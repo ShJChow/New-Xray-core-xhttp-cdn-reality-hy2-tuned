@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+MODULES=(
+  01-env.sh
+  02-os-service.sh
+  03-xray-install.sh
+  04-input.sh
+  05-base-env.sh
+  06-net-tuning.sh
+  07-acme-cert.sh
+  08-nginx-install.sh
+  09-server-config.sh
+  10-service-check.sh
+  11-client-config.sh
+  12-subscription.sh
+  13-manage-cli.sh
+  14-final-output.sh
+)
+
+append_with_includes() {
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == @@include\ * ]]; then
+      append_with_includes "$ROOT_DIR/${line#@@include }"
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$1"
+}
+
+append_profile() {
+  local variant="$1"
+
+  case "$variant" in
+    normal)
+      cat <<'PROFILE'
+# ==================================================
+# 功能开关：普通版
+# ==================================================
+
+FEATURE_XPADDING=false
+FEATURE_CDN_ECH=false
+CDN_ECH_ENABLED=false
+CDN_ECH_QUERY=""
+PROFILE
+      ;;
+    xpadding)
+      cat <<'PROFILE'
+# ==================================================
+# 功能开关：xpadding 版
+# ==================================================
+
+FEATURE_XPADDING=true
+FEATURE_CDN_ECH=true
+PROFILE
+      ;;
+    *)
+      echo "Unknown variant: $variant" >&2
+      return 1
+      ;;
+  esac
+}
+
+build_one() {
+  local variant="$1"
+  local output="$2"
+  local module
+
+  cat > "$output" <<'SCRIPTHEADER'
+#!/bin/bash
+set -e
+SCRIPTHEADER
+
+  for module in "${MODULES[@]}"; do
+    append_with_includes "$ROOT_DIR/src/$module" >> "$output"
+    if [[ "$module" == "01-env.sh" ]]; then
+      append_profile "$variant" >> "$output"
+    fi
+  done
+
+  chmod +x "$output"
+}
+
+OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist}"
+mkdir -p "$OUT_DIR"
+
+build_one normal "$OUT_DIR/install.sh"
+build_one xpadding "$OUT_DIR/install-xpadding.sh"
+
+echo "Generated $OUT_DIR/install.sh and $OUT_DIR/install-xpadding.sh"
