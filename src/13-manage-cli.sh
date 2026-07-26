@@ -167,6 +167,85 @@ cmd_resub() {
   cmd_sub
 }
 
+# UDP / HTTP3 节点连不上时的服务端侧自检。
+# 目的是"排除服务端"：这里全绿说明问题在客户端网络或客户端内核。
+cmd_diag() {
+  local ok=0 bad=0
+  chk() { # chk 描述 结果(0/1) 补充说明
+    if [[ "$2" -eq 0 ]]; then echo -e "  ${GREEN}[OK]${NC}   $1${3:+ — $3}"; ok=$((ok+1))
+    else echo -e "  ${RED}[!!]${NC}   $1${3:+ — $3}"; bad=$((bad+1)); fi
+  }
+
+  echo -e "${CYAN}[+] 直连 UDP 节点（Vless-xhttp-tls-UDP-direct）服务端自检${NC}"
+
+  if [[ "${FEATURE_H3_DIRECT:-true}" == true ]]; then
+    chk "FEATURE_H3_DIRECT 已开启" 0
+  else
+    chk "FEATURE_H3_DIRECT 已关闭" 1 "直连 UDP 节点未部署，仅 CDN 的 UDP 节点可用"
+  fi
+
+  if grep -q '443 quic' /etc/nginx/nginx.conf 2>/dev/null; then
+    chk "nginx.conf 含 UDP 443 quic 监听" 0
+  else
+    chk "nginx.conf 无 UDP 443 quic 监听" 1 "重跑安装脚本，或确认未被 add-quic.sh 接管"
+  fi
+
+  if nginx -t >/dev/null 2>&1; then
+    chk "nginx -t 配置有效" 0
+  else
+    chk "nginx -t 失败" 1 "执行 nginx -t 看具体报错；可用 FEATURE_H3_DIRECT=false 重装排除 quic"
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    if ss -lunp 2>/dev/null | grep -qE ':443\b'; then
+      chk "本机已监听 UDP 443" 0 "$(ss -lunp 2>/dev/null | grep -E ':443\b' | head -1 | tr -s ' ')"
+    else
+      chk "本机未监听 UDP 443" 1 "nginx 可能未加载 quic 监听，或服务未启动"
+    fi
+  else
+    warn "未安装 ss，跳过 UDP 监听检查"
+  fi
+
+  # 防火墙：只做提示，不自动改规则
+  if command -v iptables >/dev/null 2>&1; then
+    if iptables -S INPUT 2>/dev/null | grep -qE 'udp.*(dport 443|--dport 443)'; then
+      chk "iptables 有 UDP 443 相关规则" 0
+    elif iptables -S INPUT 2>/dev/null | grep -qE '^-A INPUT -j (REJECT|DROP)'; then
+      chk "iptables 有兜底 REJECT/DROP 且未见 UDP 443 放行" 1 \
+        "Oracle 默认镜像常见；见 docs/12 第 3 节"
+    else
+      chk "iptables 未见明显拦截" 0
+    fi
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    if firewall-cmd --list-ports 2>/dev/null | grep -q '443/udp'; then
+      chk "firewalld 已放行 443/udp" 0
+    else
+      chk "firewalld 未放行 443/udp" 1 "firewall-cmd --permanent --add-port=443/udp && firewall-cmd --reload"
+    fi
+  fi
+
+  echo ""
+  echo -e "${CYAN}[+] 结论与下一步${NC}"
+  if [[ $bad -eq 0 ]]; then
+    echo "  服务端侧未发现问题（$ok 项通过）。"
+    echo "  注意：云厂商的安全组/VCN 在机器外部，本地查不到，仍需自行确认已放行 UDP 443。"
+  else
+    echo "  发现 $bad 项异常，先按上面的提示处理。"
+  fi
+  echo ""
+  echo -e "${YELLOW}  经 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）不经过本机任何配置${NC}"
+  echo "  它只依赖：① Cloudflare 区域已开启 HTTP/3  ② 你的客户端网络允许 UDP 443 出站。"
+  echo ""
+  echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："
+  echo "    curl -sI --http3-only https://cloudflare-quic.com/ | head -1"
+  echo "    curl -sI --http3-only https://${CDN_DOMAIN:-你的CDN域名}/ | head -1"
+  echo "  若 curl 不支持 --http3-only，用浏览器访问 https://cloudflare-quic.com/ 看是否显示 HTTP/3。"
+  echo ""
+  echo "  两条 UDP 节点同时不通、而 TCP 节点正常 ⇒ 基本可判定为客户端侧 UDP 443 被封，"
+  echo "  服务端无法解决；请改用 Vless-reality-vision / Vless-xhttp-reality 节点。"
+}
+
 cmd_log() {
   case "${1:-xray}" in
     nginx) tail -n "${2:-50}" -f /usr/local/nginx/logs/error.log ;;
@@ -422,7 +501,8 @@ cmd_menu() {
     echo "  7) 流控调优 show / off"
     echo "  8) 保活开关"
     echo "  9) 内核自动更新开关"
-    echo " 10) 卸载"
+    echo " 10) UDP 节点自检 (diag)"
+    echo " 11) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -435,7 +515,8 @@ cmd_menu() {
       7) read -rp "  show / off: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
-      10) cmd_uninstall; break ;;
+      10) cmd_diag ;;
+      11) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -451,6 +532,7 @@ xray-xhttp 管理命令
   xh info               节点参数与客户端节点链接
   xh sub                订阅链接与二维码
   xh resub              按当前 client-config.txt 重新生成订阅文件
+  xh diag               UDP / HTTP3 节点连不上时的服务端侧自检
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
@@ -469,6 +551,7 @@ case "${1:-menu}" in
   info)       cmd_info ;;
   sub)        cmd_sub ;;
   resub)      cmd_resub ;;
+  diag)       cmd_diag ;;
   log)        shift; cmd_log "$@" ;;
   start)      cmd_start ;;
   stop)       cmd_stop ;;

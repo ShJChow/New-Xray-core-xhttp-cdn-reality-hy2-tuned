@@ -105,46 +105,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
-  - name: Vless-xhttp-up-cdn-down-reality-YOUR_HOST
-    type: vless
-    server: YOUR_CDN_DOMAIN
-    port: 443
-    uuid: YOUR_UUID_2
-    udp: true
-    flow: ""
-    tls: true
-    encryption: YOUR_VLESSENC_ENCRYPTION
-    network: xhttp
-    alpn:
-      - h2
-    servername: YOUR_CDN_DOMAIN
-    client-fingerprint: chrome
-    xhttp-opts:
-      host: YOUR_CDN_DOMAIN
-      path: YOUR_PATH
-      mode: auto
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
-      download-settings:
-        path: YOUR_PATH
-        server: YOUR_VPS_IP
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: YOUR_REALITY_DOMAIN
-        client-fingerprint: chrome
-        reality-opts:
-          public-key: YOUR_PUBLIC_KEY
-          short-id: YOUR_SHORT_ID
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"
-
-  - name: Vless-xhttp-tls-cdn-YOUR_HOST
+  - name: Vless-xhttp-tls-UDP-cdn-YOUR_HOST
     type: vless
     server: YOUR_CDN_DOMAIN
     port: 443
@@ -153,8 +114,9 @@ proxies:
     flow: ""
     tls: true
     network: xhttp
+    # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3
     alpn:
-      - h2
+      - h3
     servername: YOUR_CDN_DOMAIN
     client-fingerprint: chrome
     encryption: YOUR_VLESSENC_ENCRYPTION
@@ -167,7 +129,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
-  - name: Vless-xhttp-up-reality-down-cdn-YOUR_HOST
+  - name: Vless-xhttp-tls-UDP-direct-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
@@ -177,12 +139,9 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h2
-    servername: YOUR_REALITY_DOMAIN
+      - h3
+    servername: YOUR_CDN_DOMAIN
     client-fingerprint: chrome
-    reality-opts:
-      public-key: YOUR_PUBLIC_KEY
-      short-id: YOUR_SHORT_ID
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
       host: YOUR_CDN_DOMAIN
@@ -192,21 +151,6 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
-      download-settings:
-        host: YOUR_CDN_DOMAIN
-        path: YOUR_PATH
-        server: YOUR_CDN_DOMAIN
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: YOUR_CDN_DOMAIN
-        client-fingerprint: chrome
-        reality-opts: { public-key: "" }
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"
 
 proxy-groups:
   - name: 前置代理

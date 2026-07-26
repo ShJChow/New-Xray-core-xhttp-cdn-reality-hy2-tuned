@@ -1,20 +1,10 @@
 IP v4
 vless://YOUR_UUID_1@YOUR_VPS_IPV4:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=tcp&headerType=none#Vless-reality-vision-YOUR_HOST
 vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-reality-YOUR_HOST
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_VPS_IPV4%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22show%22%3Afalse%2C%22serverName%22%3A%22YOUR_REALITY_DOMAIN%22%2C%22fingerprint%22%3A%22chrome%22%2C%22shortId%22%3A%22YOUR_SHORT_ID%22%2C%22publicKey%22%3A%22YOUR_PUBILC_KEY%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22%22%2C%22path%22%3A%22YOUR_PATH%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-up-cdn-down-reality-YOUR_HOST
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-cdn-YOUR_HOST
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_CDN_DOMAIN%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22YOUR_CDN_DOMAIN%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22YOUR_CDN_DOMAIN%22%2C%22path%22%3A%22YOUR_PATH%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-up-reality-down-cdn-YOUR_HOST
 
 IP v6（把2001:db8::1换成你的IP v6地址）
 vless://YOUR_UUID_1@[2001:db8::1]:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=tcp&headerType=none#Vless-reality-vision-YOUR_HOST
 vless://YOUR_UUID_2@[2001:db8::1]:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-reality-YOUR_HOST
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_VPS_IPV6%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22show%22%3Afalse%2C%22serverName%22%3A%22YOUR_REALITY_DOMAIN%22%2C%22fingerprint%22%3A%22chrome%22%2C%22shortId%22%3A%22YOUR_SHORT_ID%22%2C%22publicKey%22%3A%22YOUR_PUBILC_KEY%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22%22%2C%22path%22%3A%22YOUR_PATH%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-up-cdn-down-reality-YOUR_HOST
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-cdn-YOUR_HOST
-vless://YOUR_UUID_2@[2001:db8::1]:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_CDN_DOMAIN%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22YOUR_CDN_DOMAIN%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22YOUR_CDN_DOMAIN%22%2C%22path%22%3A%22YOUR_PATH%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-up-reality-down-cdn-YOUR_HOST
-
-XHTTP + TLS 直连（不过 CDN，走 Reality 回落到 Nginx 的真实证书）
-# 直连 VPS TCP 443：Reality 把非 Reality 的握手回落到 Nginx:8003，因此拿到的是 CDN 域名的真实证书
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-direct-YOUR_HOST
 
 XHTTP over HTTP/3（UDP 443）
 # 经 CDN：由 Cloudflare 边缘终结 h3，回源仍是 TCP，服务端无需任何改动（需 CF 已开启 HTTP/3，默认开启）
@@ -30,4 +20,5 @@ vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&securi
 - YOUR_HOST 替换为你的主机名（仅用于节点备注，随意）
 - flow 默认 xtls-rprx-vision（兼容性最好，且能走 Splice）
 - 只有客户端确认支持时才改成 xtls-rprx-vision-udp443（不拦截 UDP 443）；服务端永远只能写 xtls-rprx-vision
+- UDP 节点的 alpn 必须恰好只有 h3，Xray 与 Mihomo 才会走 HTTP/3；多写一个 h2 就会退回 TCP
 - 客户端 flow 留空会被服务端直接拒绝，详见 docs/10.流控调优.md 第 4 节

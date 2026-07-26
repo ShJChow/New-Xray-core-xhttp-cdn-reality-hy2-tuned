@@ -16,7 +16,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 8 种节点模式 | 见下方节点表，含两条 XHTTP over HTTP/3（UDP 443）节点 |
+| 4 种节点模式 | 2 条 TCP 直连兜底 + 2 条 XHTTP over HTTP/3（UDP 443），见下方节点表 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -33,39 +33,40 @@
 
 ## 节点列表
 
-脚本生成 8 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
+脚本生成 4 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice 的节点，速度最快** |
+| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice，速度最快**；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
-| 3 | `Vless-xhttp-up-cdn-down-reality-<host>` | 上行经 CDN / 下行直连 | XHTTP，h2 |
-| 4 | `Vless-xhttp-tls-cdn-<host>` | 双向经 CDN | XHTTP + TLS，h2 |
-| 5 | `Vless-xhttp-up-reality-down-cdn-<host>` | 上行直连 / 下行经 CDN | XHTTP |
-| 6 | `Vless-xhttp-tls-direct-<host>` | 直连 VPS TCP 443，不过 CDN | XHTTP + TLS（真实证书），h2 |
-| 7 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
-| 8 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
+| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
+| 4 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
 
-> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。其余节点是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。追求单节点速度请优先用节点 1，详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
+CDN 侧只保留 UDP（HTTP/3）版本；节点 1、2 走 TCP，作为 UDP 不可用时的兜底。
 
-关于节点 6（直连 VPS 的 XHTTP + TLS，h2）：
+> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–4 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
 
-- 客户端连 **VPS IP 的 TCP 443**、SNI 用 CDN 域名。Reality 入站把非 Reality 的握手回落到 Nginx:8003，因此拿到的是 CDN 域名的**真实证书**，不过 CDN、也不用 Reality 公钥。
-- 服务端**零额外配置**，不需要放行任何 UDP 端口。
+### 两条 UDP（HTTP/3）节点
 
-关于两条 UDP（HTTP/3）节点：
-
-- **节点 7** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（CF 的 HTTP/3 默认开启）。
-- **节点 8** 直连 VPS：Nginx 额外监听 `UDP 443 quic`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
-- `http3` 依赖支持 QUIC 的 TLS 库（标准 OpenSSL 未必满足），该监听**曾在部分环境下导致 nginx 启动失败**。若重装后 `[6/8]` 阶段 `nginx -t` 或服务启动失败，用 `FEATURE_H3_DIRECT=false` 重跑一次以排除该因素：
+- **节点 3** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（需 CF 区域已开启 HTTP/3，默认开启）。
+- **节点 4** 直连 VPS：Nginx 额外监听 `UDP 443 quic`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
+- **`alpn` 必须恰好只有 `h3`**，Xray 与 Mihomo 才会走 HTTP/3（`decideHTTPVersion` 与 `transport/xhttp/client.go` 都要求 `len(alpn)==1`）。手工改配置时不要额外加 `h2`。
+- Mihomo 同样支持 XHTTP-over-H3，所以 Mihomo 配置里也包含这两条节点。
+- `http3` 依赖支持 QUIC 的 TLS 库（标准 OpenSSL 未必满足），该监听**曾在部分环境下导致 nginx 启动失败**。若 `[6/8]` 阶段 `nginx -t` 或服务启动失败，用 `FEATURE_H3_DIRECT=false` 重跑一次排除该因素：
 
   ```bash
   FEATURE_H3_DIRECT=false bash ~/install-xpadding.sh
   ```
 
-  关闭后节点 8 不会生成（不会留一个连不上的死链接），节点 1–7 不受影响。
-- Mihomo 配置只包含节点 1–5：未核实其对 XHTTP-over-H3 的支持。V2rayN / Xray JSON 客户端可用全部 8 条。
-- 运行 `add-quic.sh` 扩展后，节点 8 的 UDP 443 监听会被该扩展接管（避免 `reuseport` 重复）。
+  关闭后节点 4 不会生成（不留死链接），节点 1–3 不受影响。
+
+### UDP 节点连不上怎么办
+
+```bash
+xh diag     # 服务端侧自检：quic 监听 / nginx -t / UDP 443 / 防火墙，并给出客户端自测步骤
+```
+
+**两条 UDP 节点同时不通、而 TCP 节点正常**，基本可判定为客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2，或用 `add-quic.sh` 扩展换一个非 443 的 UDP 端口。
 
 ---
 
@@ -145,7 +146,7 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_H3_DIRECT` | `false` 关闭节点 8（直连 VPS 的 h3）与对应 Nginx `443 quic` 监听 | `true` |
+| `FEATURE_H3_DIRECT` | `false` 关闭节点 4（直连 VPS 的 h3）与对应 Nginx `443 quic` 监听 | `true` |
 | `FEATURE_TUNING` | `false` 关闭全部流控调优 | `true` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |
@@ -167,6 +168,7 @@ xh log [xray|nginx]    跟踪日志
 xh start|stop|restart  服务控制
 xh update [--auto]     更新 Xray-core（自检失败自动回滚）
 xh tuning [show|off]   查看 / 回滚流控调优
+xh diag                UDP / HTTP3 节点连不上时的服务端侧自检
 xh keepalive [on|off]  保活开关
 xh autoupdate [on|off] 内核自动更新开关
 xh uninstall           卸载全部组件

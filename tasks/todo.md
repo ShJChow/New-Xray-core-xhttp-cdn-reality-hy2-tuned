@@ -98,7 +98,59 @@
 
 **未验证**：无 VPS —— 节点 8 的 nginx `443 quic` 监听能否通过 `nginx -t` 与实际连通性仍未做运行时验证，这正是 `FEATURE_H3_DIRECT` 开关存在的原因。
 
+---
+
+# v1.2.0（2026-07-27）
+
+## Goal
+
+按用户要求收敛节点：只保留 `xhttp+reality` 直连与 UDP（h3）节点，CDN 侧只留 UDP 版；并处理"两条 UDP 节点都不通"。
+
+## Current State
+
+v1.1.4 有 8 条节点。用户反馈两条 UDP 节点**都**连不上。
+
+## Assumptions（已核对，非记忆）
+
+- Xray `transport/internet/splithttp/dialer.go:84-101` `decideHTTPVersion`：**`alpn` 必须恰好为 `["h3"]`** 才走 HTTP/3；`len != 1` 一律降级为 h2。链接写 `alpn=h3` 满足。
+- Xray 同文件 `:363-371`：`mode=auto` + TLS（无 reality）→ `packet-up`；我们的 CDN 节点即此模式。
+- **Mihomo `transport/xhttp/client.go:159` 同样支持 h3**（`len(alpn)==1 && alpn[0]=="h3"`）。此前 docs 里"未核实 mihomo 对 XHTTP-over-H3 的支持"是错的，本次一并纠正，Mihomo 配置也纳入 UDP 节点。
+- 两条 UDP 节点走**完全不同**的路径（CDN 节点根本不碰本项目服务端，与已能用的 h2 CDN 节点只差 client↔CF 这一段）。两条同时失败 ⇒ 共同因子在客户端侧网络或客户端内核，**服务端改不了**。
+
+## Change Scope
+
+节点收敛为 4 条（用户选择保留 Vision 作兜底）：
+
+| # | 节点 | 说明 |
+|---|---|---|
+| 1 | `Vless-reality-vision-<host>` | TCP 直连，唯一走 Splice，UDP 全挂时的兜底 |
+| 2 | `Vless-xhttp-reality-<host>` | TCP 直连，XHTTP + Reality |
+| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | UDP 443 经 CDN，`alpn=h3` |
+| 4 | `Vless-xhttp-tls-UDP-direct-<host>` | UDP 443 直连，受 `FEATURE_H3_DIRECT` 控制 |
+
+- `templates/client-config.txt.tmpl`：删除节点 3/4/5/6（h2 的 CDN 与直连 TLS）
+- `templates/mihomo-proxies.yaml.tmpl`：同步为 4 条，UDP 节点用 `alpn: [h3]`
+- `src/11-client-config.sh`：删除随之失效的 `EXTRA_3` / `EXTRA_5` 及其专用编码变量；新增 `${MIHOMO_UDP_DIRECT_BLOCK}`
+- **`extensions/*/00-env-utils.sh`**：`NODE_RE_CDN_BOTH` 增加 `Vless-xhttp-tls-UDP-cdn-` 分支。h2 的 CDN 节点已删除，不加这条会让三个扩展全部报"未找到节点"（v1.1.1 同款回归）。旧装机仍存在 h2 节点时，因 `head -n1` 取文件首个匹配，仍优先命中 h2 节点。
+- **`src/13-manage-cli.sh` 新增 `xh diag`**：把"UDP 不通"从猜测变成可判定——检查 nginx 是否在监听 UDP 443、防火墙是否放行、`FEATURE_H3_DIRECT` 状态，并给出客户端侧自测步骤。
+
+## Verification
+
+1. 4 个 build 脚本 + `bash -n dist/*.sh`
+2. nginx 模板未转义 `$` 复查
+3. 既有 13 组 xray-config 渲染矩阵
+4. `FEATURE_H3_DIRECT` 开关回归（节点数 4/3、nginx 含/不含 main-h3）
+5. 扩展节点定位回归：**新 4 节点文件**、v1.1.4 的 8 节点文件、v1.0.0 中文名文件三种输入下均能定位到 CDN 参数
+6. Mihomo YAML 用 Python `yaml.safe_load` 解析验证结构合法
+
+**未验证**：无 VPS —— UDP 连通性、nginx `443 quic` 能否起来均未做运行时验证。
+
 ## Review
+
+- 两条 UDP 节点同时失败，服务端侧无法解释：CDN 那条不经过本项目任何新增配置。`xh diag` 的价值在于**排除**服务端，把结论收敛到客户端网络（UDP 443 被封是常见情况）或客户端内核版本。
+- 纠正了一处此前写进公开文档的错误结论（mihomo 不支持 XHTTP-h3）——源码显示支持。
+
+## Review（v1.0.0）
 
 - 最实质的性能修复是 Nginx 的 `grpc_read_timeout` / `grpc_send_timeout`（默认 60s 会周期性切断 XHTTP 长连接），而非内核参数本身。
 - "流控最佳全开" 的正确含义不是把每个旋钮拉满：`tcpMptcp`、`scMaxEachPostBytes`、内核替换都被明确排除。

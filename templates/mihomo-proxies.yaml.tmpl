@@ -42,46 +42,8 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
-  - name: Vless-xhttp-up-cdn-down-reality-${HOSTNAME_TAG}
-    type: vless
-    server: ${CDN_DOMAIN}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    encryption: ${VLESSENC_ENCRYPTION}
-    network: xhttp
-    alpn:
-      - h2
-    servername: ${CDN_DOMAIN}
-    client-fingerprint: chrome${MIHOMO_ECH_PROXY_BLOCK}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-      download-settings:
-        path: ${XHTTP_PATH}
-        server: ${VPS_IP}
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: ${REALITY_DOMAIN}
-        client-fingerprint: chrome${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
-        reality-opts:
-          public-key: ${PUBLIC_KEY}
-          short-id: ${SHORT_ID}
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
-
-  - name: Vless-xhttp-tls-cdn-${HOSTNAME_TAG}
+  # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3（transport/xhttp/client.go:159）
+  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
     port: 443
@@ -91,7 +53,7 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h2
+      - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
@@ -102,45 +64,4 @@ proxies:
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-
-  - name: Vless-xhttp-up-reality-down-cdn-${HOSTNAME_TAG}
-    type: vless
-    server: ${VPS_IP}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    network: xhttp
-    alpn:
-      - h2
-    servername: ${REALITY_DOMAIN}
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: ${PUBLIC_KEY}
-      short-id: ${SHORT_ID}
-    encryption: ${VLESSENC_ENCRYPTION}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-      download-settings:
-        host: ${CDN_DOMAIN}
-        path: ${XHTTP_PATH}
-        server: ${CDN_DOMAIN}
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: ${CDN_DOMAIN}
-        client-fingerprint: chrome${MIHOMO_ECH_DOWNLOAD_BLOCK}${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
-        reality-opts: { public-key: "" }
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}${MIHOMO_UDP_DIRECT_BLOCK}
