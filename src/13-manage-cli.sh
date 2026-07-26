@@ -432,7 +432,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|on|off]
+  xh tuning [show|off]  查看 / 回滚流控调优（重新开启需重跑安装脚本）
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）

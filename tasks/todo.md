@@ -37,6 +37,9 @@
 - [x] 8 组占位变量组合渲染 `xray-config.json.tmpl`，`python -m json.tool` 全部合法
 - [x] nginx 模板新增行无未转义 `$`
 - [x] MODULES 数组与 `src/` 文件一一对应，步骤标签 `[1/8]`–`[8/8]` 连续
+- [x] 抽取生成的 `xh` 脚本（455 行）单独 `bash -n` 通过
+- [x] 用桩 `crontab` 验证 `keepalive on/off`、`autoupdate on` 的幂等性：重复执行不产生重复行，
+      acme.sh 续签行与用户无关 cron 行全程保留（这是唯一具有"延迟且无声"失败模式的路径）
 
 **未验证**：无 VPS，证书签发、BBR 实际生效、Nginx 编译、Xray 启动、客户端连通性与 CDN 链路均未做运行时验证。
 
