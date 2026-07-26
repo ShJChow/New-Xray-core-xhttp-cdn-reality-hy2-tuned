@@ -148,6 +148,24 @@ cmd_sub() {
   fi
 }
 
+# 手工改过 ~/client-config.txt 后，用它把订阅文件重新生成，无需重跑安装脚本
+cmd_resub() {
+  [[ -f "$SUB_TOKEN_FILE" ]] || fail "未找到订阅 token，请先运行安装脚本"
+  local home token subdir
+  home="${USER_HOME:-/root}"
+  token=$(tr -d '\r\n' < "$SUB_TOKEN_FILE")
+  subdir="/usr/local/nginx/html/sub/${token}"
+  [[ -d "$subdir" ]] || fail "未找到订阅目录 ${subdir}"
+  [[ -f "${home}/client-config.txt" ]] || fail "未找到 ${home}/client-config.txt"
+
+  cp "${home}/client-config.txt" "${subdir}/v2rayn-raw.txt"
+  base64 "${home}/client-config.txt" | tr -d '\n' > "${subdir}/v2rayn.txt"
+  [[ -f "${home}/client-config-mihomo-full.yaml" ]]  && cp "${home}/client-config-mihomo-full.yaml"  "${subdir}/mihomo-full.yaml"
+  [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
+  info "订阅已按当前 client-config.txt 重新生成（客户端需手动更新订阅）"
+  cmd_sub
+}
+
 cmd_log() {
   case "${1:-xray}" in
     nginx) tail -n "${2:-50}" -f /usr/local/nginx/logs/error.log ;;
@@ -431,6 +449,7 @@ xray-xhttp 管理命令
   xh status             服务状态 / 监听端口 / 流控参数 / 版本
   xh info               节点参数与客户端节点链接
   xh sub                订阅链接与二维码
+  xh resub              按当前 client-config.txt 重新生成订阅文件
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
@@ -448,6 +467,7 @@ case "${1:-menu}" in
   status)     cmd_status ;;
   info)       cmd_info ;;
   sub)        cmd_sub ;;
+  resub)      cmd_resub ;;
   log)        shift; cmd_log "$@" ;;
   start)      cmd_start ;;
   stop)       cmd_stop ;;

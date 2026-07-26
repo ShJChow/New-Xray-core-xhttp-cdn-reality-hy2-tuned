@@ -22,7 +22,7 @@
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
 | **流控全开** | BBR + fq、TFO、MTU 探测、句柄 1048576、Xray `sockopt` 与 `policy.bufferSize`、Nginx gRPC 长连接超时 |
 | **机型自适应** | 按内存自动分三档（≥16G / ≥4G / <4G）伸缩缓冲区与队列；ARM64 显式设置 `bufferSize`（默认仅 4 KB） |
-| flow | 客户端 `xtls-rprx-vision-udp443`（不拦截 UDP 443，QUIC 程序可用），服务端按 Xray 要求保持 `xtls-rprx-vision` |
+| flow / Vision | 节点 1 用 `xtls-rprx-vision`（唯一能走 Splice 的节点）；节点 2–7 是 XHTTP，按协议不能带 flow。`VISION_UDP443=1` 可切到 `-udp443` |
 | **管理命令 `xh`** | 状态 / 节点信息 / 订阅 / 日志 / 更新内核 / 调优开关 / 保活 / 卸载 |
 | **非交互一键** | 环境变量驱动，`AUTO=1` 零交互重装 |
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
@@ -37,13 +37,15 @@
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision（`-udp443`，不拦截 QUIC） |
+| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice 的节点，速度最快** |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-up-cdn-down-reality-<host>` | 上行经 CDN / 下行直连 | XHTTP，h2 |
 | 4 | `Vless-xhttp-tls-cdn-<host>` | 双向经 CDN | XHTTP + TLS，h2 |
 | 5 | `Vless-xhttp-up-reality-down-cdn-<host>` | 上行直连 / 下行经 CDN | XHTTP |
 | 6 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
 | 7 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
+
+> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–7 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。追求单节点速度请优先用节点 1，详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
 
 关于两条 UDP（HTTP/3）节点：
 
@@ -129,6 +131,7 @@ bash ~/install-xpadding.sh
 | `REALITY_FALLBACK_ORIGIN` / `CDN_FALLBACK_ORIGIN` | `proxy` 模式下的回落站 | stanford / harvard |
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
+| `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
 | `FEATURE_TUNING` | `false` 关闭全部流控调优 | `true` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |

@@ -48,6 +48,16 @@ install_xray
 export PATH="/usr/local/bin:$PATH"
 
 info "生成参数..."
+# 节点 1 的 flow：默认用兼容性最好的 xtls-rprx-vision。
+# 只有明确设置 VISION_UDP443=1 才写 -udp443（不拦截 UDP 443/QUIC）。
+# 原因：部分客户端不认识 -udp443，会把 flow 置空；而服务端 account 是 XRV 时，
+# 客户端空 flow 会被直接拒绝（Xray inbound.go: "client flow is empty"），
+# 节点不是变慢而是完全连不上，同时也失去 Splice。
+if [[ "${VISION_UDP443:-0}" == "1" ]]; then
+  VISION_FLOW="xtls-rprx-vision-udp443"
+else
+  VISION_FLOW="xtls-rprx-vision"
+fi
 # 节点名后缀：取主机名，剔除非 ASCII 字母数字与连字符，避免客户端列表乱码
 HOSTNAME_TAG=$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9-' | cut -c1-20)
 [[ -z "$HOSTNAME_TAG" ]] && HOSTNAME_TAG="vps"
