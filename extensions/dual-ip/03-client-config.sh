@@ -2,10 +2,13 @@
 # 追加客户端节点
 # ==================================================
 
-NODE_V4_UP_NAME="上行 xhttp+Reality IPv4 | 下行 xhttp+Reality IPv6"
-NODE_V6_UP_NAME="上行 xhttp+Reality IPv6 | 下行 xhttp+Reality IPv4"
-NODE_V4_UP_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BReality%20IPv4%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BReality%20IPv6"
-NODE_V6_UP_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BReality%20IPv6%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BReality%20IPv4"
+NODE_V4_UP_NAME="Vless-xhttp-up-v4-down-v6-${HOSTNAME_TAG}"
+NODE_V6_UP_NAME="Vless-xhttp-up-v6-down-v4-${HOSTNAME_TAG}"
+NODE_V4_UP_TAG=$(rawurlencode "$NODE_V4_UP_NAME")
+NODE_V6_UP_TAG=$(rawurlencode "$NODE_V6_UP_NAME")
+# v1.1.0 之前的中文节点名，重复运行时一并清理
+LEGACY_V4_UP_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BReality%20IPv4%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BReality%20IPv6"
+LEGACY_V6_UP_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BReality%20IPv6%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BReality%20IPv4"
 
 if [[ -n "$BASE_EXTRA_ENC" ]]; then
   BASE_EXTRA_JSON=$(urldecode "$BASE_EXTRA_ENC")
@@ -36,6 +39,8 @@ LINE_V6_UP="vless://${UUID2}@${IPV6_URI}:443?encryption=${VLESSENC_ENCRYPTION}&s
 
 sed -i "/#${NODE_V4_UP_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${NODE_V6_UP_TAG}\$/d" "$V2RAYN_FILE"
+sed -i "/#${LEGACY_V4_UP_TAG}\$/d" "$V2RAYN_FILE"
+sed -i "/#${LEGACY_V6_UP_TAG}\$/d" "$V2RAYN_FILE"
 printf '%s\n%s\n' "$LINE_V4_UP" "$LINE_V6_UP" >> "$V2RAYN_FILE"
 chown "$(stat -c '%u:%g' "$USER_HOME")" "$V2RAYN_FILE"
 

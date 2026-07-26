@@ -13,7 +13,7 @@ echo ""
 find_client_files
 info "读取已有客户端配置: $USER_HOME"
 
-BASE_LINE=$(grep -F '#xhttp%2BReality%20%E4%B8%8A%E4%B8%8B%E8%A1%8C%E4%B8%8D%E5%88%86%E7%A6%BB' "$V2RAYN_FILE" | head -n1 | tr -d '\r' || true)
+BASE_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_XHTTP_REALITY")
 [[ -n "$BASE_LINE" ]] || error "未找到 xhttp+Reality 上下行不分离节点，无法自动读取参数"
 
 UUID2=$(extract_uri_user "$BASE_LINE")
@@ -25,7 +25,7 @@ PUBLIC_KEY=$(get_query_param "$BASE_LINE" "pbk" || true)
 SHORT_ID=$(get_query_param "$BASE_LINE" "sid" || true)
 BASE_EXTRA_ENC=$(get_query_param "$BASE_LINE" "extra" || true)
 
-CDN_LINE=$(grep -F '#xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN' "$V2RAYN_FILE" | head -n1 | tr -d '\r' || true)
+CDN_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_CDN_BOTH")
 if [[ -n "$CDN_LINE" ]]; then
   DEFAULT_CDN_DOMAIN=$(get_query_param "$CDN_LINE" "host" || true)
   [[ -n "$DEFAULT_CDN_DOMAIN" ]] || DEFAULT_CDN_DOMAIN=$(get_query_param "$CDN_LINE" "sni" || true)

@@ -139,6 +139,25 @@ format_uri_host() {
   fi
 }
 
+# ==================================================
+# 节点定位（兼容 v1.1.0 之前的中文节点备注）
+# v1.1.0 起节点名改为纯 ASCII + 主机名后缀，这里同时匹配新旧两种写法，
+# 保证升级前部署的机器仍能被扩展脚本正确识别。
+# ==================================================
+
+NODE_RE_XHTTP_REALITY='#(Vless-xhttp-reality-|xhttp%2BReality%20)'
+NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
+NODE_RE_REALITY_VISION='#(Vless-reality-vision-|reality%2Bvision)'
+
+# find_node_line FILE REGEX
+find_node_line() {
+  grep -E "$2" "$1" | head -n1 | tr -d '' || true
+}
+
+# 节点名后缀，与主脚本保持一致
+HOSTNAME_TAG=$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9-' | cut -c1-20)
+[[ -z "$HOSTNAME_TAG" ]] && HOSTNAME_TAG="vps"
+
 find_client_files() {
   if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
     USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)

@@ -2,8 +2,10 @@
 # 追加客户端节点
 # ==================================================
 
-NODE_NAME="上行 xhttp+TLS+CDN-A | 下行 xhttp+TLS+CDN-B"
-NODE_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BTLS%2BCDN-A%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BTLS%2BCDN-B"
+NODE_NAME="Vless-xhttp-up-cdnA-down-cdnB-${HOSTNAME_TAG}"
+NODE_TAG=$(rawurlencode "$NODE_NAME")
+# v1.1.0 之前的中文节点名，重复运行时一并清理
+LEGACY_NODE_TAG="%E4%B8%8A%E8%A1%8C%20xhttp%2BTLS%2BCDN-A%20%7C%20%E4%B8%8B%E8%A1%8C%20xhttp%2BTLS%2BCDN-B"
 
 if [[ -n "$BASE_EXTRA_ENC" ]]; then
   BASE_EXTRA_JSON=$(urldecode "$BASE_EXTRA_ENC")
@@ -27,6 +29,7 @@ EXTRA_ENC=$(rawurlencode "$EXTRA_JSON")
 NEW_V2RAYN_LINE="vless://${UUID2}@${CDN_A}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_A}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${ECH_URI_PARAM}&type=xhttp&host=${CDN_A}&path=${XHTTP_PATH}&mode=auto&extra=${EXTRA_ENC}#${NODE_TAG}"
 
 sed -i "/#${NODE_TAG}\$/d" "$V2RAYN_FILE"
+sed -i "/#${LEGACY_NODE_TAG}\$/d" "$V2RAYN_FILE"
 printf '%s\n' "$NEW_V2RAYN_LINE" >> "$V2RAYN_FILE"
 chown "$(stat -c '%u:%g' "$USER_HOME")" "$V2RAYN_FILE"
 

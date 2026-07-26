@@ -2,8 +2,12 @@
 # 追加客户端节点
 # ==================================================
 
-NODE_XHTTP_H3_NAME="vless+xhttp+tls+h3 直连"
-NODE_HY2_NAME="hysteria2 直连"
+NODE_XHTTP_H3_NAME="Vless-xhttp-tls-h3-direct-${HOSTNAME_TAG}"
+NODE_HY2_NAME="Hysteria2-direct-${HOSTNAME_TAG}"
+
+# v1.1.0 之前使用中文节点名，重复运行时一并清理，避免残留重复节点
+LEGACY_XHTTP_H3_TAG=$(rawurlencode "vless+xhttp+tls+h3 直连")
+LEGACY_HY2_TAG=$(rawurlencode "hysteria2 直连")
 
 NODE_XHTTP_H3_TAG=$(rawurlencode "$NODE_XHTTP_H3_NAME")
 NODE_HY2_TAG=$(rawurlencode "$NODE_HY2_NAME")
@@ -15,6 +19,8 @@ LINE_HY2="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${BASE_SERVER_URI}:${HY2_P
 
 sed -i "/#${NODE_XHTTP_H3_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${NODE_HY2_TAG}\$/d" "$V2RAYN_FILE"
+sed -i "/#${LEGACY_XHTTP_H3_TAG}\$/d" "$V2RAYN_FILE"
+sed -i "/#${LEGACY_HY2_TAG}\$/d" "$V2RAYN_FILE"
 printf '%s\n%s\n' "$LINE_XHTTP_H3" "$LINE_HY2" >> "$V2RAYN_FILE"
 chown "$(stat -c '%u:%g' "$USER_HOME")" "$V2RAYN_FILE"
 
