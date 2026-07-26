@@ -2,7 +2,7 @@
 
 ## Goal
 
-以 `Yulinanami/my-xhttp-cdn-config`（MIT）为基座，融合 `ShJChow26/argosbx` 的产品形态，生成可上传到 `github.com/ShJChow26/xray-xhttp` 的项目：主路径为带 xpadding 的 XHTTP（ECH 可选），流控参数全部打开。
+以 `Yulinanami/my-xhttp-cdn-config`（MIT）为基座，融合 `ShJChow26/argosbx` 的产品形态，生成可上传到 `github.com/ShJChow26/xhttp-cdn-tuned` 的项目：主路径为带 xpadding 的 XHTTP（ECH 可选），流控参数全部打开。
 
 ## Current State
 

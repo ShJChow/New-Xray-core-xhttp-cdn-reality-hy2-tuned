@@ -53,7 +53,7 @@ Debian / Ubuntu：
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 bash ~/install-xpadding.sh
 ```
 
@@ -62,7 +62,7 @@ Alpine Linux：
 ```sh
 doas -s
 apk add --no-cache bash curl
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 bash ~/install-xpadding.sh
 ```
 
@@ -71,7 +71,7 @@ bash ~/install-xpadding.sh
 > Mihomo 内核 ≥ `1.19.23` 即可。
 
 ```bash
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -81,7 +81,7 @@ bash ~/install.sh
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 AUTO=1 \
 REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \
@@ -152,13 +152,13 @@ xh uninstall           卸载全部组件
 
 ```bash
 # 上行 CDN-A | 下行 CDN-B
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/add-dual-cdn.sh -o ~/add-dual-cdn.sh && bash ~/add-dual-cdn.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-dual-cdn.sh -o ~/add-dual-cdn.sh && bash ~/add-dual-cdn.sh
 
 # 上行 IPv4 | 下行 IPv6（需 VPS 同时拥有 v4/v6）
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/add-dual-ip.sh -o ~/add-dual-ip.sh && bash ~/add-dual-ip.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-dual-ip.sh -o ~/add-dual-ip.sh && bash ~/add-dual-ip.sh
 
 # VLESS+XHTTP+TLS(H3) | Hysteria2 直连
-curl -fsSL https://github.com/ShJChow26/xray-xhttp/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
 
 ---

@@ -91,7 +91,7 @@ cmd_status() {
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
   else
-    printf '  %-32s %s\n' "调优配置文件" "未启用（xh tuning on 开启）"
+    printf '  %-32s %s\n' "调优配置文件" "未启用（重跑安装脚本可开启）"
   fi
   if [[ "$SERVICE_TYPE" == "systemd" ]] && svc_active xray; then
     local pid
@@ -257,14 +257,14 @@ cmd_tuning() {
         echo -e "${CYAN}[+] ${SYSCTL_CONF}${NC}"
         cat "$SYSCTL_CONF"
       else
-        info "未启用流控调优（xh tuning on 开启）"
+        info "未启用流控调优（重跑安装脚本可开启）"
       fi
       [[ -f "$LIMITS_CONF" ]] && { echo ""; echo -e "${CYAN}[+] ${LIMITS_CONF}${NC}"; cat "$LIMITS_CONF"; }
       ;;
     on)
       [[ -f "$SYSCTL_CONF" ]] && { info "调优已处于开启状态"; return 0; }
       warn "重新开启调优需要重跑安装脚本（其中包含逐项能力探测）："
-      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow26/xray-xhttp}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh && bash ~/install-xpadding.sh"
+      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow26/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh && bash ~/install-xpadding.sh"
       ;;
     off)
       rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
