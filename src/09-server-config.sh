@@ -32,6 +32,25 @@ EOF
   fi
 }
 
+# 直连 VPS 的 XHTTP-over-H3（节点 Vless-xhttp-tls-UDP-direct）需要 Nginx 监听
+# UDP 443 quic。http3 依赖支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足，曾在部分
+# 环境下导致 nginx 启动失败。FEATURE_H3_DIRECT=false 可跳过该监听（对应客户端
+# 节点也不生成，见 src/11-client-config.sh）。add-quic.sh 扩展会接管并移除本段。
+if [[ "$FEATURE_H3_DIRECT" == true ]]; then
+  NGINX_H3_DIRECT_BLOCK=$(cat <<'EOF'
+        # BEGIN main-h3
+        # 直连 VPS 的 XHTTP over HTTP/3（节点 Vless-xhttp-tls-UDP-direct）
+        # Xray 占用的是 TCP 443，这里占用 UDP 443，互不冲突。
+        # 需要防火墙放行 UDP 443；add-quic.sh 会接管并移除本段。
+        listen       443 quic reuseport;
+        http3        on;
+        # END main-h3
+EOF
+)
+else
+  NGINX_H3_DIRECT_BLOCK=""
+fi
+
 info "写入 /etc/nginx/nginx.conf ..."
 cat > /etc/nginx/nginx.conf << NGINXEOF
 @@include templates/nginx.conf.tmpl
@@ -80,6 +99,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
+  printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
   printf 'FEATURE_TUNING=%q\n'    "$FEATURE_TUNING"
   printf 'TUNING_BBR_OK=%q\n'     "${TUNING_BBR_OK:-false}"
   printf 'TUNE_TIER=%q\n'         "${TUNE_TIER:-none}"

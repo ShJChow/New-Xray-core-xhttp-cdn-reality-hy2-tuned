@@ -75,6 +75,16 @@ EXTRA_3="%7B${EXTRA_TOP_SC_PREFIX_ENC}%22downloadSettings%22%3A%7B%22address%22%
 
 EXTRA_5="%7B${EXTRA_TOP_PREFIX_ENC}%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22${CDN_ECH_TLS_SETTINGS_EXTRA}%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22${XHTTP_EXTRA_FIELD_ENC}%7D%7D%7D"
 
+# 直连 VPS 的 XHTTP-over-H3 节点依赖 Nginx 的 UDP 443 quic 监听（见
+# src/09-server-config.sh 的 NGINX_H3_DIRECT_BLOCK），该监听曾在部分环境下
+# 导致 nginx 启动失败。FEATURE_H3_DIRECT=false 时两者一起关闭，避免生成一个
+# 打不通的节点链接。
+if [[ "$FEATURE_H3_DIRECT" == true ]]; then
+  NODE_UDP_DIRECT_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-UDP-direct-${HOSTNAME_TAG}"
+else
+  NODE_UDP_DIRECT_LINE=""
+fi
+
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
 CLIENTEOF

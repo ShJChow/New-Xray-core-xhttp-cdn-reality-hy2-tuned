@@ -125,6 +125,7 @@ cmd_info() {
   [[ "${FEATURE_XPADDING:-false}" == true ]] && \
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
+  echo "  直连 H3 节点:    ${FEATURE_H3_DIRECT:-false}"
   echo "  流控调优:        ${FEATURE_TUNING:-false}（BBR 可用: ${TUNING_BBR_OK:-false}）"
   echo ""
   echo -e "${YELLOW}[+] 客户端节点${NC}"

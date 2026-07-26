@@ -16,6 +16,13 @@ XHTTP + TLS 直连（不过 CDN，走 Reality 回落到 Nginx 的真实证书）
 # 直连 VPS TCP 443：Reality 把非 Reality 的握手回落到 Nginx:8003，因此拿到的是 CDN 域名的真实证书
 vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-direct-YOUR_HOST
 
+XHTTP over HTTP/3（UDP 443）
+# 经 CDN：由 Cloudflare 边缘终结 h3，回源仍是 TCP，服务端无需任何改动（需 CF 已开启 HTTP/3，默认开启）
+vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
+# 直连 VPS：需要 Nginx 监听 UDP 443 quic（一键脚本默认开启，FEATURE_H3_DIRECT=false 可关闭），且防火墙放行 UDP 443。
+# 该监听曾在部分环境下导致 nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库），手工配置前请先用一键脚本验证过。
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-direct-YOUR_HOST
+
 注意：
 - YOUR_UUID_1 的节点 (Vision 直连) encryption 保持 none，因为不过 CDN
 - YOUR_UUID_2 的节点 (XHTTP) encryption 填入 xray vlessenc 生成的 ML-KEM-768 encryption 值

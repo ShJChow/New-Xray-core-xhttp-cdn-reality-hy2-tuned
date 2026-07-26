@@ -16,13 +16,13 @@
 
 | 能力 | 说明 |
 |---|---|
-| 6 种节点模式 | 见下方节点表，全部使用 `alpn=h2` |
+| 8 种节点模式 | 见下方节点表，含两条 XHTTP over HTTP/3（UDP 443）节点 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
 | **流控全开** | BBR + fq、TFO、MTU 探测、句柄 1048576、Xray `sockopt` 与 `policy.bufferSize`、Nginx gRPC 长连接超时 |
 | **机型自适应** | 按内存自动分三档（≥16G / ≥4G / <4G）伸缩缓冲区与队列；ARM64 显式设置 `bufferSize`（默认仅 4 KB） |
-| flow / Vision | 节点 1 用 `xtls-rprx-vision`（唯一能走 Splice 的节点）；节点 2–7 是 XHTTP，按协议不能带 flow。`VISION_UDP443=1` 可切到 `-udp443` |
+| flow / Vision | 节点 1 用 `xtls-rprx-vision`（唯一能走 Splice 的节点）；其余节点是 XHTTP，按协议不能带 flow。`VISION_UDP443=1` 可切到 `-udp443` |
 | **管理命令 `xh`** | 状态 / 节点信息 / 订阅 / 日志 / 更新内核 / 调优开关 / 保活 / 卸载 |
 | **非交互一键** | 环境变量驱动，`AUTO=1` 零交互重装 |
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
@@ -33,7 +33,7 @@
 
 ## 节点列表
 
-脚本生成 6 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
+脚本生成 8 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
@@ -43,16 +43,29 @@
 | 4 | `Vless-xhttp-tls-cdn-<host>` | 双向经 CDN | XHTTP + TLS，h2 |
 | 5 | `Vless-xhttp-up-reality-down-cdn-<host>` | 上行直连 / 下行经 CDN | XHTTP |
 | 6 | `Vless-xhttp-tls-direct-<host>` | 直连 VPS TCP 443，不过 CDN | XHTTP + TLS（真实证书），h2 |
+| 7 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
+| 8 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
 
-> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–7 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。追求单节点速度请优先用节点 1，详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
+> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。其余节点是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。追求单节点速度请优先用节点 1，详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
 
-关于节点 6（直连 VPS 的 XHTTP + TLS）：
+关于节点 6（直连 VPS 的 XHTTP + TLS，h2）：
 
 - 客户端连 **VPS IP 的 TCP 443**、SNI 用 CDN 域名。Reality 入站把非 Reality 的握手回落到 Nginx:8003，因此拿到的是 CDN 域名的**真实证书**，不过 CDN、也不用 Reality 公钥。
 - 服务端**零额外配置**，不需要放行任何 UDP 端口。
-- Mihomo 配置只包含节点 1–5。
 
-> 早期版本曾提供两条 `alpn=h3`（UDP 443）节点并让 Nginx 监听 `443 quic`。该监听会导致部分环境下 Nginx 启动失败，且 h3 收益未经实测，已在 v1.1.3 移除；需要 QUIC 请用 `add-quic.sh` 扩展（它单独管理 UDP 端口与 Hysteria2）。
+关于两条 UDP（HTTP/3）节点：
+
+- **节点 7** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（CF 的 HTTP/3 默认开启）。
+- **节点 8** 直连 VPS：Nginx 额外监听 `UDP 443 quic`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
+- `http3` 依赖支持 QUIC 的 TLS 库（标准 OpenSSL 未必满足），该监听**曾在部分环境下导致 nginx 启动失败**。若重装后 `[6/8]` 阶段 `nginx -t` 或服务启动失败，用 `FEATURE_H3_DIRECT=false` 重跑一次以排除该因素：
+
+  ```bash
+  FEATURE_H3_DIRECT=false bash ~/install-xpadding.sh
+  ```
+
+  关闭后节点 8 不会生成（不会留一个连不上的死链接），节点 1–7 不受影响。
+- Mihomo 配置只包含节点 1–5：未核实其对 XHTTP-over-H3 的支持。V2rayN / Xray JSON 客户端可用全部 8 条。
+- 运行 `add-quic.sh` 扩展后，节点 8 的 UDP 443 监听会被该扩展接管（避免 `reuseport` 重复）。
 
 ---
 
@@ -132,6 +145,7 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
+| `FEATURE_H3_DIRECT` | `false` 关闭节点 8（直连 VPS 的 h3）与对应 Nginx `443 quic` 监听 | `true` |
 | `FEATURE_TUNING` | `false` 关闭全部流控调优 | `true` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |

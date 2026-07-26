@@ -4,3 +4,5 @@ vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tl
 vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_URI_PARAM}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-cdn-${HOSTNAME_TAG}
 vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto&extra=${EXTRA_5}#Vless-xhttp-up-reality-down-cdn-${HOSTNAME_TAG}
 vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-direct-${HOSTNAME_TAG}
+vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_URI_PARAM}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
+${NODE_UDP_DIRECT_LINE}

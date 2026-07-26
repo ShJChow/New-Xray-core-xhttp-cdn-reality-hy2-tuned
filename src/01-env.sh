@@ -45,5 +45,10 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 FEATURE_TUNING=${FEATURE_TUNING:-true}
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
+# 直连 VPS 的 XHTTP-over-H3 节点需要 Nginx 监听 UDP 443 quic，是配置里唯一有
+# SSL 库依赖的指令（http3 需要支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足），
+# 曾导致部分环境下 nginx 启动失败。若重装后 nginx -t / 服务启动失败，先用
+# FEATURE_H3_DIRECT=false 重跑一次以排除该因素，问题不在此项再继续排查。
+FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 AUTO=${AUTO:-0}
 

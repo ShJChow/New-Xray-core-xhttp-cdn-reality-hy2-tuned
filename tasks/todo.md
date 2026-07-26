@@ -70,6 +70,34 @@
 
 **未验证**：无 VPS —— `bufferSize` 的实际吞吐收益、BBR 生效、Nginx `listen 443 quic` 能否通过 `nginx -t`、两条 h3 节点的连通性均未做运行时验证。
 
+---
+
+# v1.1.4（2026-07-26）
+
+## Goal
+
+用户要求"回滚到 1.2 版本的节点"（即 v1.1.2 的 7 节点，含两条 `alpn=h3` 的 UDP 节点），同时保留 v1.1.3 修的两个问题（flow 默认值、acme reloadcmd 报错吞没）。已知这会重新引入曾导致 nginx 启动失败的 `listen 443 quic` 监听，用户在 AskUserQuestion 中明确知情后选择该项。
+
+## Change Scope
+
+- [x] 新增 `FEATURE_H3_DIRECT`（默认 `true`）开关，作为逃生舱：`false` 时不生成 nginx 的 `443 quic` 监听，也不生成对应的死链接节点
+- [x] `templates/nginx.conf.tmpl`：CDN server 块改为 `${NGINX_H3_DIRECT_BLOCK}` 占位符
+- [x] `src/09-server-config.sh`：渲染 nginx.conf 前按开关生成该占位符内容；`node.env` 记录 `FEATURE_H3_DIRECT`
+- [x] `templates/client-config.txt.tmpl`：恢复节点 7（经 CDN 的 h3，服务端零改动，不受开关影响）；节点 8（直连 h3）改为 `${NODE_UDP_DIRECT_LINE}` 占位符
+- [x] `src/11-client-config.sh`：按开关生成节点 8 的链接或空串
+- [x] `src/13-manage-cli.sh`：`xh info` 显示该开关状态
+- [x] README / docs/10 / docs/12 / 客户端模板.txt 同步：8 节点表、开关用法、Oracle 防火墙提醒改回需要放行 UDP 443（除非关闭该开关）
+
+## Verification
+
+- [x] 4 个 build 脚本 + `bash -n dist/*.sh` 全绿
+- [x] nginx 模板未转义 `$` 检查（两处例外是既有的 `$(nginx_fallback_config ...)` 函数调用，非本次引入）
+- [x] 13 组 xray-config 渲染矩阵（复用既有测试，未受本次改动影响）
+- [x] 新增 h3 开关回归：`FEATURE_H3_DIRECT` true/false 两种取值下，分别断言 nginx.conf 是否含 `main-h3` 段、`client-config.txt` 是否为 8/7 条节点、是否含/不含 UDP-direct 节点
+- [x] 复用既有的扩展节点定位回归，确认恢复的 UDP 节点不会被 `NODE_RE_CDN_BOTH` 等正则误匹配
+
+**未验证**：无 VPS —— 节点 8 的 nginx `443 quic` 监听能否通过 `nginx -t` 与实际连通性仍未做运行时验证，这正是 `FEATURE_H3_DIRECT` 开关存在的原因。
+
 ## Review
 
 - 最实质的性能修复是 Nginx 的 `grpc_read_timeout` / `grpc_send_timeout`（默认 60s 会周期性切断 XHTTP 长连接），而非内核参数本身。
