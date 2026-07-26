@@ -48,6 +48,9 @@ install_xray
 export PATH="/usr/local/bin:$PATH"
 
 info "生成参数..."
+# 节点名后缀：取主机名，剔除非 ASCII 字母数字与连字符，避免客户端列表乱码
+HOSTNAME_TAG=$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9-' | cut -c1-20)
+[[ -z "$HOSTNAME_TAG" ]] && HOSTNAME_TAG="vps"
 UUID1=$(xray uuid)
 UUID2=$(xray uuid)
 KEY_OUTPUT=$(xray x25519 2>&1)

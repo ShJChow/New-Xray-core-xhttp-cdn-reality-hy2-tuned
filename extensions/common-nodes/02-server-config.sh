@@ -17,7 +17,9 @@ info "XHTTP H3 复用 Xray 127.0.0.1:8001 入站"
 sed -i \
   -e '/^[[:space:]]*# BEGIN common-nodes h3$/,/^[[:space:]]*# END common-nodes h3$/d' \
   -e '/^[[:space:]]*# BEGIN quic xhttp$/,/^[[:space:]]*# END quic xhttp$/d' \
+  -e '/^[[:space:]]*# BEGIN main-h3$/,/^[[:space:]]*# END main-h3$/d' \
   "$NGINX_CONF"
+info "已移除主脚本的 UDP 443 quic 监听（由本扩展接管，避免 reuseport 重复）"
 
 grep -Eq "^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:space:]]*$" "$NGINX_CONF" ||
   error "未找到 Reality 域名 Nginx 配置"

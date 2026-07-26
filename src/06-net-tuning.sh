@@ -81,7 +81,10 @@ else
   MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
   CPU_CORES=$(nproc 2>/dev/null || echo 1)
   ARCH=$(uname -m 2>/dev/null || echo unknown)
-  MEM_PAGES=$(awk '/^MemTotal:/{printf "%d", $2/4}' /proc/meminfo 2>/dev/null || echo 262144)
+  # tcp_mem 的单位是"页"，页大小不一定是 4K：
+  # RHEL 系的 aarch64 内核（Oracle Linux / UEK）常用 64K 页，写死 /4 会让页数偏大 16 倍
+  PAGE_SIZE=$(getconf PAGESIZE 2>/dev/null || echo 4096)
+  MEM_PAGES=$(awk -v ps="$PAGE_SIZE" '/^MemTotal:/{printf "%d", $2*1024/ps}' /proc/meminfo 2>/dev/null || echo 262144)
 
   if [[ "$MEM_MB" -ge 16384 ]]; then
     TUNE_TIER="large"

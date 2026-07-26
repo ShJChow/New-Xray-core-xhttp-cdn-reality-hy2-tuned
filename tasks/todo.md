@@ -43,6 +43,33 @@
 
 **未验证**：无 VPS，证书签发、BBR 实际生效、Nginx 编译、Xray 启动、客户端连通性与 CDN 链路均未做运行时验证。
 
+---
+
+# v1.1.0（2026-07-26）
+
+## Goal
+
+客户端 flow 改 `xtls-rprx-vision-udp443`；按 Oracle Ampere A1（4 OCPU / 24 GB / ARM64）整体调优；节点名重写为 ASCII + 主机名后缀；新增两条 XHTTP over HTTP/3（UDP 443）节点。
+
+## Change Scope
+
+- [x] flow：客户端链接与手动模板改 `-udp443`；**服务端 inbound 保持 `xtls-rprx-vision`**（Xray 源码中 `XRV` 是唯一常量，客户端 `-udp443` 只是本地开关，上线仍发 `xtls-rprx-vision`）；mihomo 保持原值（其 flow 被截断到 16 字符，写了无效）
+- [x] `src/06-net-tuning.sh`：探测内存/核数/架构，按内存分 large/medium/small 三档；`tcp_mem` 用 `getconf PAGESIZE` 换算，不再假定 4K 页
+- [x] `templates/xray-config.json.tmpl`：新增 `policy` 段，`bufferSize` 按档位 512/256/64 KB（ARM64 默认仅 4 KB）
+- [x] 节点名重写为 `Vless-*-<hostname>`（`src/05-base-env.sh` 生成 `HOSTNAME_TAG`）
+- [x] 新增节点 6（经 CDN 的 h3，服务端零改动）与节点 7（直连 VPS 的 h3，Nginx 加 `listen 443 quic reuseport`，标记 `# BEGIN main-h3`）
+- [x] `extensions/common-nodes/02-server-config.sh`：删除 `main-h3` 标记段，避免 `add-quic.sh` 与主脚本 `reuseport` 重复
+- [x] 新增 `docs/12.机型调优-OracleARM.md`；更新 `docs/10`、`docs/2`、README
+
+## Verification
+
+- [x] 4 个 build 脚本 + `bash -n dist/*.sh` 全绿；抽取的 `xh` 单独 `bash -n` 通过
+- [x] 渲染矩阵 13 组（3 档 bufferSize × BBR 有无 × xpadding 有无 + 关闭调优），`python -m json.tool` + 断言：`bufferSize` 正确、服务端 flow 必须是 `xtls-rprx-vision`、`tcpcongestion` 只在 BBR 可用时出现。**渲染函数直接从 `dist/install-xpadding.sh` 抽取执行**，不再手抄副本，源码漂移会被测出
+- [x] 分档回归覆盖 4K/16K/64K 页大小，断言 `tcp_mem` 上限恒低于物理内存
+- [x] 节点断言：7 条链接、7 个唯一 ASCII 名、`main-h3` 段落存在
+
+**未验证**：无 VPS —— `bufferSize` 的实际吞吐收益、BBR 生效、Nginx `listen 443 quic` 能否通过 `nginx -t`、两条 h3 节点的连通性均未做运行时验证。
+
 ## Review
 
 - 最实质的性能修复是 Nginx 的 `grpc_read_timeout` / `grpc_send_timeout`（默认 60s 会周期性切断 XHTTP 长连接），而非内核参数本身。

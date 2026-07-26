@@ -16,7 +16,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 5 种节点模式 | Reality Vision 直连 / XHTTP+Reality 不分离 / 上行 CDN 下行 Reality / 双向 CDN / 上行 Reality 下行 CDN |
+| 7 种节点模式 | 见下方节点表，含两条 XHTTP over HTTP/3（UDP 443）节点 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -28,6 +28,29 @@
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
 | **内核自动更新** | 每周更新 Xray-core，配置自检失败自动回滚 |
 | 扩展 | 上下行不同 CDN / 上行 IPv4 下行 IPv6 / XHTTP-H3 与 Hysteria2 |
+
+---
+
+## 节点列表
+
+脚本生成 7 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
+
+| # | 节点名 | 链路 | 传输 |
+|---|---|---|---|
+| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision（`-udp443`，不拦截 QUIC） |
+| 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
+| 3 | `Vless-xhttp-up-cdn-down-reality-<host>` | 上行经 CDN / 下行直连 | XHTTP，h2 |
+| 4 | `Vless-xhttp-tls-cdn-<host>` | 双向经 CDN | XHTTP + TLS，h2 |
+| 5 | `Vless-xhttp-up-reality-down-cdn-<host>` | 上行直连 / 下行经 CDN | XHTTP |
+| 6 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
+| 7 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
+
+关于两条 UDP（HTTP/3）节点：
+
+- **节点 6** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（CF 的 HTTP/3 默认开启）。
+- **节点 7** 直连 VPS：Nginx 额外监听 `UDP 443 quic`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
+- Mihomo 配置只包含节点 1–5：未核实 mihomo 对 XHTTP-over-H3 的支持，宁可不写也不写错。V2rayN / Xray JSON 客户端可用全部 7 条。
+- 运行 `add-quic.sh` 扩展后，节点 7 的 UDP 443 监听会被该扩展接管（避免 `reuseport` 重复）。
 
 ---
 

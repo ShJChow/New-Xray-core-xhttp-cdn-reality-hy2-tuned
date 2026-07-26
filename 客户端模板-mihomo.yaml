@@ -62,7 +62,7 @@ dns:
       - https://doh.pub/dns-query
 
 proxies:
-  - name: reality+vision 直连
+  - name: Vless-reality-vision-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
@@ -80,7 +80,7 @@ proxies:
       public-key: YOUR_PUBLIC_KEY
       short-id: YOUR_SHORT_ID
 
-  - name: xhttp+Reality 上下行不分离
+  - name: Vless-xhttp-reality-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
@@ -105,7 +105,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
-  - name: 上行 xhttp+TLS+CDN | 下行 xhttp+Reality
+  - name: Vless-xhttp-up-cdn-down-reality-YOUR_HOST
     type: vless
     server: YOUR_CDN_DOMAIN
     port: 443
@@ -144,7 +144,7 @@ proxies:
           c-max-reuse-times: "0"
           h-max-reusable-secs: "1800-3000"
 
-  - name: xhttp+TLS 双向 CDN
+  - name: Vless-xhttp-tls-cdn-YOUR_HOST
     type: vless
     server: YOUR_CDN_DOMAIN
     port: 443
@@ -167,7 +167,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
-  - name: 上行 xhttp+Reality | 下行 xhttp+TLS+CDN
+  - name: Vless-xhttp-up-reality-down-cdn-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443

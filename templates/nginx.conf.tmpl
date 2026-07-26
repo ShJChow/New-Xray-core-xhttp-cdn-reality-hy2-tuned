@@ -1,6 +1,5 @@
 user root;
 worker_processes auto;
-worker_cpu_affinity auto;
 worker_rlimit_nofile 1048576;
 
 error_log /usr/local/nginx/logs/error.log notice;
@@ -87,6 +86,13 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
     server {
         listen       8003 ssl;
         http2        on;
+        # BEGIN main-h3
+        # 直连 VPS 的 XHTTP over HTTP/3（节点 Vless-xhttp-tls-UDP-direct）
+        # Xray 占用的是 TCP 443，这里占用 UDP 443，互不冲突。
+        # 需要防火墙放行 UDP 443；add-quic.sh 会接管并移除本段。
+        listen       443 quic reuseport;
+        http3        on;
+        # END main-h3
         server_name  ${CDN_DOMAIN};
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
