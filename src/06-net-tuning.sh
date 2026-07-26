@@ -44,12 +44,72 @@ render_sockopt_kv() {
   printf '%s}' "$pad"
 }
 
+# render_policy_json BUFFER_KB —— 输出 `,\n    "policy": { ... },` 之前的片段
+# 超时项一律沿用 Xray 官方默认值，只调 bufferSize。
+render_policy_json() {
+  cat <<EOF
+
+    "policy": {
+        "levels": {
+            "0": {
+                "handshake": 4,
+                "connIdle": 300,
+                "uplinkOnly": 2,
+                "downlinkOnly": 5,
+                "bufferSize": $1
+            }
+        },
+        "system": {
+            "statsInboundUplink": false,
+            "statsInboundDownlink": false,
+            "statsOutboundUplink": false,
+            "statsOutboundDownlink": false
+        }
+    },
+EOF
+}
+
 if [[ "$FEATURE_TUNING" != true ]]; then
-  warn "FEATURE_TUNING=false，跳过内核调优（Xray sockopt 也不会写入）"
+  warn "FEATURE_TUNING=false，跳过内核调优（Xray sockopt / policy 也不会写入）"
   XRAY_SOCKOPT_JSON=""
   XRAY_SOCKOPT_OUT_JSON=""
+  XRAY_POLICY_JSON=""
 else
   install -d -m 700 "$STATE_DIR"
+
+  # ---------- 机型探测：按内存分档，参数随机器规格伸缩 ----------
+  MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+  CPU_CORES=$(nproc 2>/dev/null || echo 1)
+  ARCH=$(uname -m 2>/dev/null || echo unknown)
+  MEM_PAGES=$(awk '/^MemTotal:/{printf "%d", $2/4}' /proc/meminfo 2>/dev/null || echo 262144)
+
+  if [[ "$MEM_MB" -ge 16384 ]]; then
+    TUNE_TIER="large"
+    SOCK_MEM_MAX=67108864       # 64 MB
+    TCP_MEM_MAX=33554432        # 32 MB
+    NETDEV_BACKLOG=65536
+    CONNTRACK_MAX=1048576
+    XRAY_BUFFER_KB=512
+  elif [[ "$MEM_MB" -ge 4096 ]]; then
+    TUNE_TIER="medium"
+    SOCK_MEM_MAX=33554432       # 32 MB
+    TCP_MEM_MAX=16777216        # 16 MB
+    NETDEV_BACKLOG=32768
+    CONNTRACK_MAX=262144
+    XRAY_BUFFER_KB=256
+  else
+    TUNE_TIER="small"
+    SOCK_MEM_MAX=16777216       # 16 MB
+    TCP_MEM_MAX=8388608         # 8 MB
+    NETDEV_BACKLOG=16384
+    CONNTRACK_MAX=0             # 0 = 不调整
+    XRAY_BUFFER_KB=64
+  fi
+
+  info "机型: ${CPU_CORES} 核 / ${MEM_MB} MB / ${ARCH} → 调优档位 ${TUNE_TIER}"
+  if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+    info "ARM64 平台：Xray policy.bufferSize 默认仅 4 KB，本次将显式设为 ${XRAY_BUFFER_KB} KB"
+  fi
 
   # ---------- 调优前快照 ----------
   BEFORE_QDISC=$(sysctl_get net.core.default_qdisc)
@@ -77,25 +137,32 @@ else
     try_sysctl net.ipv4.tcp_congestion_control bbr
   fi
 
-  # ---------- 收发缓冲区（大带宽时延积链路 / 过 CDN 的关键项）----------
-  try_sysctl net.core.rmem_max 16777216
-  try_sysctl net.core.wmem_max 16777216
+  # ---------- 收发缓冲区（大带宽时延积链路 / 过 CDN 的关键项，按档位伸缩）----------
+  try_sysctl net.core.rmem_max "$SOCK_MEM_MAX"
+  try_sysctl net.core.wmem_max "$SOCK_MEM_MAX"
   try_sysctl net.core.rmem_default 1048576
   try_sysctl net.core.wmem_default 1048576
-  try_sysctl net.ipv4.tcp_rmem "4096 87380 16777216"
-  try_sysctl net.ipv4.tcp_wmem "4096 65536 16777216"
-  try_sysctl net.ipv4.tcp_mem "786432 1048576 26777216"
+  try_sysctl net.ipv4.tcp_rmem "4096 87380 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_wmem "4096 65536 ${TCP_MEM_MAX}"
+  # tcp_mem 单位是页(4K)，按物理内存的 6% / 8% / 12% 推算，避免在小内存机上过量占用
+  try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
   # QUIC / HTTP3（add-quic.sh 扩展与 Hysteria2 会用到）
   try_sysctl net.core.optmem_max 65536
   try_sysctl net.ipv4.udp_rmem_min 8192
   try_sysctl net.ipv4.udp_wmem_min 8192
 
   # ---------- 队列与并发 ----------
-  try_sysctl net.core.netdev_max_backlog 32768
+  try_sysctl net.core.netdev_max_backlog "$NETDEV_BACKLOG"
   try_sysctl net.core.somaxconn 65535
-  try_sysctl net.ipv4.tcp_max_syn_backlog 32768
+  try_sysctl net.ipv4.tcp_max_syn_backlog "$NETDEV_BACKLOG"
   try_sysctl net.ipv4.tcp_max_tw_buckets 65536
   try_sysctl net.ipv4.ip_local_port_range "1024 65535"
+
+  # conntrack 仅在模块已加载时调整；未加载时写入会失败并留下无用告警
+  if [[ "$CONNTRACK_MAX" -gt 0 ]] && [[ -r /proc/sys/net/netfilter/nf_conntrack_max ]]; then
+    try_sysctl net.netfilter.nf_conntrack_max "$CONNTRACK_MAX"
+    try_sysctl net.netfilter.nf_conntrack_tcp_timeout_established 3600
+  fi
 
   # ---------- 连接建立与保持 ----------
   try_sysctl net.ipv4.tcp_fastopen 3
@@ -177,6 +244,7 @@ DROPINEOF
   printf '  %-28s %-18s -> %s\n' "net.core.rmem_max"               "${BEFORE_RMEM:-n/a}"   "$(sysctl_get net.core.rmem_max)"
   printf '  %-28s %-18s -> %s\n' "net.ipv4.tcp_fastopen"           "-"                     "$(sysctl_get net.ipv4.tcp_fastopen)"
   printf '  %-28s %-18s -> %s\n' "ulimit -n (当前 shell)"          "${BEFORE_NOFILE}"      "重新登录后生效: 1048576"
+  printf '  %-28s %-18s -> %s\n' "Xray policy.bufferSize"          "平台默认"               "${XRAY_BUFFER_KB} KB"
   echo ""
 
   # ---------- 供 Xray 模板注入的 sockopt ----------
@@ -186,4 +254,6 @@ DROPINEOF
   XRAY_SOCKOPT_JSON=$(printf ',\n%s' "$(render_sockopt_kv 16)")
   # 出站 freedom：需要额外包一层 streamSettings（"streamSettings" 缩进 12）
   XRAY_SOCKOPT_OUT_JSON=$(printf ',\n            "streamSettings": {\n%s\n            }' "$(render_sockopt_kv 16)")
+  # policy：ARM64 默认 bufferSize 仅 4 KB，显式设置是本机型最大的一处 Xray 侧杠杆
+  XRAY_POLICY_JSON=$(render_policy_json "$XRAY_BUFFER_KB")
 fi

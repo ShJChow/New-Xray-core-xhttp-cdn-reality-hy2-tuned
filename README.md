@@ -20,7 +20,9 @@
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
-| **流控全开** | BBR + fq、16MB 收发缓冲、TFO、MTU 探测、句柄 1048576、Xray `sockopt`、Nginx gRPC 长连接超时修复 |
+| **流控全开** | BBR + fq、TFO、MTU 探测、句柄 1048576、Xray `sockopt` 与 `policy.bufferSize`、Nginx gRPC 长连接超时 |
+| **机型自适应** | 按内存自动分三档（≥16G / ≥4G / <4G）伸缩缓冲区与队列；ARM64 显式设置 `bufferSize`（默认仅 4 KB） |
+| flow | 客户端 `xtls-rprx-vision-udp443`（不拦截 UDP 443，QUIC 程序可用），服务端按 Xray 要求保持 `xtls-rprx-vision` |
 | **管理命令 `xh`** | 状态 / 节点信息 / 订阅 / 日志 / 更新内核 / 调优开关 / 保活 / 卸载 |
 | **非交互一键** | 环境变量驱动，`AUTO=1` 零交互重装 |
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
@@ -136,7 +138,8 @@ xh uninstall           卸载全部组件
 
 完整参数表、探测降级逻辑与回滚方式见 [docs/10.流控调优.md](./docs/10.流控调优.md)。要点：
 
-- **内核**：BBR + fq、`rmem/wmem` 16MB、`tcp_fastopen=3`、`tcp_mtu_probing=1`、`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲（QUIC/H3）等，全部写入独立文件 `/etc/sysctl.d/99-xray-xhttp.conf`，**不改动你原有的 `sysctl.conf`**。
+- **内核**：BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tcp_mtu_probing=1`、`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲（QUIC/H3）等，全部写入独立文件 `/etc/sysctl.d/99-xray-xhttp.conf`，**不改动你原有的 `sysctl.conf`**。
+- **Xray policy**：`bufferSize` 按档位取 512/256/64 KB。**ARM64（Oracle Ampere A1）默认只有 4 KB**，amd64 是 512 KB —— 不显式设置会形成巨大差异，详见 [docs/12](./docs/12.机型调优-OracleARM.md)。
 - **句柄**：`limits.d` + systemd drop-in（不改官方 Xray unit，内核更新不会被覆盖），`nofile=1048576`。
 - **Xray**：入站与 freedom 出站注入 `sockopt`（`tcpFastOpen` / `tcpcongestion: bbr` / keepalive / `tcpUserTimeout`）。`tcpcongestion` **仅在探测到 BBR 时写入**，否则省略以免 Xray 启动失败。
 - **Nginx**：`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
@@ -178,7 +181,8 @@ curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download
 9. [9.卸载.md](./docs/9.卸载.md)
 10. [10.流控调优.md](./docs/10.流控调优.md)
 11. [11.管理命令.md](./docs/11.管理命令.md)
-12. [客户端模板.txt](./客户端模板.txt) / [客户端模板-mihomo.yaml](./客户端模板-mihomo.yaml)
+12. [12.机型调优-OracleARM.md](./docs/12.机型调优-OracleARM.md)
+13. [客户端模板.txt](./客户端模板.txt) / [客户端模板-mihomo.yaml](./客户端模板-mihomo.yaml)
 
 ---
 

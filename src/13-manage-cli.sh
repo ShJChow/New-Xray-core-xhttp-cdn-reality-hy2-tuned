@@ -88,6 +88,8 @@ cmd_status() {
   printf '  %-32s %s\n' "net.ipv4.tcp_congestion_control" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.core.rmem_max"               "$(sysctl -n net.core.rmem_max 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.ipv4.tcp_fastopen"           "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo n/a)"
+  printf '  %-32s %s\n' "机型 / 调优档位" "${CPU_CORES:-?} 核 / ${MEM_MB:-?} MB / ${ARCH:-?} → ${TUNE_TIER:-未知}"
+  printf '  %-32s %s\n' "Xray policy.bufferSize" "${XRAY_BUFFER_KB:-未设置} KB"
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
   else
