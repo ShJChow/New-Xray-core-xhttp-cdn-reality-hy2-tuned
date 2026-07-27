@@ -166,6 +166,15 @@ bash ~/install.sh
 
 脚本可重复执行，用于更新域名、回落网站等参数。
 
+## 扩展脚本
+
+主脚本部署完成后按需追加，会复用已有 `UUID / Path / VLESS Encryption` 并更新客户端配置与订阅。
+
+```bash
+# VLESS+XHTTP+TLS(H3) | Hysteria2 直连
+curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+```
+
 ### 非交互一键（脚本化重装）
 
 ```bash
@@ -249,21 +258,6 @@ xh uninstall           卸载全部组件
 全部调优均为 **best-effort**：OpenVZ / LXC 等只读 sysctl 环境会逐项跳过并告警，不会中断部署。回滚只需 `xh tuning off`。
 
 ---
-
-## 扩展脚本
-
-主脚本部署完成后按需追加，会复用已有 `UUID / Path / VLESS Encryption` 并更新客户端配置与订阅。
-
-```bash
-# 上行 CDN-A | 下行 CDN-B
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-dual-cdn.sh -o ~/add-dual-cdn.sh && bash ~/add-dual-cdn.sh
-
-# 上行 IPv4 | 下行 IPv6（需 VPS 同时拥有 v4/v6）
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-dual-ip.sh -o ~/add-dual-ip.sh && bash ~/add-dual-ip.sh
-
-# VLESS+XHTTP+TLS(H3) | Hysteria2 直连
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
-```
 
 ---
 
