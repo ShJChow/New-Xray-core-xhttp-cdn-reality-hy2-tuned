@@ -175,9 +175,58 @@ cmd_resub() {
   cmd_sub
 }
 
+# /etc/sysctl.d/ 里的冲突与残留检测。
+# 背景：这台机器上常常跑过不止一个调优脚本。systemd-sysctl 按**文件名字典序**
+# 加载，后加载的覆盖先加载的——也就是说别人的文件只要排在 99-xray-xhttp.conf
+# 之后，就会静默覆盖掉本项目的值，而且没有任何报错。
+# 本函数只报告，不删除任何文件：那些文件不是本项目产生的，脚本无权处置。
+cmd_conflict() {
+  local ours="99-xray-xhttp.conf" d=/etc/sysctl.d
+  echo -e "${CYAN}[+] sysctl 配置冲突检测${NC}"
+  [[ -f "$SYSCTL_CONF" ]] || { info "本项目未写入 sysctl（系统层调优关闭），无冲突可言"; echo ""; return 0; }
+
+  local ourkeys conflict=0
+  ourkeys=$(sed 's/#.*//; s/=.*//; s/[[:space:]]//g' "$SYSCTL_CONF" | grep -E '^[a-z]' | sort -u)
+
+  for f in "$d"/*.conf; do
+    [[ -f "$f" ]] || continue
+    local base; base=$(basename "$f")
+    [[ "$base" == "$ours" ]] && continue
+    local dup; dup=$(sed 's/#.*//; s/=.*//; s/[[:space:]]//g' "$f" | grep -E '^[a-z]' | sort -u |
+                     comm -12 - <(echo "$ourkeys") 2>/dev/null)
+    [[ -z "$dup" ]] && continue
+    conflict=1
+    if [[ "$base" > "$ours" ]]; then
+      echo -e "  ${RED}[!!]${NC} $base 排在本项目之后，会**覆盖**以下参数："
+    else
+      echo -e "  ${YELLOW}[--]${NC} $base 与本项目重叠，但排序在前，被本项目覆盖（当前无害）："
+    fi
+    echo "$dup" | sed 's/^/         /'
+  done
+  [[ "$conflict" -eq 0 ]] && echo -e "  ${GREEN}[OK]${NC}   未发现与其它 sysctl 文件的参数重叠"
+
+  # 不会被加载的残留（systemd-sysctl 只读 *.conf）
+  local junk; junk=$(ls "$d" 2>/dev/null | grep -vE '\.conf$|^README' || true)
+  if [[ -n "$junk" ]]; then
+    echo ""
+    echo -e "  ${YELLOW}[--]${NC} 以下文件不以 .conf 结尾，systemd-sysctl 不会加载（仅占位，可自行清理）："
+    echo "$junk" | sed 's/^/         /'
+    echo "         清理: mkdir -p /root/sysctl-backup && mv /etc/sysctl.d/*.disabled.* /etc/sysctl.d/*.bak /root/sysctl-backup/"
+  fi
+
+  echo ""
+  echo -e "  ${CYAN}实际生效值（以内核为准，与文件内容无关）${NC}"
+  for k in net.core.somaxconn net.core.netdev_max_backlog net.ipv4.tcp_max_syn_backlog \
+           net.core.rmem_max net.ipv4.tcp_congestion_control net.core.default_qdisc; do
+    printf '    %-36s %s\n' "$k" "$(sysctl -n "$k" 2>/dev/null || echo n/a)"
+  done
+  echo ""
+}
+
 # UDP / HTTP3 节点连不上时的服务端侧自检。
 # 目的是"排除服务端"：这里全绿说明问题在客户端网络或客户端内核。
 cmd_diag() {
+  cmd_conflict
   local ok=0 bad=0
   chk() { # chk 描述 结果(0/1) 补充说明
     if [[ "$2" -eq 0 ]]; then echo -e "  ${GREEN}[OK]${NC}   $1${3:+ — $3}"; ok=$((ok+1))
@@ -546,7 +595,8 @@ cmd_menu() {
     echo "  8) 保活开关"
     echo "  9) 内核自动更新开关"
     echo " 10) UDP 节点自检 (diag)"
-    echo " 11) 卸载"
+    echo " 11) sysctl 冲突检测 (conflict)"
+    echo " 12) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -560,7 +610,8 @@ cmd_menu() {
       8) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
       10) cmd_diag ;;
-      11) cmd_uninstall; break ;;
+      11) cmd_conflict ;;
+      12) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -596,6 +647,7 @@ case "${1:-menu}" in
   sub)        cmd_sub ;;
   resub)      cmd_resub ;;
   diag)       cmd_diag ;;
+  conflict)   cmd_conflict ;;
   log)        shift; cmd_log "$@" ;;
   start)      cmd_start ;;
   stop)       cmd_stop ;;

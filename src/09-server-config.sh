@@ -9,6 +9,16 @@ if [[ "$FALLBACK_MODE" == "static" ]]; then
   [[ -f "${STATIC_SITE_DIR}/${CDN_DOMAIN}/index.html" ]] || error "未找到 CDN 域名页面"
 fi
 
+# IP_CHOICE=1（纯 IPv4 出网）的机器上，回落站域名若解析出 AAAA，nginx 会先尝试
+# IPv6 再失败回退，实测 error.log 出现:
+#   connect() to [2600:...]:443 failed (101: Network is unreachable)
+# 每次伪装探测都白白多一次超时。这里按出网协议族关掉对应的解析。
+if [[ "$IP_CHOICE" == "2" ]]; then
+  NGINX_RESOLVER_IPV6="ipv4=off"
+else
+  NGINX_RESOLVER_IPV6="ipv6=off"
+fi
+
 nginx_fallback_config() {
   if [[ "$FALLBACK_MODE" == "static" ]]; then
     cat <<EOF

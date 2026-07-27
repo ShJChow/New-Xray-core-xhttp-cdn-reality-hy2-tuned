@@ -218,6 +218,7 @@ xh start|stop|restart  服务控制
 xh update [--auto]     更新 Xray-core（自检失败自动回滚）
 xh tuning [show|on|off] 查看 / 开启 / 回滚系统层调优
 xh diag                UDP / HTTP3 节点连不上时的服务端侧自检
+xh conflict            检测 /etc/sysctl.d/ 中会覆盖本项目参数的其它配置文件
 xh keepalive [on|off]  保活开关
 xh autoupdate [on|off] 内核自动更新开关
 xh uninstall           卸载全部组件
@@ -233,7 +234,7 @@ xh uninstall           卸载全部组件
 - **Xray policy**：`bufferSize` 按档位取 512/256/64 KB。**ARM64（Oracle Ampere A1）默认只有 4 KB**，amd64 是 512 KB —— 不显式设置会形成巨大差异，详见 [docs/12](./docs/12.机型调优-OracleARM.md)。
 - **句柄**：`limits.d` + systemd drop-in（不改官方 Xray unit，内核更新不会被覆盖），`nofile=1048576`。
 - **Xray**：入站与 freedom 出站注入 `sockopt`（`tcpFastOpen` / `tcpcongestion: bbr` / keepalive / `tcpUserTimeout`）。`tcpcongestion` **仅在探测到 BBR 时写入**，否则省略以免 Xray 启动失败。
-- **Nginx**：`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
+- **Nginx**：`listen backlog=65535`（默认仅 511，而全部 CDN 流量都经此进入，是全链路唯一的浅队列）、`access_log off`（XHTTP 高频 POST 且 URL 带上千字符 x_padding，写盘既费 IO 又把 padding 明文落盘）、`resolver` 按出网协议族关掉 IPv6/IPv4 解析（避免回落站每次先失败一次）、`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
 - **客户端**：xpadding 版自动带 `xmux`（`maxConcurrency 32-64`、`hMaxReusableSecs 3600-6000`）。
 
 **v1.2.2 起系统层与 Xray 层分开**：

@@ -32,6 +32,10 @@ http {
     keepalive_requests    10000;
     gzip                  on;
 
+    # XHTTP 是高频 POST，且 URL 携带上千字符的 x_padding：写 access_log 既是持续的
+    # 磁盘 IO，也把 padding 明文落盘。error_log 保留，排障不受影响。
+    access_log            off;
+
     add_header X-Content-Type-Options nosniff;
 
     ssl_session_cache          shared:SSL:16m;
@@ -42,7 +46,7 @@ http {
     ssl_prefer_server_ciphers  on;
     ssl_stapling               on;
     ssl_stapling_verify        on;
-    resolver                   1.1.1.1 8.8.8.8 valid=60s;
+    resolver                   1.1.1.1 8.8.8.8 valid=60s ${NGINX_RESOLVER_IPV6};
     resolver_timeout           2s;
 
     map \$real_client_ip \$proxy_forwarded_elem {
@@ -59,7 +63,11 @@ http {
     }
 
     server {
-        listen       8003 ssl;
+        # backlog=65535 对齐 net.core.somaxconn；nginx 默认仅 511，而全部 CDN 流量
+        # 都经 Xray:443 fallback 落到这里，是全链路唯一的浅队列。
+        # 注意：同一 address:port 的 backlog 只能声明一次，下面 CDN 那个 8003
+        # server 块不能重复写，否则 nginx -t 报 duplicate listen options。
+        listen       8003 ssl backlog=65535;
         http2        on;
         server_name  ${REALITY_DOMAIN};
 ${NGINX_H3_DIRECT_BLOCK}
@@ -112,7 +120,7 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
     }
 
     server {
-        listen  80 default_server;
+        listen  80 default_server backlog=65535;
         server_name _;
         return 301 https://\$host\$request_uri;
     }
