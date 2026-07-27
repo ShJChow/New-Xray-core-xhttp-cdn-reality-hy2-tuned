@@ -252,8 +252,18 @@ kv "irqbalance 状态" "$(systemctl is-active irqbalance 2>/dev/null || echo '�
 
 sub "!! softnet_stat 每 CPU 统计"
 echo "  CPU   processed    dropped     time_squeeze"
-awk '{printf "  %-5d %-12d %-11d %d\n", NR-1, strtonum("0x"$1), strtonum("0x"$2), strtonum("0x"$3)}' \
-  /proc/net/softnet_stat 2>/dev/null
+# strtonum() 是 gawk 扩展；Debian 默认 awk 是 mawk，不支持它，会静默输出空。
+# 改用 bash 的 $((16#..)) 做十六进制转换，任何发行版都可用。
+if [[ -r /proc/net/softnet_stat ]]; then
+  _c=0
+  while read -r f1 f2 f3 _rest; do
+    [[ "$f1" =~ ^[0-9a-fA-F]+$ ]] || continue
+    printf '  %-5d %-12d %-11d %d\n' "$_c" "$((16#$f1))" "$((16#$f2))" "$((16#$f3))"
+    _c=$((_c+1))
+  done < /proc/net/softnet_stat
+else
+  echo "  /proc/net/softnet_stat 不可读"
+fi
 echo ""
 echo "  判读："
 echo "    dropped 非 0      -> netdev_max_backlog 不足"
