@@ -10,7 +10,7 @@
 > **注意**：本方案使用 VLESS Encryption，客户端（V2rayN、Mihomo）需更新到支持 `vlessenc` / `xhttp` 的版本。
 >
 > **注意**：V2rayN v7.19.5+ 在 TUN 模式下链路可能不稳定，需启用旧版 TUN 保护选项（[PR #9005](https://github.com/2dust/v2rayN/pull/9005)）。
-安装所有节点和扩展histeria2节点后，运行**xh tuning on**
+安装所有节点和扩展histeria2节点后，运行 **xh tuning on**
 ---
 
 ## 特性
