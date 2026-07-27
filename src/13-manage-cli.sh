@@ -126,7 +126,8 @@ cmd_info() {
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
   echo "  直连 H3 节点:    ${FEATURE_H3_DIRECT:-false}"
-  echo "  流控调优:        ${FEATURE_TUNING:-false}（BBR 可用: ${TUNING_BBR_OK:-false}）"
+  echo "  Xray 侧调优:     ${FEATURE_TUNING:-false}（bufferSize / sockopt）"
+  echo "  系统层调优:      ${FEATURE_SYSCTL:-false}（内核 / 句柄，BBR 可用: ${TUNING_BBR_OK:-false}）"
   echo ""
   echo -e "${YELLOW}[+] 客户端节点${NC}"
   local f="${USER_HOME:-/root}/client-config.txt"
@@ -178,11 +179,17 @@ cmd_diag() {
 
   echo -e "${CYAN}[+] 直连 UDP 节点（Vless-xhttp-tls-UDP-direct）服务端自检${NC}"
 
-  if [[ "${FEATURE_H3_DIRECT:-true}" == true ]]; then
-    chk "FEATURE_H3_DIRECT 已开启" 0
-  else
-    chk "FEATURE_H3_DIRECT 已关闭" 1 "直连 UDP 节点未部署，仅 CDN 的 UDP 节点可用"
+  # FEATURE_H3_DIRECT=false 是一个**有意的**状态（用户主动关闭，或安装期
+  # nginx 启动失败后自动降级），不是异常：此时直连节点本就不该存在，后面
+  # 的 quic / server 块检查全部跳过，否则会刷出一屏假告警。
+  if [[ "${FEATURE_H3_DIRECT:-true}" != true ]]; then
+    echo -e "  ${YELLOW}[--]${NC}   FEATURE_H3_DIRECT 已关闭 — 直连 UDP 节点未部署，本项检查跳过"
+    echo ""
+    echo "  仅 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）可用。若这是安装期自动降级的"
+    echo "  结果，根因是当时的 nginx quic 启动失败，重装时可用 FEATURE_H3_DIRECT=true 重试。"
+    return 0
   fi
+  chk "FEATURE_H3_DIRECT 已开启" 0
 
   if grep -q '443 quic' /etc/nginx/nginx.conf 2>/dev/null; then
     chk "nginx.conf 含 UDP 443 quic 监听" 0
@@ -378,14 +385,23 @@ cmd_tuning() {
         echo -e "${CYAN}[+] ${SYSCTL_CONF}${NC}"
         cat "$SYSCTL_CONF"
       else
-        info "未启用流控调优（重跑安装脚本可开启）"
+        info "未启用系统层调优（默认关闭，用 `xh tuning on` 查看开启方式）"
       fi
       [[ -f "$LIMITS_CONF" ]] && { echo ""; echo -e "${CYAN}[+] ${LIMITS_CONF}${NC}"; cat "$LIMITS_CONF"; }
       ;;
     on)
-      [[ -f "$SYSCTL_CONF" ]] && { info "调优已处于开启状态"; return 0; }
-      warn "重新开启调优需要重跑安装脚本（其中包含逐项能力探测）："
-      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow26/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh && bash ~/install-xpadding.sh"
+      [[ -f "$SYSCTL_CONF" ]] && { info "系统层调优已处于开启状态"; return 0; }
+      # v1.2.2：系统层调优（FEATURE_SYSCTL）默认关闭，等节点验证无误后再开。
+      # 调优含逐项能力探测（BBR / 只读 sysctl / limits.d 是否存在），只能由安装
+      # 脚本执行，这里给出带 FEATURE_SYSCTL=true 的现成命令，并复用已有参数重装。
+      warn "开启系统层调优需重跑安装脚本（其中包含逐项能力探测），已为你拼好命令："
+      echo ""
+      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow26/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh"
+      echo "  AUTO=1 FEATURE_SYSCTL=true \\"
+      echo "  REALITY_DOMAIN=${REALITY_DOMAIN} CDN_DOMAIN=${CDN_DOMAIN} IP_CHOICE=${IP_CHOICE} \\"
+      echo "  bash ~/install-xpadding.sh"
+      echo ""
+      info "Xray 侧的 bufferSize / sockopt 不受该开关影响，安装时已写入"
       ;;
     off)
       rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
@@ -519,7 +535,7 @@ cmd_menu() {
     echo "  4) 重启服务"
     echo "  5) 查看日志 (xray)"
     echo "  6) 更新 Xray-core"
-    echo "  7) 流控调优 show / off"
+    echo "  7) 系统层调优 show / on / off"
     echo "  8) 保活开关"
     echo "  9) 内核自动更新开关"
     echo " 10) UDP 节点自检 (diag)"
@@ -557,7 +573,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|off]  查看 / 回滚流控调优（重新开启需重跑安装脚本）
+  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（默认关闭）
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）

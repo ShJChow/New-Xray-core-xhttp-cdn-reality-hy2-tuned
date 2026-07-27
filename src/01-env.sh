@@ -43,6 +43,11 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 # ==================================================
 
 FEATURE_TUNING=${FEATURE_TUNING:-true}
+# v1.2.2：把"改动宿主机全局状态"的部分从 FEATURE_TUNING 里拆出来，默认关闭。
+# 内核参数 / 句柄上限 / systemd drop-in 与"节点能不能通"无关，却是安装期最容易
+# 出问题的一段；先把节点跑通，确认无误后再 `xh tuning on` 打开。
+# Xray 侧的 bufferSize / sockopt 不写系统状态，仍由 FEATURE_TUNING 控制且默认开启。
+FEATURE_SYSCTL=${FEATURE_SYSCTL:-false}
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 # 直连 VPS 的 XHTTP-over-H3 节点需要 Nginx 监听 UDP 443 quic，是配置里唯一有

@@ -63,6 +63,8 @@ Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12]
 
   关闭后节点 4 不会生成（不留死链接），节点 1–3 不受影响。
 
+  **v1.2.2 起不需要手动重跑**：`[6/8]` 阶段若 Nginx 启动失败，脚本会自动打印 `journalctl` / 端口占用 / SELinux 状态，然后移除 `main-h3` 段重试一次。起来了就说明根因是 quic（此时节点 4 自动停用，`node.env` 同步改写）；仍起不来就说明与 quic 无关，两段诊断都已在屏幕上。
+
 ### UDP 节点连不上怎么办
 
 ```bash
@@ -131,7 +133,7 @@ REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \
 IP_CHOICE=1 \
 FALLBACK_MODE=proxy \
-REALITY_FALLBACK_ORIGIN=https://www.stanford.edu \
+REALITY_FALLBACK_ORIGIN=https://www.sjsu.edu \
 CDN_FALLBACK_ORIGIN=https://www.harvard.edu \
 CDN_ECH=n \
 bash ~/install-xpadding.sh
@@ -144,13 +146,14 @@ bash ~/install-xpadding.sh
 | `AUTO` | `1` 表示零交互 | `0` |
 | `REALITY_DOMAIN` / `CDN_DOMAIN` | 两个域名，**必填** | — |
 | `IP_CHOICE` | `1`=IPv4，`2`=IPv6 | `1` |
-| `FALLBACK_MODE` | `static`（本地页面）/ `proxy`（反代） | `static` |
-| `REALITY_FALLBACK_ORIGIN` / `CDN_FALLBACK_ORIGIN` | `proxy` 模式下的回落站 | stanford / harvard |
+| `FALLBACK_MODE` | `static`（本地页面）/ `proxy`（反代） | `proxy` |
+| `REALITY_FALLBACK_ORIGIN` / `CDN_FALLBACK_ORIGIN` | `proxy` 模式下的回落站 | sjsu / harvard |
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
 | `FEATURE_H3_DIRECT` | `false` 关闭节点 4（直连 VPS 的 h3）与对应 Nginx `443 quic` 监听 | `true` |
-| `FEATURE_TUNING` | `false` 关闭全部流控调优 | `true` |
+| `FEATURE_TUNING` | `false` 关闭全部调优（含 Xray 侧 bufferSize / sockopt） | `true` |
+| `FEATURE_SYSCTL` | **系统层**调优（内核参数 / 句柄 / systemd drop-in），默认关闭，节点验证无误后再开 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |
 
@@ -170,7 +173,7 @@ xh sub                 订阅链接与二维码
 xh log [xray|nginx]    跟踪日志
 xh start|stop|restart  服务控制
 xh update [--auto]     更新 Xray-core（自检失败自动回滚）
-xh tuning [show|off]   查看 / 回滚流控调优
+xh tuning [show|on|off] 查看 / 开启 / 回滚系统层调优
 xh diag                UDP / HTTP3 节点连不上时的服务端侧自检
 xh keepalive [on|off]  保活开关
 xh autoupdate [on|off] 内核自动更新开关
@@ -189,6 +192,15 @@ xh uninstall           卸载全部组件
 - **Xray**：入站与 freedom 出站注入 `sockopt`（`tcpFastOpen` / `tcpcongestion: bbr` / keepalive / `tcpUserTimeout`）。`tcpcongestion` **仅在探测到 BBR 时写入**，否则省略以免 Xray 启动失败。
 - **Nginx**：`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
 - **客户端**：xpadding 版自动带 `xmux`（`maxConcurrency 16-32`、`hMaxReusableSecs 1800-3000`）。
+
+**v1.2.2 起系统层与 Xray 层分开**：
+
+| 层 | 开关 | 默认 | 内容 |
+|---|---|---|---|
+| 系统层 | `FEATURE_SYSCTL` | **`false`** | `sysctl.d` 内核参数、`limits.d`、systemd drop-in —— 唯一改动宿主机全局状态、也是最容易在 OpenVZ / LXC 上出问题的一段 |
+| Xray 层 | `FEATURE_TUNING` | `true` | `policy.bufferSize`、入站/出站 `sockopt` —— 只写本项目的配置文件，无失败风险 |
+
+先把节点跑通、确认无误，再用 `xh tuning on`（会给出带 `FEATURE_SYSCTL=true` 的现成重装命令）打开系统层。ARM64 的 `bufferSize` 属于 Xray 层，默认就已生效，不会因为系统层关闭而丢失。
 
 全部调优均为 **best-effort**：OpenVZ / LXC 等只读 sysctl 环境会逐项跳过并告警，不会中断部署。回滚只需 `xh tuning off`。
 

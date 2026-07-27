@@ -77,16 +77,19 @@ normalize_proxy_origin() {
 
 echo ""
 echo -e "${YELLOW}[+] 主动探测回落方式${NC}"
-echo "  1) 使用自己的 index.html（默认）"
-echo "  2) Nginx 反向代理网站"
+echo "  1) 使用自己的 index.html"
+echo "  2) Nginx 反向代理网站（默认）"
 # FALLBACK_MODE 也可直接由环境变量给出 static / proxy
+# v1.2.2：默认由 static 改为 proxy —— 静态页需要用户自备两个域名的 index.html，
+# 未准备时回落内容是脚本生成的占位页，主动探测下与真实网站差异明显。
+# 注意这同时改变了 AUTO=1 的非交互路径：默认会反代 REALITY_FALLBACK_ORIGIN。
 case "${FALLBACK_MODE-}" in
   static) FALLBACK_CHOICE=1 ;;
   proxy)  FALLBACK_CHOICE=2 ;;
-  *)      ask FALLBACK_CHOICE "请选择回落方式 [1/2] (默认 1): " "1" ;;
+  *)      ask FALLBACK_CHOICE "请选择回落方式 [1/2] (默认 2): " "2" ;;
 esac
 
-case "${FALLBACK_CHOICE:-1}" in
+case "${FALLBACK_CHOICE:-2}" in
   1)
     FALLBACK_MODE="static"
     STATIC_SITE_DIR="${USER_HOME}/dist"
@@ -117,8 +120,8 @@ INITIAL_HTML_EOF
     ;;
   2)
     FALLBACK_MODE="proxy"
-    ask REALITY_FALLBACK_ORIGIN "请输入 Reality 域名回落网站 [默认 https://www.stanford.edu]: " "https://www.stanford.edu"
-    REALITY_FALLBACK_ORIGIN=$(normalize_proxy_origin "${REALITY_FALLBACK_ORIGIN:-https://www.stanford.edu}") ||
+    ask REALITY_FALLBACK_ORIGIN "请输入 Reality 域名回落网站 [默认 https://www.sjsu.edu]: " "https://www.sjsu.edu"
+    REALITY_FALLBACK_ORIGIN=$(normalize_proxy_origin "${REALITY_FALLBACK_ORIGIN:-https://www.sjsu.edu}") ||
       error "Reality 回落网站格式无效"
     ask CDN_FALLBACK_ORIGIN "请输入 CDN 域名回落网站 [默认 https://www.harvard.edu]: " "https://www.harvard.edu"
     CDN_FALLBACK_ORIGIN=$(normalize_proxy_origin "${CDN_FALLBACK_ORIGIN:-https://www.harvard.edu}") ||

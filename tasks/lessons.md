@@ -65,3 +65,15 @@
 **背景**：本项目以 `Yulinanami/my-xhttp-cdn-config` 为基座。两次 `curl` 拉到上游 `extensions/quic/02-server-config.sh`，就确认了上游是插进 **CDN** 块并复用该块已有 location——立刻反证我们插进 Reality 块是错配，而不是"另一种可行设计"。
 
 **规则**：改动继承自上游的模块前，先花一次 `curl` 看上游当前怎么写。注意上游默认分支可能是 `master` 而非 `main`（本次 `main` 全部 404，用 `contents` API 的 `download_url` 才拿到正确分支）。
+
+### L13 · `set -e` 下裸调用会启动失败的命令 = 永远拿不到根因
+
+**失败机制**：`src/10-service-check.sh` 里 `service_restart nginx` 是裸调用。`systemctl restart` 返回非零 → `set -e` 立刻中断 → 下一行的 `service_is_active nginx || error "Nginx 启动失败"` **永远执行不到**。用户屏幕上只有 systemd 一句 "See systemctl status nginx.service"，我们自己写的判定与提示一句都没输出。这个 bug 在 v1.1.0 引入 quic 时就存在，三个版本里每次 nginx 启动失败都在浪费一整轮往返。
+
+**规则**：凡是"可能失败且失败原因需要现场证据"的命令，一律 `if ! cmd; then dump_diagnostics; fi`，不要裸调用。诊断函数要在**第一次**失败时就把 journalctl / 端口占用 / LSM 状态一次性打全——远程排障的成本是一轮对话，本地多打 20 行日志的成本是零。
+
+### L14 · `nginx -t` 通过 ≠ nginx 能启动，两者验证的是不同东西
+
+**失败机制**：`nginx -t` 只解析配置、不 bind 端口、不初始化 QUIC/TLS 运行时。所以 `listen 443 quic` 的失败模式恰好落在 `-t` 的盲区里：语法检查全绿，`systemctl restart` 直接挂。我们的自检把 `nginx -t` 当成了"配置没问题"的证据。
+
+**规则**：把"能否启动"当作独立于"语法是否合法"的验证项。对这类只在运行期暴露的高风险配置段，用 BEGIN/END 标记框起来，失败时自动删段重试——这既是自愈，也是一次干净的二分：删掉能起来就是它，删掉还起不来就不是它。

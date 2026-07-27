@@ -70,7 +70,7 @@ EOF
 }
 
 if [[ "$FEATURE_TUNING" != true ]]; then
-  warn "FEATURE_TUNING=false，跳过内核调优（Xray sockopt / policy 也不会写入）"
+  warn "FEATURE_TUNING=false，跳过全部调优（Xray sockopt / policy 也不会写入）"
   XRAY_SOCKOPT_JSON=""
   XRAY_SOCKOPT_OUT_JSON=""
   XRAY_POLICY_JSON=""
@@ -133,6 +133,16 @@ else
   else
     warn "当前内核不提供 BBR（可用算法: ${AVAILABLE_CC:-未知}），将保持系统默认拥塞算法"
   fi
+
+  # ---------- 系统层写操作（sysctl / limits / systemd drop-in）----------
+  # v1.2.2：这些是唯一会改动**宿主机全局状态**的步骤，与"节点能不能通"完全无关，
+  # 却是安装期最容易在 OpenVZ / LXC / 容器化 VPS 上失败或产生副作用的一段。
+  # 因此默认关闭，等节点验证无误后用 `xh tuning on` 再打开。
+  # 下面的 Xray 侧 policy/sockopt 不写系统状态、无失败风险，不受本开关影响。
+  if [[ "$FEATURE_SYSCTL" != true ]]; then
+    warn "FEATURE_SYSCTL=false，跳过内核 / 句柄等系统层调优（Xray 侧 bufferSize、sockopt 仍会写入）"
+    warn "确认节点可用后执行 `xh tuning on` 开启，或重装时加 FEATURE_SYSCTL=true"
+  else
 
   # ---------- 拥塞控制与队列 ----------
   if [[ "$TUNING_BBR_OK" == true ]]; then
@@ -238,6 +248,8 @@ DROPINEOF
       info "已为 OpenRC 服务写入 rc_ulimit"
     fi
   fi
+
+  fi  # FEATURE_SYSCTL
 
   # ---------- Before / After ----------
   echo ""
