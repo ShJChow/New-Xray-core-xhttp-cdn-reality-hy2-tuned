@@ -101,9 +101,9 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
+        h-max-reusable-secs: "3600-6000"
 
   - name: Vless-xhttp-tls-UDP-cdn-YOUR_HOST
     type: vless
@@ -125,9 +125,9 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
+        h-max-reusable-secs: "3600-6000"
 
   - name: Vless-xhttp-tls-UDP-direct-YOUR_HOST
     type: vless
@@ -148,9 +148,9 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
+        h-max-reusable-secs: "3600-6000"
 
 proxy-groups:
   - name: 前置代理

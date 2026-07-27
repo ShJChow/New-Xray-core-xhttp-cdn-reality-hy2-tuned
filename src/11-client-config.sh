@@ -5,11 +5,35 @@
 info "[7/8] 生成客户端配置"
 XHTTP_PATH_ENC=${XHTTP_PATH//\//%2F}
 
+# ==================================================
+# TUN 模式下的节点自身流量豁免（v1.2.3）
+# ==================================================
+# 症状：开启 TUN 后 TCP 节点（1/2）正常，两条 UDP/h3 节点（3/4）全不通。
+# 节点 3 的 server 是 CDN 域名、节点 4 是裸 IP，两者唯一的共同点就是 QUIC。
+#
+# 机制：TUN 用 auto-route 把默认路由指向自己，Mihomo 自己发往节点服务器的包
+# 会被自家 TUN 再次捕获，按 rules 兜到 MATCH,漏网之鱼 → 又送回代理 → 环路。
+# TCP 之所以不受影响，是因为 dialer 绑定物理接口的保护在 TCP 路径上更完整；
+# QUIC 是无连接的 UDP，同样的保护在多数平台上兜不住。
+#
+# 三道防线，越靠前越根本：
+#   ① tun.route-exclude-address：让节点流量**根本不进 TUN**（最根本）
+#   ② rules 首条 DIRECT：万一进了 TUN，也在第一条就放出去
+#   ③ sniffer.skip-dst-address：即使被 TUN 捞到，也不许改写目标地址
+# 字段名均已核对 mihomo 源码（listener/config/tun.go、config/config.go:373-378）。
+if [[ "$IP_CHOICE" == "2" ]]; then
+  VPS_IP_CIDR="${VPS_IP}/128"
+  MIHOMO_NODE_DIRECT_RULE="  - IP-CIDR6,${VPS_IP_CIDR},全局直连,no-resolve"
+else
+  VPS_IP_CIDR="${VPS_IP}/32"
+  MIHOMO_NODE_DIRECT_RULE="  - IP-CIDR,${VPS_IP_CIDR},全局直连,no-resolve"
+fi
+
 rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null || true
 
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
-  XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+  XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2232-64%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%223600-6000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
   XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
   SC_MIN_POSTS_ENC="%22scMinPostsIntervalMs%22%3A30"
 
@@ -79,9 +103,9 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+        h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 EOF
 )
 else

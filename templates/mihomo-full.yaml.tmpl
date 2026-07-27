@@ -5,11 +5,30 @@ log-level: info
 ipv6: true
 unified-delay: true
 
+# TUN 模式下节点自身流量的豁免（v1.2.3）：route-exclude-address 让发往 VPS 的
+# 包根本不进 TUN，是解决"开 TUN 后两条 UDP/h3 节点不通"最根本的一道。
+# 客户端 GUI 若自带 TUN 开关，以 GUI 的设置为准时请手动补上 route-exclude-address。
+tun:
+  enable: false
+  stack: mixed
+  auto-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+  strict-route: false
+  route-exclude-address:
+    - ${VPS_IP_CIDR}
+  udp-timeout: 300
+  mtu: 1500
+
 sniffer:
   enable: true
   force-dns-mapping: true
   parse-pure-ip: true
   override-destination: true
+  # 节点自身的 QUIC 流量绝不能被自家 sniffer 改写目标
+  skip-dst-address:
+    - ${VPS_IP_CIDR}
   sniff:
     HTTP:
       ports: [80, 8080-8880]
@@ -30,6 +49,9 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
+    # 节点服务器域名必须拿到真实 IP，否则 TUN + fake-ip 下解析成 198.18.x.x 直接连不上
+    - ${REALITY_DOMAIN}
+    - ${CDN_DOMAIN}
     - +.lan
     - +.local
     - +.msftconnecttest.com
@@ -439,6 +461,10 @@ rule-providers:
     path: ./ruleset/xiaolin-007/TikTok.yaml
 
 rules:
+  # 第一条：发往本节点服务器的流量永远直连，杜绝 TUN 下的自环
+${MIHOMO_NODE_DIRECT_RULE}
+  - DOMAIN-SUFFIX,${REALITY_DOMAIN},全局直连
+  - DOMAIN-SUFFIX,${CDN_DOMAIN},全局直连
   - DOMAIN-SUFFIX,googleapis.cn,节点选择
   - DOMAIN-SUFFIX,gstatic.com,节点选择
   - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,节点选择

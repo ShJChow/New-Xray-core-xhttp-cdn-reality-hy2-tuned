@@ -72,7 +72,29 @@ Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12]
 xh diag     # 服务端侧自检：quic 监听 / nginx -t / UDP 443 / 防火墙，并给出客户端自测步骤
 ```
 
-**两条 UDP 节点同时不通、而 TCP 节点正常**，基本可判定为客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2，或用 `add-quic.sh` 扩展换一个非 443 的 UDP 端口。
+**两条 UDP 节点同时不通、而 TCP 节点正常**，先分清是不是 TUN 模式导致的：
+
+#### 情况 A：只在开启 TUN 时不通（v1.2.3 已修）
+
+TUN 用 `auto-route` 把默认路由指向自己，客户端**自己**发往节点服务器的包会被自家 TUN 再次捕获，按 rules 兜到 `MATCH,漏网之鱼` → 又送回代理 → 自环。TCP 不受影响是因为 dialer 绑定物理接口的保护在 TCP 路径上更完整，QUIC 是无连接 UDP，同样的保护在多数平台兜不住。
+
+`client-config-mihomo-full.yaml` 现在自带三道防线（越靠前越根本）：
+
+| # | 位置 | 作用 |
+|---|---|---|
+| ① | `tun.route-exclude-address` | 让发往 VPS 的包**根本不进 TUN** |
+| ② | `rules` 第一条 `IP-CIDR,<VPS_IP>/32,全局直连` | 万一进了 TUN，第一条就放出去 |
+| ③ | `sniffer.skip-dst-address` | 即使被捞到，也不许改写目标地址 |
+
+外加 `dns.fake-ip-filter` 补上两个域名——节点 3 的 `server` 是 CDN 域名，被 fake-ip 解析成 `198.18.x.x` 同样连不上。
+
+> **纯节点订阅（`mihomo-nodes.yaml`）不含这些**——它只有 `proxies` 段。用纯节点导入自己配置的话，请手动把上面三条抄进去。
+>
+> **v2rayN 用户**：v2rayN 的 TUN 由客户端自己实现，我们改不到。v7.19.5+ 需启用旧版 TUN 保护选项（[PR #9005](https://github.com/2dust/v2rayN/pull/9005)）；或在设置里把 VPS IP 加入直连/绕过列表。
+
+#### 情况 B：不开 TUN 也不通
+
+那就是客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2，或用 `add-quic.sh` 扩展换一个非 443 的 UDP 端口。
 
 ---
 
@@ -192,7 +214,7 @@ xh uninstall           卸载全部组件
 - **句柄**：`limits.d` + systemd drop-in（不改官方 Xray unit，内核更新不会被覆盖），`nofile=1048576`。
 - **Xray**：入站与 freedom 出站注入 `sockopt`（`tcpFastOpen` / `tcpcongestion: bbr` / keepalive / `tcpUserTimeout`）。`tcpcongestion` **仅在探测到 BBR 时写入**，否则省略以免 Xray 启动失败。
 - **Nginx**：`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
-- **客户端**：xpadding 版自动带 `xmux`（`maxConcurrency 16-32`、`hMaxReusableSecs 1800-3000`）。
+- **客户端**：xpadding 版自动带 `xmux`（`maxConcurrency 32-64`、`hMaxReusableSecs 3600-6000`）。
 
 **v1.2.2 起系统层与 Xray 层分开**：
 
