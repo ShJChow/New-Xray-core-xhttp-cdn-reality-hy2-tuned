@@ -93,7 +93,7 @@ cmd_status() {
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
   else
-    printf '  %-32s %s\n' "调优配置文件" "未启用（重跑安装脚本可开启）"
+    printf '  %-32s %s\n' "调优配置文件" "未启用（系统层调优默认关闭，见 xh tuning on）"
   fi
   if [[ "$SERVICE_TYPE" == "systemd" ]] && svc_active xray; then
     local pid
@@ -556,7 +556,7 @@ cmd_menu() {
       4) cmd_restart ;;
       5) cmd_log xray ;;
       6) cmd_update ;;
-      7) read -rp "  show / off: " a; cmd_tuning "${a:-show}" ;;
+      7) read -rp "  show / on / off: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
       10) cmd_diag ;;
@@ -601,7 +601,7 @@ case "${1:-menu}" in
   stop)       cmd_stop ;;
   restart)    cmd_restart ;;
   update)     shift; cmd_update "$@" ;;
-  tuning)     shift; cmd_tuning "$@" ;;
+  tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   keepalive)  shift; cmd_keepalive "$@" ;;
   autoupdate) shift; cmd_autoupdate "$@" ;;
   guard)      cmd_guard ;;
