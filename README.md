@@ -40,7 +40,7 @@
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice，速度最快**；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
-| 4 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3** |
+| 4 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3**；SNI/Host 用 **Reality 域名**（灰云） |
 
 CDN 侧只保留 UDP（HTTP/3）版本；节点 1、2 走 TCP，作为 UDP 不可用时的兜底。
 
@@ -49,7 +49,10 @@ CDN 侧只保留 UDP（HTTP/3）版本；节点 1、2 走 TCP，作为 UDP 不�
 ### 两条 UDP（HTTP/3）节点
 
 - **节点 3** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（需 CF 区域已开启 HTTP/3，默认开启）。
-- **节点 4** 直连 VPS：Nginx 额外监听 `UDP 443 quic`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
+- **节点 4** 直连 VPS：SNI/Host 使用 **Reality 域名**（Cloudflare 灰云、DNS 直指 VPS），Nginx 在**该域名的 `server` 块内**额外监听 `UDP 443 quic` 并挂载 XHTTP 的 `location`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；
+
+  > v1.2.0 及之前该节点的 SNI 写的是 CDN 域名，而 QUIC 监听与 `location` 分处两个 `server_name`，TLS 握手会落到回落网站上——这是它一直不通的结构性原因，v1.2.1 已修复。`add-quic.sh` 的 `Vless-xhttp-tls-h3-direct` 节点同因同修。
+Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
 - **`alpn` 必须恰好只有 `h3`**，Xray 与 Mihomo 才会走 HTTP/3（`decideHTTPVersion` 与 `transport/xhttp/client.go` 都要求 `len(alpn)==1`）。手工改配置时不要额外加 `h2`。
 - Mihomo 同样支持 XHTTP-over-H3，所以 Mihomo 配置里也包含这两条节点。
 - `http3` 依赖支持 QUIC 的 TLS 库（标准 OpenSSL 未必满足），该监听**曾在部分环境下导致 nginx 启动失败**。若 `[6/8]` 阶段 `nginx -t` 或服务启动失败，用 `FEATURE_H3_DIRECT=false` 重跑一次排除该因素：

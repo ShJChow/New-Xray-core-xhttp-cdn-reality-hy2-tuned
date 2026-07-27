@@ -14,15 +14,15 @@ info "读取已有客户端配置: $USER_HOME"
 
 BASE_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_XHTTP_REALITY")
 [[ -n "$BASE_LINE" ]] || error "未找到 xhttp+Reality 上下行不分离节点，无法自动读取参数"
+# v1.2.1 起直连 H3 节点改用 Reality 域名（灰云），CDN 域名仅用于信息展示，
+# 读不到不再中断执行。
 CDN_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_CDN_BOTH")
-[[ -n "$CDN_LINE" ]] || error "未找到 xhttp+tls 双向 CDN 节点，无法自动读取 CDN 域名"
 
 BASE_SERVER=$(strip_ipv6_brackets "$(extract_uri_server "$BASE_LINE")")
 UUID2=$(extract_uri_user "$BASE_LINE")
 XHTTP_PATH=$(get_query_param "$BASE_LINE" "path" || true)
 REALITY_DOMAIN=$(get_query_param "$BASE_LINE" "sni" || true)
-CDN_DOMAIN=$(get_query_param "$CDN_LINE" "host" || true)
-ECH_PARAM=$(get_query_param "$CDN_LINE" "ech" || true)
+CDN_DOMAIN=$([[ -n "$CDN_LINE" ]] && get_query_param "$CDN_LINE" "host" || true)
 VLESSENC_ENCRYPTION=$(get_query_param "$BASE_LINE" "encryption" || true)
 XHTTP_EXTRA=$(get_query_param "$BASE_LINE" "extra" || true)
 
@@ -30,13 +30,7 @@ XHTTP_EXTRA=$(get_query_param "$BASE_LINE" "extra" || true)
 [[ -n "$BASE_SERVER" ]] || error "读取 VPS IP 失败"
 [[ -n "$XHTTP_PATH" ]] || error "读取 XHTTP Path 失败"
 [[ -n "$REALITY_DOMAIN" ]] || error "读取 Reality 域名失败"
-[[ -n "$CDN_DOMAIN" ]] || error "读取 CDN 域名失败"
 [[ -n "$VLESSENC_ENCRYPTION" ]] || error "读取 VLESS Encryption 失败"
-
-if [[ -n "$ECH_PARAM" ]]; then
-  read -rp "是否复用原 CDN 节点的 ECH [y/N]: "
-  [[ "${REPLY,,}" == "y" ]] || ECH_PARAM=""
-fi
 
 if [[ -n "$XHTTP_EXTRA" ]]; then
   XHTTP_PADDING_KEY=$(sed -n 's/.*"xPaddingKey":[[:space:]]*"\([^"]*\)".*/\1/p' /usr/local/etc/xray/config.json | head -n1)
@@ -122,7 +116,7 @@ HY2_PASSWORD=${HY2_PASSWORD:-$DEFAULT_HY2_PASSWORD}
 
 info "VPS IP:         $BASE_SERVER"
 info "Reality 域名:   $REALITY_DOMAIN"
-info "CDN 域名:       $CDN_DOMAIN"
+info "CDN 域名:       ${CDN_DOMAIN:-（未检测到，直连节点不使用）}"
 info "XHTTP Path:      $XHTTP_PATH"
 info "XHTTP H3:       UDP $XHTTP_H3_PORT"
 info "hysteria2:      UDP $HY2_PORT"

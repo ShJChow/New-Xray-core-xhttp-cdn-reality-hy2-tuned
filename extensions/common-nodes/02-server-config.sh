@@ -28,6 +28,10 @@ sed -i "/^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:spa
         # BEGIN quic xhttp\\
         location ${XHTTP_PATH} {\\
             grpc_pass 127.0.0.1:8001;\\
+            grpc_socket_keepalive on;\\
+            grpc_read_timeout     1h;\\
+            grpc_send_timeout     1h;\\
+            grpc_connect_timeout  15s;\\
             grpc_set_header Host                  \$host;\\
             grpc_set_header X-Real-IP             \$real_client_ip;\\
             grpc_set_header Forwarded             \$proxy_add_forwarded;\\

@@ -52,7 +52,10 @@ fi
 # 导致 nginx 启动失败。FEATURE_H3_DIRECT=false 时两者一起关闭，避免生成一个
 # 打不通的节点链接。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  NODE_UDP_DIRECT_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-UDP-direct-${HOSTNAME_TAG}"
+  # 直连节点走的是 VPS 自己的 UDP 443，不经过 CDN：sni/host 必须用 Reality 域名
+  # （Cloudflare 灰云、DNS 直指 VPS），才能命中 Nginx 里带 quic 监听的那个
+  # server 块（见 src/09-server-config.sh 的 NGINX_H3_DIRECT_BLOCK）。
+  NODE_UDP_DIRECT_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${REALITY_DOMAIN}&path=${XHTTP_PATH}&mode=auto${EXTRA_4_PARAM}#Vless-xhttp-tls-UDP-direct-${HOSTNAME_TAG}"
   # Mihomo 同样支持 alpn: [h3]（transport/xhttp/client.go:159）
   MIHOMO_UDP_DIRECT_BLOCK=$(cat <<EOF
 
@@ -68,11 +71,11 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
     network: xhttp
     alpn:
       - h3
-    servername: ${CDN_DOMAIN}
+    servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}
     xhttp-opts:
-      host: ${CDN_DOMAIN}
+      host: ${REALITY_DOMAIN}
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:

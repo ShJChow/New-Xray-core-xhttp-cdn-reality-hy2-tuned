@@ -14,7 +14,11 @@ NODE_HY2_TAG=$(rawurlencode "$NODE_HY2_NAME")
 
 BASE_SERVER_URI=$(format_uri_host "$BASE_SERVER")
 
-LINE_XHTTP_H3="vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=$(rawurlencode "$XHTTP_PATH")&mode=auto${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_XHTTP_H3_TAG}"
+# 本扩展的 nginx 监听与 location 都挂在 Reality 域名的 server 块（见
+# 02-server-config.sh），因此 sni/host 必须同为 Reality 域名（灰云直连），
+# 否则 TLS 握手落到别的 server_name 上，节点必然不通。ECH 是 Cloudflare CDN
+# 侧的机制，直连节点不适用，已一并去掉。
+LINE_XHTTP_H3="vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${REALITY_DOMAIN}&path=$(rawurlencode "$XHTTP_PATH")&mode=auto${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_XHTTP_H3_TAG}"
 LINE_HY2="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${BASE_SERVER_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0#${NODE_HY2_TAG}"
 
 sed -i "/#${NODE_XHTTP_H3_TAG}\$/d" "$V2RAYN_FILE"
@@ -38,21 +42,10 @@ build_common_nodes_block() {
     network: xhttp
     alpn:
       - h3
-    servername: ${CDN_DOMAIN}
+    servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
-EOF
-
-  if [[ -n "$ECH_PARAM" ]]; then
-    cat <<'EOF'
-    ech-opts:
-      enable: true
-      query-server-name: cloudflare-ech.com
-EOF
-  fi
-
-  cat <<EOF
     xhttp-opts:
-      host: ${CDN_DOMAIN}
+      host: ${REALITY_DOMAIN}
       path: ${XHTTP_PATH}
       mode: auto
 EOF

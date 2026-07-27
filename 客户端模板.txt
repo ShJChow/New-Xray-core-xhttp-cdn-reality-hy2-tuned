@@ -11,7 +11,7 @@ XHTTP over HTTP/3（UDP 443）
 vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
 # 直连 VPS：需要 Nginx 监听 UDP 443 quic（一键脚本默认开启，FEATURE_H3_DIRECT=false 可关闭），且防火墙放行 UDP 443。
 # 该监听曾在部分环境下导致 nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库），手工配置前请先用一键脚本验证过。
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-direct-YOUR_HOST
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_REALITY_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-direct-YOUR_HOST
 
 注意：
 - YOUR_UUID_1 的节点 (Vision 直连) encryption 保持 none，因为不过 CDN

@@ -117,11 +117,11 @@ proxies:
     # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3
     alpn:
       - h3
-    servername: YOUR_CDN_DOMAIN
+    servername: YOUR_REALITY_DOMAIN
     client-fingerprint: chrome
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
-      host: YOUR_CDN_DOMAIN
+      host: YOUR_REALITY_DOMAIN
       path: YOUR_PATH
       mode: auto
       reuse-settings:
@@ -140,11 +140,11 @@ proxies:
     network: xhttp
     alpn:
       - h3
-    servername: YOUR_CDN_DOMAIN
+    servername: YOUR_REALITY_DOMAIN
     client-fingerprint: chrome
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
-      host: YOUR_CDN_DOMAIN
+      host: YOUR_REALITY_DOMAIN
       path: YOUR_PATH
       mode: auto
       reuse-settings:

@@ -155,3 +155,99 @@ v1.1.4 有 8 条节点。用户反馈两条 UDP 节点**都**连不上。
 - 最实质的性能修复是 Nginx 的 `grpc_read_timeout` / `grpc_send_timeout`（默认 60s 会周期性切断 XHTTP 长连接），而非内核参数本身。
 - "流控最佳全开" 的正确含义不是把每个旋钮拉满：`tcpMptcp`、`scMaxEachPostBytes`、内核替换都被明确排除。
 - 全部调优可用 `xh tuning off` 单命令回滚，符合"最易回滚"的选型标准。
+
+---
+
+# v1.2.1（2026-07-27）
+
+## Goal
+
+修复 `Vless-xhttp-tls-UDP-direct`（主脚本）与 `Vless-xhttp-tls-h3-direct`（add-quic 扩展）
+两条直连节点不通。按用户指示：直连节点不使用 CDN 域名，改用 **Reality 域名（Cloudflare
+灰云、DNS 直指 VPS）**；xpadding 的 `extra=` 保持不变。
+
+## Current State（根因，已核对源码/配置，非猜测）
+
+**h3-direct（扩展）—— 结构性错配，确定性 bug：**
+`extensions/common-nodes/02-server-config.sh` 把 QUIC 监听与 `location ${XHTTP_PATH}`
+插进 **Reality 域名**的 server 块，而 `03-client-config.sh` 生成的节点却发
+`sni=${CDN_DOMAIN}`。客户端 SNI 与服务端 `server_name` 分处两块 → TLS 握手命中的是
+另一个 server 块（回落网站）→ 必然不通。
+
+**UDP-direct（主脚本）—— 同一族问题：**
+`templates/nginx.conf.tmpl` 把 `${NGINX_H3_DIRECT_BLOCK}` 放在 CDN 域名块（与上游
+`Yulinanami/my-xhttp-cdn-config` 一致），配置本身自洽；但用户要求直连侧改用灰云的
+Reality 域名，而 Reality 块**原本没有 XHTTP 的 `location`**，只改 sni 会失败得更彻底。
+因此监听与 location 必须一起搬进 Reality 块。
+
+## Assumptions（已核对）
+
+- 证书为 `REALITY_DOMAIN + CDN_DOMAIN` 双 SAN（`src/07-acme-cert.sh`），换 SNI 不影响校验。
+- Xray 8001 入站 `xhttpSettings.host = ""`（不校验 Host），换 Host 无需改服务端 Xray。
+- `nginx.conf.tmpl` 由**未加引号**的 heredoc 展开 → 新增 nginx 变量必须写 `\$`（L2）。
+- `extensions/common-nodes/02` 会整段删除 `# BEGIN main-h3 … # END main-h3` 后自行插入
+  location → 新增 location **必须留在标记内**，否则同块两个同名 location，`nginx -t` 失败。
+
+## 借鉴上游
+
+- `Yulinanami/my-xhttp-cdn-config`（master 分支，2026-07-26 最新）：确认其 `extensions/quic/02`
+  把监听插进 **CDN** 块并复用该块已有 location —— 反证我们扩展插进 Reality 块是错配。
+- 从上游借入 `add_header Alt-Svc 'h3=":443"; ma=86400' always;`（本项目此前缺失）。
+- 未移植上游的上下行分离（H2↑/H3↓）节点，超出本次范围。
+
+## Change Scope
+
+- [x] `templates/nginx.conf.tmpl`：`${NGINX_H3_DIRECT_BLOCK}` 从 CDN 块**移到** Reality 块
+- [x] `src/09-server-config.sh`：该段内补 `location ${XHTTP_PATH}` + `Alt-Svc`；heredoc 由
+      `<<'EOF'` 改为 `<<EOF`（需展开 `${XHTTP_PATH}`），5 个 nginx 变量转义为 `\$`
+- [x] `src/11-client-config.sh`：UDP-direct 的 `sni`/`host`/`servername` → `REALITY_DOMAIN`
+- [x] `extensions/common-nodes/03-client-config.sh`：h3-direct 同改；去掉直连节点的 ECH
+      （ECH 是 Cloudflare 侧机制，直连不适用）
+- [x] `extensions/common-nodes/01-read-existing.sh`：CDN 节点缺失不再 `error` 中断（L10：
+      该变量原本只为直连节点服务）；移除 ECH 复用询问
+- [x] `extensions/common-nodes/02-server-config.sh`：其 sed 插入的 `location` 补上
+      `grpc_socket_keepalive` / `grpc_read_timeout 1h` / `grpc_send_timeout 1h` /
+      `grpc_connect_timeout 15s`。该 location 此前**从未被命中**（客户端 SNI 走的是
+      CDN 域名），本次修复让它首次生效，不补就会继承 nginx 默认 60s 超时，
+      表现为"能连上但每 60 秒断一次"
+- [x] `src/13-manage-cli.sh`：`xh diag` 新增"quic 监听与 location 是否同在 Reality 块"的
+      判定；客户端自测新增一条 `curl --http3-only --resolve` 直打本机 UDP 443
+- [x] `README.md` / `docs/8` / `客户端模板.txt` / `客户端模板-mihomo.yaml` 同步
+- [x] 重建 `dist/` 5 个产物
+
+## Verification
+
+- [x] 4 个 build 脚本 + `bash -n dist/*.sh` 全绿；抽取的 `cmd_diag` 单独 `bash -n` 通过
+- [x] **从 `dist/install-xpadding.sh` 抽取真实模板与真实 `FEATURE_H3_DIRECT` 分支**执行渲染
+      （L5：不手抄副本），断言：
+      - `true`：Reality 块同时含 quic 监听 + `location`（恰好 1 次）+ `Alt-Svc`；
+        CDN 块仍有自己的 `location` 且**不含** quic；`$host` 已正确解转义（无残留 `\$`）
+      - `false`：全文无 `main-h3`，Reality 块既无 quic 也无 location
+- [x] 模拟 add-quic 流程（删 `main-h3` 段 → 插入扩展自己的 location）后，Reality 块中
+      `location` 恰好 1 次（防重复定义导致 `nginx -t` 失败）
+- [x] 两条直连节点链接断言：`sni`/`host` 均为 Reality 域名，`extra=`（xpadding）仍在；
+      `Vless-xhttp-tls-UDP-cdn` 未被波及，仍用 CDN 域名
+- [x] `客户端模板-mihomo.yaml` 经 `yaml.safe_load` 解析通过
+- [x] **从 `dist/add-quic.sh` 抽取真实 `build_common_nodes_block` 执行**（该函数本次由
+      三段 heredoc 合并为一段、删掉了中间的 `ech-opts` 分支，是 YAML 缩进最易出错处），
+      `XHTTP_EXTRA` 有/无两种取值下 `yaml.safe_load` 均通过，断言 `servername`/`host`
+      为 Reality 域名、无 `ech-opts`、xpadding 随 `XHTTP_EXTRA` 正确开合
+- [x] `grep -rn 'sni=|host=|servername' extensions/dual-cdn extensions/dual-ip`：两个扩展
+      分别读 CDN 节点与 Reality 节点，均不读直连节点，未受本次改动影响（L10）
+
+## Review
+
+- h3-direct 的失败是**可判定的配置错配**（服务端与客户端分处两个 `server_name`），
+  与 v1.2.0 结论中"两条 UDP 节点同时失败 ⇒ 共同因子在客户端"不同——那条结论针对的是
+  UDP-cdn + UDP-direct 的组合，对 add-quic 的 h3-direct 并不成立。
+- 修复后 `xh diag` 能直接判定这一类错配，不再依赖人工比对两个 server 块。
+
+### 附带的行为变化（非 bug，记录以免意外）
+
+`location ${XHTTP_PATH}` 进入 Reality 块后，也会经 Xray REALITY 的 `dest 8003` 回落
+暴露在 **TCP 443** 上。这是搬移 location 的副作用，等于多了一条直连 TCP 路径，
+不影响既有节点。
+
+**未验证（L8）**：无 VPS —— nginx 能否加载 `443 quic`、证书链、以及两条直连节点的实际
+连通性均未做运行时验证。若云厂商安全组未放行 UDP 443，本次改动**不解决**问题，
+`xh diag` 会明确提示这一层查不到。

@@ -53,3 +53,15 @@
 ### L8 · 交付时如实区分"已构建"与"已验证"
 
 **规则**：本机无法运行的部分（VPS 上的证书签发、服务启动、链路连通性）必须在报告里单独列为未验证项，不能让"构建成功、语法检查通过"读起来像"功能可用"。
+
+### L11 · 服务端 `server_name` 与客户端 `sni` 必须成对核对，不能各自演进
+
+**失败机制**：`extensions/common-nodes/02` 把 QUIC 监听与 `location` 插进 **Reality 域名**的 server 块，`03` 生成的节点却发 `sni=CDN_DOMAIN`。两个文件各自都"看着对"，但 TLS 握手按 SNI 选 server 块，请求落到回落网站上，节点从上线起就没通过。更糟的是：因为从未被命中，那条 `location` 缺少 `grpc_read_timeout` 也一直没暴露——修好 SNI 的同时会立刻冒出"每 60 秒断一次"的第二个 bug。
+
+**规则**：改动任何 `sni` / `host` / `servername` 之前，先 `grep` 出服务端对应的 `server_name`，确认二者字面相等；改完把"监听 + location + server_name + 客户端 sni"作为**一个整体**断言（本次的渲染测试正是这样写的）。另外，**让一段死代码复活时，要按新代码审一遍它**——它从未运行过，等于从未被验证过。
+
+### L12 · 上游同源项目是最廉价的反证来源
+
+**背景**：本项目以 `Yulinanami/my-xhttp-cdn-config` 为基座。两次 `curl` 拉到上游 `extensions/quic/02-server-config.sh`，就确认了上游是插进 **CDN** 块并复用该块已有 location——立刻反证我们插进 Reality 块是错配，而不是"另一种可行设计"。
+
+**规则**：改动继承自上游的模块前，先花一次 `curl` 看上游当前怎么写。注意上游默认分支可能是 `master` 而非 `main`（本次 `main` 全部 404，用 `contents` API 的 `download_url` 才拿到正确分支）。

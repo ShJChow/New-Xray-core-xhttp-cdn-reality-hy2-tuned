@@ -190,6 +190,25 @@ cmd_diag() {
     chk "nginx.conf 无 UDP 443 quic 监听" 1 "重跑安装脚本，或确认未被 add-quic.sh 接管"
   fi
 
+  # v1.2.1：quic 监听与 XHTTP 的 location 必须落在 **同一个** server 块里，
+  # 且该块的 server_name 要等于客户端节点的 sni（Reality 域名）。
+  # 两者分处不同 server_name 正是 v1.2.0 及之前直连 H3 节点不通的原因。
+  if [[ -n "${REALITY_DOMAIN:-}" ]] && [[ -n "${XHTTP_PATH:-}" ]]; then
+    if awk -v d="$REALITY_DOMAIN" -v p="$XHTTP_PATH" '
+          $0 ~ "^[[:space:]]*server[[:space:]]*\\{" { blk=""; }
+          { blk = blk $0 "\n" }
+          $0 ~ "^[[:space:]]*server_name[[:space:]]+" d ";[[:space:]]*$" { want=1 }
+          want && index(blk, "quic") && index(blk, "location " p) { found=1 }
+          $0 ~ "^[[:space:]]*\\}[[:space:]]*$" { want=0 }
+          END { exit(found ? 0 : 1) }
+        ' /etc/nginx/nginx.conf 2>/dev/null; then
+      chk "quic 监听与 location ${XHTTP_PATH} 同在 ${REALITY_DOMAIN} 的 server 块" 0
+    else
+      chk "quic 监听与 XHTTP location 未落在 ${REALITY_DOMAIN} 的同一 server 块" 1 \
+        "客户端 sni 与服务端 server_name 不一致会导致握手落到回落网站；重跑安装脚本"
+    fi
+  fi
+
   if nginx -t >/dev/null 2>&1; then
     chk "nginx -t 配置有效" 0
   else
@@ -237,9 +256,11 @@ cmd_diag() {
   echo -e "${YELLOW}  经 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）不经过本机任何配置${NC}"
   echo "  它只依赖：① Cloudflare 区域已开启 HTTP/3  ② 你的客户端网络允许 UDP 443 出站。"
   echo ""
-  echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："
+  echo "  在客户端机器上执行下面三条来区分（任一不通即为客户端侧网络封锁 QUIC）："
   echo "    curl -sI --http3-only https://cloudflare-quic.com/ | head -1"
   echo "    curl -sI --http3-only https://${CDN_DOMAIN:-你的CDN域名}/ | head -1"
+  echo "    curl -sI --http3-only --resolve ${REALITY_DOMAIN:-你的Reality域名}:443:${VPS_IP:-你的VPS_IP} https://${REALITY_DOMAIN:-你的Reality域名}/ | head -1"
+  echo "    （第三条直接打本机 UDP 443，走的正是直连节点的路径）"
   echo "  若 curl 不支持 --http3-only，用浏览器访问 https://cloudflare-quic.com/ 看是否显示 HTTP/3。"
   echo ""
   echo "  两条 UDP 节点同时不通、而 TCP 节点正常 ⇒ 基本可判定为客户端侧 UDP 443 被封，"
