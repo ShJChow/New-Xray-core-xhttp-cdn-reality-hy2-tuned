@@ -20,6 +20,7 @@ cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
 V2RAYN_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/v2rayn.txt"
+V2RAYN_RAW_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/v2rayn-raw.txt"
 MIHOMO_FULL_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/mihomo-full.yaml"
 MIHOMO_NODES_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/mihomo-nodes.yaml"
 
@@ -44,13 +45,28 @@ check_subscription() {
 
 info "验证订阅链接..."
 check_subscription "/sub/${SUB_TOKEN}/v2rayn.txt" "$SUB_DIR/v2rayn.txt"
+check_subscription "/sub/${SUB_TOKEN}/v2rayn-raw.txt" "$SUB_DIR/v2rayn-raw.txt"
 check_subscription "/sub/${SUB_TOKEN}/mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 check_subscription "/sub/${SUB_TOKEN}/mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 info "订阅链接自检通过"
 
+# 上面的自检用 -k 跳过证书校验（只为验证内容一致），而真实客户端会严格校验。
+# 这里额外做一次**带证书校验**的公网路径检查：iOS 客户端（Shadowrocket /
+# onexray）对证书链比 curl -k 严格得多，链不完整时表现就是"订阅拉不到节点"。
+# best-effort：失败只告警，不中断安装（可能只是本机出网受限）。
+if curl -fsS -o /dev/null --max-time 15 "${V2RAYN_SUB_URL}" 2>/dev/null; then
+  info "订阅链接证书校验通过（公网路径）"
+else
+  warn "订阅链接在**严格证书校验**下拉取失败：${V2RAYN_SUB_URL}"
+  warn "若 iOS 客户端提示订阅为空，多半就是这里——请在该设备浏览器里打开该链接确认"
+fi
+
 cat > "$SUB_LINKS_FILE" << SUBLINKEOF
-V2RayN / Shadowrocket 订阅:
+V2RayN 订阅 (base64):
 $V2RAYN_SUB_URL
+
+明文节点订阅（Shadowrocket / onexray 等对 base64 挑剔时改用这个）:
+${V2RAYN_RAW_SUB_URL}
 
 Mihomo 完整分流订阅:
 $MIHOMO_FULL_SUB_URL

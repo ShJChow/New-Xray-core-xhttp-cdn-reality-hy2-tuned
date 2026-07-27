@@ -140,9 +140,16 @@ cmd_sub() {
   token=$(tr -d '\r\n' < "$SUB_TOKEN_FILE")
   base="https://${REALITY_DOMAIN}/sub/${token}"
   echo -e "${CYAN}[+] 订阅链接${NC}"
-  echo "  V2RayN / Shadowrocket: ${base}/v2rayn.txt"
+  echo "  V2RayN (base64):       ${base}/v2rayn.txt"
+  # 明文订阅一直有生成，但 v1.2.3 之前从未对外列出。部分 iOS 客户端
+  # （Shadowrocket / onexray）对 base64 订阅更挑剔，明文是有效的备选。
+  echo "  明文节点（备选）:      ${base}/v2rayn-raw.txt"
   echo "  Mihomo 完整分流:       ${base}/mihomo-full.yaml"
   echo "  Mihomo 纯节点:         ${base}/mihomo-nodes.yaml"
+  echo ""
+  echo -e "${YELLOW}  订阅拉不到节点时，先在该设备的浏览器里直接打开上面的链接：${NC}"
+  echo "    打得开且有内容 → 客户端解析问题，改用明文订阅或手动导入单条节点"
+  echo "    打不开         → 该设备到 VPS 的网络问题，与本项目配置无关"
   if command -v qrencode >/dev/null 2>&1; then
     echo ""
     echo -e "${YELLOW}[+] V2RayN / Shadowrocket 订阅二维码${NC}"
