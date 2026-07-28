@@ -174,9 +174,13 @@ bash ~/install.sh
 主脚本部署完成后按需追加，会复用已有 `UUID / Path / VLESS Encryption` 并更新客户端配置与订阅。
 
 ```bash
-# VLESS+XHTTP+TLS(H3) | Hysteria2 直连
+# Hysteria2 直连（同扩展的 XHTTP+TLS+H3 节点已知不通，见下）
 curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
+
+> 该扩展产出两条节点：`Hysteria2-direct` 与 `Vless-xhttp-tls-h3-direct`。
+> **后者在 Shadowrocket 下实测不通**（与主脚本已默认停用的直连 h3 节点同因），
+> 见 [docs/8 勘误](./docs/8.拓展-QUIC添加.md)。想要 Hysteria2 的照常运行本扩展，忽略 h3 那条即可。
 
 ### 非交互一键（脚本化重装）
 
