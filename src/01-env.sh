@@ -50,10 +50,15 @@ FEATURE_TUNING=${FEATURE_TUNING:-true}
 FEATURE_SYSCTL=${FEATURE_SYSCTL:-false}
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
-# 直连 VPS 的 XHTTP-over-H3 节点需要 Nginx 监听 UDP 443 quic，是配置里唯一有
-# SSL 库依赖的指令（http3 需要支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足），
-# 曾导致部分环境下 nginx 启动失败。若重装后 nginx -t / 服务启动失败，先用
-# FEATURE_H3_DIRECT=false 重跑一次以排除该因素，问题不在此项再继续排查。
-FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
+# 直连 VPS 的 XHTTP-over-H3 节点（Vless-xhttp-tls-UDP-direct）。
+# v1.2.7 起默认 false：用户在 Shadowrocket 下实测该节点不通，与 add-quic.sh 的
+# Vless-xhttp-tls-h3-direct 表现一致。经 CDN 的 h3 节点（Vless-xhttp-tls-UDP-cdn）
+# 不受影响，仍默认启用。
+# 该开关同时控制 Nginx 的 UDP 443 quic 监听（src/09-server-config.sh）与客户端
+# 节点链接 / mihomo 块（src/11-client-config.sh），关闭后不会留下打不通的死节点。
+# 该监听也是配置里唯一有 SSL 库依赖的指令（http3 需要支持 QUIC 的 TLS 库，标准
+# OpenSSL 未必满足），曾导致部分环境下 nginx 启动失败——默认关闭一并规避了这点。
+# 想自行验证的用 FEATURE_H3_DIRECT=true 重跑，代码路径完整保留。
+FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-false}
 AUTO=${AUTO:-0}
 

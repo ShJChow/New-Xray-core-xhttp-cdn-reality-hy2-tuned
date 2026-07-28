@@ -105,6 +105,8 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"
 
+  # 经 CDN 的 h3 节点。servername/host 必须是 CDN 域名——TLS 握手按 SNI 选服务端
+  # server 块，写成 Reality 域名会落到回落网站上，节点必然不通。
   - name: Vless-xhttp-tls-UDP-cdn-YOUR_HOST
     type: vless
     server: YOUR_CDN_DOMAIN
@@ -117,19 +119,70 @@ proxies:
     # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3
     alpn:
       - h3
-    servername: YOUR_REALITY_DOMAIN
+    servername: YOUR_CDN_DOMAIN
     client-fingerprint: chrome
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
-      host: YOUR_REALITY_DOMAIN
+      host: YOUR_CDN_DOMAIN
       path: YOUR_PATH
       mode: auto
+      reuse-settings:
+        # h3 专用 64-128（假设，非结论）：QUIC 无队头阻塞，单连接多流可省 CF 侧
+        # 握手；但若 CF 边缘的 MAX_STREAMS 低于 128，quic-go 会阻塞在建流上，
+        # 并行度可能反降。回滚值 32-64。
+        max-concurrency: "64-128"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "3600-6000"
+
+  # ------------------------------------------------------------------
+  # 上下行分离节点（依赖 download-settings）
+  # 直连 VPS 的 h3 节点 Vless-xhttp-tls-UDP-direct 已在 v1.2.7 默认停用
+  # （Shadowrocket 下实测不通），改由下面两条上下行分离节点提供直连侧的速度。
+  # ------------------------------------------------------------------
+
+  # 上行经 CDN（防封锁）/ 下行直连 VPS 走 Reality（拿速度）
+  - name: Vless-xhttp-split-cdnup-realitydown-YOUR_HOST
+    type: vless
+    server: YOUR_CDN_DOMAIN
+    port: 443
+    uuid: YOUR_UUID_2
+    udp: true
+    flow: ""
+    tls: true
+    encryption: YOUR_VLESSENC_ENCRYPTION
+    network: xhttp
+    alpn:
+      - h2
+    servername: YOUR_CDN_DOMAIN
+    client-fingerprint: chrome
+    xhttp-opts:
+      host: YOUR_CDN_DOMAIN
+      path: YOUR_PATH
+      mode: auto
+      sc-min-posts-interval-ms: 30
       reuse-settings:
         max-concurrency: "32-64"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"
+      download-settings:
+        path: YOUR_PATH
+        server: YOUR_VPS_IP
+        port: 443
+        tls: true
+        alpn:
+          - h2
+        servername: YOUR_REALITY_DOMAIN
+        client-fingerprint: chrome
+        reality-opts:
+          public-key: YOUR_PUBILC_KEY
+          short-id: YOUR_SHORT_ID
+        reuse-settings:
+          max-concurrency: "32-64"
+          c-max-reuse-times: "0"
+          h-max-reusable-secs: "3600-6000"
 
-  - name: Vless-xhttp-tls-UDP-direct-YOUR_HOST
+  # 上行直连 VPS 走 Reality / 下行经 CDN。与上一条互为反向。
+  - name: Vless-xhttp-split-realityup-cdndown-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
@@ -139,18 +192,36 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h3
+      - h2
     servername: YOUR_REALITY_DOMAIN
     client-fingerprint: chrome
+    reality-opts:
+      public-key: YOUR_PUBILC_KEY
+      short-id: YOUR_SHORT_ID
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
-      host: YOUR_REALITY_DOMAIN
+      host: YOUR_CDN_DOMAIN
       path: YOUR_PATH
       mode: auto
       reuse-settings:
         max-concurrency: "32-64"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"
+      download-settings:
+        host: YOUR_CDN_DOMAIN
+        path: YOUR_PATH
+        server: YOUR_CDN_DOMAIN
+        port: 443
+        tls: true
+        alpn:
+          - h2
+        servername: YOUR_CDN_DOMAIN
+        client-fingerprint: chrome
+        reality-opts: { public-key: "" }
+        reuse-settings:
+          max-concurrency: "32-64"
+          c-max-reuse-times: "0"
+          h-max-reusable-secs: "3600-6000"
 
 proxy-groups:
   - name: 前置代理

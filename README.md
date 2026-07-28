@@ -17,7 +17,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 4 种节点模式 | 2 条 TCP 直连兜底 + 2 条 XHTTP over HTTP/3（UDP 443），见下方节点表 |
+| 5 种节点模式 | 2 条 TCP 直连兜底 + 1 条 XHTTP over HTTP/3（UDP 443）+ 2 条上下行分离，见下方节点表 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -28,43 +28,44 @@
 | **非交互一键** | 环境变量驱动，`AUTO=1` 零交互重装 |
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
 | **内核自动更新** | 每周更新 Xray-core，配置自检失败自动回滚 |
-| 扩展 | 上下行不同 CDN / 上行 IPv4 下行 IPv6 / XHTTP-H3 与 Hysteria2 |
+| 扩展 | 上下行不同 CDN / 上行 IPv4 下行 IPv6 / Hysteria2（同扩展的 XHTTP-H3 节点已知不通，见 docs/8 勘误） |
 
 ---
 
 ## 节点列表
 
-脚本生成 4 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
+脚本生成 5 条节点，名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice，速度最快**；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
-| 4 | `Vless-xhttp-tls-UDP-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，**alpn h3**；SNI/Host 用 **Reality 域名**（灰云） |
+| 4 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，`downloadSettings`，alpn h2 |
+| 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS / 下行经 CDN | 上下行分离，`downloadSettings`，alpn h2 |
 
-CDN 侧只保留 UDP（HTTP/3）版本；节点 1、2 走 TCP，作为 UDP 不可用时的兜底。
+- 节点 1、2 走 TCP，是 UDP 被封时的兜底。
+- 节点 3 是本项目相对上游的主要改动：CDN 侧只保留 UDP（HTTP/3）版本。
+- 节点 4、5 是 v1.2.7 恢复的**上下行分离**节点：上行防封锁走 CDN、下行拿速度走直连（或反向）。二者依赖 Xray 的 `downloadSettings` 字段。
 
-> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–4 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
+> **节点 4/5 的客户端支持性未验证**：`downloadSettings` 是 Xray-core 特有字段。**Shadowrocket 能否解析未经实测**——推荐用 mihomo / onexray 使用这两条。若 SR 中显示异常，改用节点 1–3。
 
-### 两条 UDP（HTTP/3）节点
+> **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–5 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
+
+### UDP（HTTP/3）节点
 
 - **节点 3** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（需 CF 区域已开启 HTTP/3，默认开启）。
-- **节点 4** 直连 VPS：SNI/Host 使用 **Reality 域名**（Cloudflare 灰云、DNS 直指 VPS），Nginx 在**该域名的 `server` 块内**额外监听 `UDP 443 quic` 并挂载 XHTTP 的 `location`（Xray 占的是 TCP 443，互不冲突），**需要防火墙放行 UDP 443**；
-
-  > v1.2.0 及之前该节点的 SNI 写的是 CDN 域名，而 QUIC 监听与 `location` 分处两个 `server_name`，TLS 握手会落到回落网站上——这是它一直不通的结构性原因，v1.2.1 已修复。`add-quic.sh` 的 `Vless-xhttp-tls-h3-direct` 节点同因同修。
-Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
 - **`alpn` 必须恰好只有 `h3`**，Xray 与 Mihomo 才会走 HTTP/3（`decideHTTPVersion` 与 `transport/xhttp/client.go` 都要求 `len(alpn)==1`）。手工改配置时不要额外加 `h2`。
-- Mihomo 同样支持 XHTTP-over-H3，所以 Mihomo 配置里也包含这两条节点。
-- `http3` 依赖支持 QUIC 的 TLS 库（标准 OpenSSL 未必满足），该监听**曾在部分环境下导致 nginx 启动失败**。若 `[6/8]` 阶段 `nginx -t` 或服务启动失败，用 `FEATURE_H3_DIRECT=false` 重跑一次排除该因素：
 
-  ```bash
-  FEATURE_H3_DIRECT=false bash ~/install-xpadding.sh
-  ```
+#### 直连 h3 节点（`Vless-xhttp-tls-UDP-direct`）—— v1.2.7 起默认停用
 
-  关闭后节点 4 不会生成（不留死链接），节点 1–3 不受影响。
+用户在 Shadowrocket 下实测，直连 VPS 的两条 h3 节点（本脚本的 `Vless-xhttp-tls-UDP-direct` 与 `add-quic.sh` 的 `Vless-xhttp-tls-h3-direct`）**均不通**。因此 `FEATURE_H3_DIRECT` 默认值自 v1.2.7 改为 `false`：
 
-  **v1.2.2 起不需要手动重跑**：`[6/8]` 阶段若 Nginx 启动失败，脚本会自动打印 `journalctl` / 端口占用 / SELinux 状态，然后移除 `main-h3` 段重试一次。起来了就说明根因是 quic（此时节点 4 自动停用，`node.env` 同步改写）；仍起不来就说明与 quic 无关，两段诊断都已在屏幕上。
+- 客户端不再生成该节点链接与 mihomo 块，**不留死链接**；
+- Nginx 不再监听 `UDP 443 quic`——这原本是配置里唯一有 SSL 库依赖的指令（`http3` 需要支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足），曾在部分环境下导致 nginx 启动失败，默认关闭一并规避；
+- 代码路径完整保留，想自行验证的用 `FEATURE_H3_DIRECT=true bash ~/install-xpadding.sh` 重跑。此时需防火墙放行 **UDP 443**，Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
+
+> **历史**：v1.2.0 及之前该节点的 SNI 写的是 CDN 域名，而 QUIC 监听与 `location` 分处两个 `server_name`，TLS 握手会落到回落网站上——v1.2.1 已修复该错配，但客户端侧仍不通，故 v1.2.7 直接默认停用。
 
 ### 订阅在 Shadowrocket / onexray 里拉不到节点
 
@@ -84,7 +85,7 @@ https://<Reality域名>/sub/<token>/v2rayn-raw.txt    # 明文，每行一条
 > - **打得开、能看到内容** → 网络与证书都没问题，是客户端的解析问题。改用明文订阅；仍不行就手动复制单条节点导入，看是哪一条被拒。
 > - **打不开 / 报证书错误** → 该设备到 VPS 的网络或证书信任问题，与本项目配置无关。
 
-节点本身的兼容性：节点 2–4 使用 **VLESS Encryption**（`encryption=` 为 ML-KEM-768 长串）与 **XHTTP**，都是较新的特性。客户端不支持时通常表现为**跳过这几条**，而不是整个订阅为空——所以"一条都没有"基本可以排除节点格式问题。
+节点本身的兼容性：节点 2–5 使用 **VLESS Encryption**（`encryption=` 为 ML-KEM-768 长串）与 **XHTTP**，都是较新的特性。客户端不支持时通常表现为**跳过这几条**，而不是整个订阅为空——所以"一条都没有"基本可以排除节点格式问题。
 
 ### UDP 节点连不上怎么办
 
@@ -92,7 +93,7 @@ https://<Reality域名>/sub/<token>/v2rayn-raw.txt    # 明文，每行一条
 xh diag     # 服务端侧自检：quic 监听 / nginx -t / UDP 443 / 防火墙，并给出客户端自测步骤
 ```
 
-**两条 UDP 节点同时不通、而 TCP 节点正常**，先分清是不是 TUN 模式导致的：
+**UDP 节点（节点 3）不通、而 TCP 节点正常**，先分清是不是 TUN 模式导致的：
 
 #### 情况 A：只在开启 TUN 时不通（v1.2.3 已修）
 
@@ -114,7 +115,9 @@ TUN 用 `auto-route` 把默认路由指向自己，客户端**自己**发往节�
 
 #### 情况 B：不开 TUN 也不通
 
-那就是客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2，或用 `add-quic.sh` 扩展换一个非 443 的 UDP 端口。
+那就是客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2 / 4 / 5（全部走 TCP）。
+
+> `add-quic.sh` 换非 443 UDP 端口这条路**不再推荐**：它产出的 `Vless-xhttp-tls-h3-direct` 同样在 Shadowrocket 下实测不通（见 [docs/8 勘误](./docs/8.拓展-QUIC添加.md)），该扩展现在只有 Hysteria2 那条节点可用。
 
 ---
 
@@ -203,7 +206,7 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_H3_DIRECT` | `false` 关闭节点 4（直连 VPS 的 h3）与对应 Nginx `443 quic` 监听 | `true` |
+| `FEATURE_H3_DIRECT` | `true` 启用直连 VPS 的 h3 节点（`Vless-xhttp-tls-UDP-direct`）与对应 Nginx `443 quic` 监听。v1.2.7 起默认关闭：Shadowrocket 下实测不通 | `false` |
 | `FEATURE_TUNING` | `false` 关闭全部调优（含 Xray 侧 bufferSize / sockopt） | `true` |
 | `FEATURE_SYSCTL` | **系统层**调优（内核参数 / 句柄 / systemd drop-in），默认关闭，节点验证无误后再开 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |

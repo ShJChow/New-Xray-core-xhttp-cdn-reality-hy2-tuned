@@ -235,14 +235,16 @@ cmd_diag() {
 
   echo -e "${CYAN}[+] 直连 UDP 节点（Vless-xhttp-tls-UDP-direct）服务端自检${NC}"
 
-  # FEATURE_H3_DIRECT=false 是一个**有意的**状态（用户主动关闭，或安装期
-  # nginx 启动失败后自动降级），不是异常：此时直连节点本就不该存在，后面
-  # 的 quic / server 块检查全部跳过，否则会刷出一屏假告警。
-  if [[ "${FEATURE_H3_DIRECT:-true}" != true ]]; then
+  # FEATURE_H3_DIRECT=false 是一个**有意的**状态（v1.2.7 起的默认值、用户主动
+  # 关闭、或安装期 nginx 启动失败后自动降级），不是异常：此时直连节点本就不该
+  # 存在，后面的 quic / server 块检查全部跳过，否则会刷出一屏假告警。
+  # 默认值同步改为 false，与 src/01-env.sh 一致，避免老 node.env 缺该字段时误判。
+  if [[ "${FEATURE_H3_DIRECT:-false}" != true ]]; then
     echo -e "  ${YELLOW}[--]${NC}   FEATURE_H3_DIRECT 已关闭 — 直连 UDP 节点未部署，本项检查跳过"
     echo ""
-    echo "  仅 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）可用。若这是安装期自动降级的"
-    echo "  结果，根因是当时的 nginx quic 启动失败，重装时可用 FEATURE_H3_DIRECT=true 重试。"
+    echo "  v1.2.7 起该节点默认停用：用户在 Shadowrocket 下实测直连 h3 不通。"
+    echo "  经 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）不受影响，仍然可用。"
+    echo "  想自行验证直连 h3，用 FEATURE_H3_DIRECT=true 重跑安装脚本。"
     return 0
   fi
   chk "FEATURE_H3_DIRECT 已开启" 0

@@ -124,6 +124,11 @@ NODE_RE_XHTTP_REALITY='#(Vless-xhttp-reality-|xhttp%2BReality%20)'
 # 旧装机两条都在时，grep|head -n1 按文件顺序仍优先命中 h2 那条。
 NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|Vless-xhttp-tls-UDP-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
 NODE_RE_REALITY_VISION='#(Vless-reality-vision-|reality%2Bvision)'
+# v1.2.7 恢复的两条上下行分离节点。前缀 Vless-xhttp-split- 刻意与上面三条都不重叠：
+# 若叫 Vless-xhttp-reality-* 会被 NODE_RE_XHTTP_REALITY 抢先命中（grep|head -n1），
+# 扩展就会拿分离节点的参数去当基础节点用（L10）。
+NODE_RE_SPLIT_CDNUP='#(Vless-xhttp-split-cdnup-realitydown-)'
+NODE_RE_SPLIT_REALITYUP='#(Vless-xhttp-split-realityup-cdndown-)'
 
 # find_node_line FILE REGEX
 find_node_line() {

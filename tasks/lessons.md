@@ -89,3 +89,49 @@
 **失败机制**：我们的 `xmux` 一直写 `hKeepAlivePeriod: 0`，文档也照抄没解释。用户要求"调优拉大"时，直觉是把 0 改成正值。查 `transport/internet/splithttp/dialer.go:182-186` 才发现 h3 路径下 `0` = **采用 quic-go/http3 的经验默认**，只有负值才是禁用——把它改成拍脑袋的正值等于**覆盖掉更好的默认**，方向恰好相反。`cMaxReuseTimes: 0` 同样是"不限制"而非"不复用"。
 
 **规则**：调参前先确认 `0` 的语义（关闭 / 无限 / 采用默认），三者的正确动作完全相反。这类语义只能从源码或官方文档读，读不到就不动它，并在文档里写清楚为什么不动。
+
+## 2026-07-28 · v1.2.7 节点方案回归
+
+### L17 · 「回退到版本 X」是症状描述，不是根因诊断——先 diff 再动手
+
+**失败机制**：用户说「回退到版本 1.2.5，direct 的两个节点不通」，读起来像 v1.2.6 引入了回归。
+若直接 `git revert`，会连带删掉 v1.2.6 的 `tools/perf-audit.sh`（383 行全新文件）、`xh conflict`
+和三项 nginx 调优——**而且修不好问题**：`git diff v1.2.5 v1.2.6` 只动了 resolver 协议族、
+`access_log off`、`listen backlog=65535`，全部不在 H3/QUIC 路径上。直连 h3 的问题从 v1.2.0
+时代就存在。
+
+**规则**：收到「回退到 X」时，先 `git diff X HEAD -- <相关路径>` 看**具体 hunk**（不是 `--stat`），
+确认 X→HEAD 是否真的是回归源。不是的话，把这个发现当成结论告诉用户，并把「以 X 为方案基线、
+保留其余工作」写成显式假设，而不是照字面执行一次破坏性回滚。
+
+### L18 · 移植上游代码时，`${VAR:+…}` guard 不能"顺手规范化"
+
+**失败机制**：上游的上下行分离节点把 padding/xmux 包在 `${XPAD_FIELDS_ENC:+…}` 里，却把
+`downloadSettings` 留在 guard **外面**，所以 `extra=` 恒定输出。本项目的风格是不带 guard 的
+`${EXTRA_4_PARAM}`，而它在 `normal` profile（`FEATURE_XPADDING=false`）下整体为空。若把上游
+的写法"统一"成本项目风格，normal 版会**整体丢掉 `downloadSettings`**——节点退化成普通
+CDN/Reality 节点，**能连通、看着完全正常**，是最难发现的一类静默错配。
+
+**规则**：移植含条件展开的模板行时，逐字保留原 guard 结构；只做变量名映射
+（如上游 `CDN_ECH_QUERY_ENC` → 本项目 `CDN_ECH_URI_PARAM`），不做风格统一。
+并且**每个 profile 都要单独渲染断言**——只测 xpadding 版会让 normal 版的退化完全逃逸。
+
+### L19 · 同一节点的 URI 版与 mihomo 版是两处独立代码，改一处必然漏另一处
+
+**失败机制**：把 h3 的 `maxConcurrency` 提到 64-128 时，改了 `XMUX_H3_ENC`（URI 用），
+漏了 `Vless-xhttp-tls-UDP-direct` 的 mihomo heredoc 块——两者都在 `11-client-config.sh` 里，
+相隔 70 行。靠肉眼 review 没发现，是 V2 的**交叉断言**（"h3 节点在 URI 和 YAML 里都必须是
+64-128"）抓出来的。
+
+**规则**：任何节点参数改动，验证脚本要对 URI 与 mihomo YAML **同时**断言同一个值，
+而不是分别检查各自"看着对不对"。
+
+### L20 · 「整个模块废弃」之前先数清楚它产出几个东西
+
+**失败机制**：我向用户建议「`add-quic.sh` 的唯一产物就是那条不通的 h3 节点，整个扩展废弃」，
+用户据此选了废弃。读 `extensions/common-nodes/03-client-config.sh:5-6` 才发现它同时产出
+`Hysteria2-direct`——独立协议，与 h3 完全无关。按原建议执行会误删一个能用的功能。
+
+**规则**：给出「整体删除」这类不可逆建议前，必须先读完该模块的产物清单（grep 它的
+`NODE_*_NAME` / 输出块），不能从模块名或文档标题推断。发现自己给错了前提要立刻更正并重新问，
+不要因为用户已经答过就将错就错。

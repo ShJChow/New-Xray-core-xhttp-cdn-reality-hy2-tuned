@@ -251,3 +251,113 @@ Reality 域名，而 Reality 块**原本没有 XHTTP 的 `location`**，只改 s
 **未验证（L8）**：无 VPS —— nginx 能否加载 `443 quic`、证书链、以及两条直连节点的实际
 连通性均未做运行时验证。若云厂商安全组未放行 UDP 443，本次改动**不解决**问题，
 `xh diag` 会明确提示这一层查不到。
+
+---
+
+# v1.2.7 · 节点方案回归上游拓扑 + 停用直连 H3 + xmux 分层调优（2026-07-28）
+
+## Goal
+
+1. 停用两条在 Shadowrocket 下实测不通的直连 h3 节点；
+2. 节点集回归上游 `Yulinanami/my-xhttp-cdn-config` 拓扑（恢复 v1.2.0 删掉的两条上下行分离节点），
+   同时保留本项目自有的 `Vless-xhttp-tls-UDP-cdn`；节点名统一为英文且不沿用上游命名；
+3. xmux 参数调优。
+
+## Current State
+
+已完成（2026-07-28）。节点数 4 → 5。
+
+## Assumptions
+
+- **「回退到 1.2.5」不做 git revert**：`git diff v1.2.5 v1.2.6` 只动了 nginx resolver 协议族、
+  `access_log off`、`listen backlog=65535`，**全部不在 H3/QUIC 路径上**——直连 h3 的问题从
+  v1.2.0/v1.2.1 时代就存在，literal revert 修不好它。v1.2.6 的 `tools/perf-audit.sh`、
+  `xh conflict`、nginx 三项调优全部保留。
+- **Shadowrocket 对 `downloadSettings` 的支持本机无法验证**（用户确认照常生成），已在
+  README / 客户端模板显式标注「SR 支持待验证，推荐 mihomo / onexray」。
+- `add-quic.sh` 扩展**整体保留不动**：它同时产出 `Hysteria2-direct`（独立协议，与 h3 无关），
+  整体废弃会误伤。仅在 docs/8 加勘误。
+- 服务端零改动即可承载恢复的两条节点：两条腿走的都是已验证通路（Reality 腿直落 Xray TCP 443；
+  CDN 腿落 nginx `${CDN_DOMAIN}` server 块，该块已有 `location` 且带 `grpc_read_timeout 1h`）。
+- 已核实无需改动：`src/12-subscription.sh`（只 cp/base64）；`mihomo-full.yaml.tmpl` 的
+  proxy-groups 用 `include-all: true`；`extensions/dual-cdn|dual-ip/03-client-config.sh`
+  均为「`sed -i` 删自己那条 + `>>` 追加」的增量写法。
+
+## Change Scope
+
+- [x] `src/01-env.sh`：`FEATURE_H3_DIRECT` 默认 `true` → `false`（一行同时关掉节点链接、
+      mihomo 块、nginx `443 quic` 监听；代码路径完整保留可回滚）
+- [x] `src/11-client-config.sh`：`NODE_UDP_DIRECT_LINE` 自带 `$'\n'` 前缀，关闭时不留空行
+- [x] `src/11-client-config.sh`：新增 `XMUX_H3_ENC`（64-128，h3 专用）；新增下行渲染变量
+      `MIHOMO_XPADDING_DOWNLOAD_BLOCK` / `MIHOMO_ECH_DOWNLOAD_BLOCK` / `MIHOMO_REUSE_KEEPALIVE_DOWNLOAD`
+- [x] `templates/client-config.txt.tmpl`：追加两条上下行分离节点 URI，**逐字保留上游的
+      `${VAR:+…}` guard 写法**——若换成本项目的 `${EXTRA_N_PARAM}` 风格，normal 版
+      （`FEATURE_XPADDING=false`）会整体丢掉 `downloadSettings`，节点退化成普通 CDN/Reality
+      节点且**能连通、看着正常**
+- [x] `templates/mihomo-proxies.yaml.tmpl`：追加两个 proxy 块（含 `download-settings`）
+- [x] `extensions/common-nodes/00-env-utils.sh`：新增 `NODE_RE_SPLIT_*`；**保留全部历史正则**
+- [x] `src/13-manage-cli.sh`：`xh diag` 的跳过文案改为「v1.2.7 起默认停用」，默认值同步 false
+- [x] README / docs/8 勘误 / `客户端模板.txt` / `客户端模板-mihomo.yaml`
+- [x] 重建 `dist/` 全部 5 个产物
+
+### 节点命名
+
+| # | 节点名 | 上行 | 下行 |
+|---|---|---|---|
+| 1 | `Vless-reality-vision-<tag>` | 直连 TCP 443 Reality+Vision | 同左 |
+| 2 | `Vless-xhttp-reality-<tag>` | 直连 TCP 443 XHTTP+Reality | 同左 |
+| 3 | `Vless-xhttp-tls-UDP-cdn-<tag>` | CDN h3 | 同左 |
+| 4 | `Vless-xhttp-split-cdnup-realitydown-<tag>` | CDN+TLS (h2) | 直连+Reality |
+| 5 | `Vless-xhttp-split-realityup-cdndown-<tag>` | 直连+Reality | CDN+TLS (h2) |
+
+`Vless-xhttp-split-` 前缀刻意与 `NODE_RE_XHTTP_REALITY` / `NODE_RE_CDN_BOTH` 都不重叠。
+
+### xmux（依据 `Xray-core transport/internet/splithttp/mux.go` 逐字核对）
+
+| 字段 | 值 | 源码语义 | 动作 |
+|---|---|---|---|
+| `cMaxReuseTimes` | 0 | `leftUsage = -1` = **无限复用** | 不动（L16） |
+| `hKeepAlivePeriod` | 0 | h3 取 quic-go 默认、h2 取 Chrome 默认 | 不动（L16） |
+| `hMaxRequestTimes` | 未设 | `LeftRequests = MaxInt32` | 不设 |
+| `hMaxReusableSecs` | 3600-6000 | 连接存活上限 | 不动 |
+| `maxConcurrency` | 见下 | 每连接并发请求上限 | 唯一旋钮 |
+
+- 节点 3（h3）：32-64 → **64-128**
+- 节点 1/2/4/5（h2 或 Reality 腿）：保持 **32-64**（单条 TCP，拉高会放大队头阻塞）
+
+## Verification
+
+- [x] **V1** `bash -n` 跑遍 `dist/*.sh` —— 5/5 通过
+- [x] **V2** 从 `dist/install.sh` **与** `dist/install-xpadding.sh` 用 awk 抽取真实代码执行渲染
+      （L5：不手抄副本），三种组合 `normal` / `xpadding` / `xpadding+h3`：
+      每条 URI 的 `extra=` URL-decode 后过 `json.tool` 合法；mihomo YAML 过 `yaml.safe_load` 合法；
+      proxies 名单逐字相等；**`downloadSettings` 在两个 profile 下都出现在节点 4/5**
+- [x] **V3** L11 SNI ↔ server_name：节点 4 上行 `sni=CDN` / 下行 `serverName=Reality`，
+      节点 5 反向，四项全部断言通过
+- [x] **V4** 扩展定位回归（L10）：v1.0.0 中文名 / v1.2.4 四节点 / v1.2.7 五节点三种历史格式下，
+      5 条 `NODE_RE_*` 命中的**都是应该命中的那一条**；`Vless-xhttp-split-*` 未被误命中
+- [x] **V5** 5 条基础节点在全部扩展（dual-cdn / dual-ip / common-nodes）的 `sed` 删除模式下均存活
+- [x] **V6** `FEATURE_H3_DIRECT=false` 渲染洁净：无空行、无 `UDP-direct`、nginx 无 `listen 443 quic`
+- [x] **V7** heredoc 转义复查（L2）：`nginx.conf.tmpl` 无未转义 `$`
+- [x] **V8** profile 维度全覆盖：`normal` / `xpadding` / `xpadding+h3` / **`xpadding+ECH`** /
+      **`xpadding+IPv6`** 共 5 种组合，合计 **155 条断言全绿**。
+      - ECH 是新代码最集中的地方：`MIHOMO_ECH_DOWNLOAD_BLOCK` 与 `MIHOMO_XPADDING_DOWNLOAD_BLOCK`
+        在节点 5 的 `client-fingerprint: chrome${...}${...}` 处背靠背拼接（YAML 缩进最易出错处），
+        且节点 5 的 `${CDN_ECH_QUERY_ENC:+%2C%22echConfigList%22…}` 注入 `downloadSettings` JSON。
+        两处经 `yaml.safe_load` / `json.loads` 验证通过。
+      - IPv6 覆盖节点 4 的 `${VPS_IP//:/%3A}`：断言 `downloadSettings.address == "2001:db8::1"`
+        （未被 `%3A` 污染）。
+
+### 验证中发现并修复的真实问题
+
+1. `Vless-xhttp-tls-UDP-direct` 的 **mihomo 块**仍是 `max-concurrency: "32-64"`，而其 URI 版
+   已改为 64-128（同为 h3）——V2 断言抓到，已同步。
+2. `客户端模板-mihomo.yaml` 里 `Vless-xhttp-tls-UDP-cdn` 的 `servername`/`host` 误写为
+   `YOUR_REALITY_DOMAIN`（应为 CDN 域名）——同 L11 类错配，顺手修正。
+
+## 未验证项（L8，需 VPS / 客户端实测）
+
+- 节点 4/5 在 **Shadowrocket** 中能否连通（`downloadSettings` 支持性）；
+- 节点 3 把 `maxConcurrency` 提到 64-128 后的**实际吞吐方向**——CF 边缘的 HTTP/3
+  `MAX_STREAMS` 若低于 128，quic-go 会阻塞在建流上而非另开连接，并行度可能反降。回滚值 32-64；
+- nginx 去掉 `443 quic` 监听后能否正常启动（预期只会更稳）。
