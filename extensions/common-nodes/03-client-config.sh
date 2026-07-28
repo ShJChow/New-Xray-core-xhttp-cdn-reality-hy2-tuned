@@ -58,9 +58,9 @@ EOF
       x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
       x-padding-method: "${XHTTP_PADDING_METHOD}"
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"
+        h-max-reusable-secs: "1800-3000"
         h-keep-alive-period: 0
 EOF
   fi

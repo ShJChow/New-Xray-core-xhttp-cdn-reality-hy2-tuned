@@ -72,9 +72,9 @@ EOF
           public-key: ${PUBLIC_KEY}
           short-id: ${SHORT_ID}
         reuse-settings:
-          max-concurrency: "32-64"
+          max-concurrency: "16-32"
           c-max-reuse-times: "0"
-          h-max-reusable-secs: "3600-6000"
+          h-max-reusable-secs: "1800-3000"
 EOF
 
   awk '

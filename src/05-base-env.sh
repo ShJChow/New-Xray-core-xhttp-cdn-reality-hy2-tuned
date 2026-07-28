@@ -108,30 +108,6 @@ else
   VPS_IP_URI="${VPS_IP}"
 fi
 
-# ------------------------------------------------------------------
-# DNS 与出站域名策略（v1.2.8）
-#
-# 背景：routing.domainStrategy 是 IPIfNonMatch，而 sniffing.routeOnly=true 让目标
-# 以**域名**形式进入路由，于是每条新连接都必须解析一次域名才能匹配 geoip:cn /
-# geoip:private 规则。此前配置里没有 dns 段，Xray 因此走 localhost（系统解析器）
-# 且自身无缓存；同时无论出网协议族如何都会照发 AAAA 查询。
-#
-# 按出网协议族收敛查询类型，可以省掉那次注定连不上的地址族解析：
-#   IP_CHOICE=1（纯 IPv4 出网）→ UseIPv4
-#   IP_CHOICE=2（纯 IPv6 出网）→ UseIPv6
-# freedom 出站同样显式指定，避免 AsIs 在拨号时用 Go 解析器再解析一遍。
-#
-# 注意：这会让"只有 AAAA 记录"的目标在纯 IPv4 机器上不可达——但这类目标在纯
-# IPv4 出网的机器上本来就不可达，不是本次新增的损失。
-# ------------------------------------------------------------------
-if [[ "$IP_CHOICE" == "2" ]]; then
-  XRAY_DNS_QUERY_STRATEGY="UseIPv6"
-  XRAY_FREEDOM_DOMAIN_STRATEGY="UseIPv6"
-else
-  XRAY_DNS_QUERY_STRATEGY="UseIPv4"
-  XRAY_FREEDOM_DOMAIN_STRATEGY="UseIPv4"
-fi
-
 info "UUID1 (Vision): $UUID1"
 info "UUID2 (XHTTP):  $UUID2"
 info "Private Key:    $PRIVATE_KEY"
