@@ -127,10 +127,12 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        # h3 专用 64-128（假设，非结论）：QUIC 无队头阻塞，单连接多流可省 CF 侧
-        # 握手；但若 CF 边缘的 MAX_STREAMS 低于 128，quic-go 会阻塞在建流上，
-        # 并行度可能反降。回滚值 32-64。
-        max-concurrency: "64-128"
+        # v1.2.8：曾用 64-128，现回滚为 32-64。核对 Xray v26.3.27 源码
+        # （transport/internet/splithttp/mux.go:92-105）确认：xmux 只统计自己的
+        # OpenUsage，对对端 QUIC 的 MAX_STREAMS 无感知，只有自己的计数满了才另开连接。
+        # 若 CF 边缘授予的流数低于 128，quic-go 会阻塞在建流上而 xmux 不补开连接，
+        # 并行度反而低于 32-64。CF 的并发流上限通常在 100 附近，故取 64 上限。
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"
 

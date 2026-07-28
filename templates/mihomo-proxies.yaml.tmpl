@@ -62,10 +62,13 @@ proxies:
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
-        # h3 专用：64-128。QUIC 无队头阻塞，单连接多流可省 CF 侧握手。
-        # 但这是**假设**——CF 边缘的 MAX_STREAMS 若低于 128，quic-go 会阻塞在建流上
-        # 而非另开连接，并行度可能反降。须 VPS 实测，回滚值 32-64。
-        max-concurrency: "64-128"
+        # v1.2.8 回滚到 32-64（与其余节点统一）。此前的 64-128 是一个未经验证的假设，
+        # 现已由 Xray 源码证伪：transport/internet/splithttp/mux.go:92-105 中 xmux 只
+        # 统计自己的 OpenUsage，对对端 QUIC 的 MAX_STREAMS 毫无感知，只会在**自己的**
+        # 计数达到 concurrency 时才另开连接。因此若 CF 边缘授予的流数低于 128，
+        # quic-go 会阻塞在建流上而 xmux 不会补开连接，实际并行度反而低于 32-64。
+        # CF 边缘的并发流上限通常在 100 附近，128 落在危险区。
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 

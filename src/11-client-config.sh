@@ -46,16 +46,26 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
   # maxConcurrency 是唯一真实旋钮：每条底层连接的并发请求上限，超了才开新连接。
   # ------------------------------------------------------------------
   XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2232-64%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%223600-6000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
-  # h3 专用：仅供经 CDN 的 UDP 节点使用，其余节点（h2 / Reality 腿）继续用 32-64。
+  # h3 专用变量：现已与其余节点取同一个值，保留变量只为让 h3 节点的取值点保持显式。
   #
-  # 【这是一个假设，不是结论】v1.2.7 起把 h3 节点提到 64-128：
-  #   正向机制：QUIC 无队头阻塞，单连接承载更多流可减少 Cloudflare 侧 TLS 握手次数。
-  #   反向机制（未排除）：maxConcurrency 只管客户端侧的流分配，Cloudflare 边缘对
-  #     HTTP/3 MAX_STREAMS 有独立上限。若 CF 授予的流数低于 128，quic-go 会阻塞在
-  #     建流上，而不是让 xmux 另开一条连接——实际并行度可能反而低于 32-64。
-  #   本机无法测量，须在 VPS 上实测。回滚值：32-64。
-  # h2 侧不跟进：h2 跑在单条 TCP 上，拉高并发会放大队头阻塞。
-  XMUX_H3_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2264-128%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%223600-6000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+  # 【v1.2.8：64-128 回滚为 32-64——此前那个"假设"已被源码证伪】
+  # v1.2.7 曾把 h3 节点提到 64-128，理由是 QUIC 无队头阻塞、单连接多流可省 CF 侧握手，
+  # 但同时记录了一个未排除的反向机制。核对 Xray v26.3.27 源码后该反向机制成立：
+  #
+  #   transport/internet/splithttp/mux.go:92-105
+  #     if m.concurrency > 0 {
+  #         for _, xmuxClient := range m.xmuxClients {
+  #             if xmuxClient.OpenUsage.Load() < m.concurrency { ... }
+  #         }
+  #     }
+  #     if len(xmuxClients) == 0 { return m.newXmuxClient() }   // 只有自己的计数满了才开新连接
+  #
+  # xmux 只统计自己的 OpenUsage，对对端 QUIC 的 MAX_STREAMS 毫无感知。若 Cloudflare
+  # 边缘授予的并发流数低于 128，quic-go 会阻塞在建流上，而 xmux 因为自己的计数没满、
+  # 不会另开连接——实际并行度反而低于 32-64。CF 边缘的并发流上限通常在 100 附近，
+  # 128 落在危险区，故取 64 上限留足余量。
+  # h2 侧本来就没跟进：h2 跑在单条 TCP 上，拉高并发会放大队头阻塞。
+  XMUX_H3_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2232-64%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%223600-6000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
   XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
   SC_MIN_POSTS_ENC="%22scMinPostsIntervalMs%22%3A30"
 
@@ -150,7 +160,8 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         # 与 URI 版（XMUX_H3_ENC）保持一致：本节点同为 h3
-        max-concurrency: "64-128"
+        # v1.2.8 随 XMUX_H3_ENC 一起回滚 64-128 → 32-64，理由见上方 XMUX_H3_ENC 注释
+        max-concurrency: "32-64"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 EOF

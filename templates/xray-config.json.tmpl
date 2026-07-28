@@ -1,6 +1,17 @@
 {
     "log": {
-        "loglevel": "info"
+        "loglevel": "warning"
+    },
+    "dns": {
+        "servers": [
+            "1.1.1.1",
+            "8.8.8.8",
+            "localhost"
+        ],
+        "queryStrategy": "${XRAY_DNS_QUERY_STRATEGY}",
+        "disableCache": false,
+        "disableFallback": false,
+        "tag": "dns-out"
     },${XRAY_POLICY_JSON}
     "routing": {
         "domainStrategy": "IPIfNonMatch",
@@ -91,7 +102,10 @@
     "outbounds": [
         {
             "protocol": "freedom",
-            "tag": "direct"${XRAY_SOCKOPT_OUT_JSON}
+            "tag": "direct",
+            "settings": {
+                "domainStrategy": "${XRAY_FREEDOM_DOMAIN_STRATEGY}"
+            }${XRAY_SOCKOPT_OUT_JSON}
         },
         {
             "protocol": "blackhole",

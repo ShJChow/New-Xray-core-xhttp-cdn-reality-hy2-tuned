@@ -40,7 +40,12 @@ render_sockopt_kv() {
   fi
   printf '%s"tcpKeepAliveIdle": 100,\n' "$inner"
   printf '%s"tcpKeepAliveInterval": 30,\n' "$inner"
-  printf '%s"tcpUserTimeout": 10000\n' "$inner"
+  # v1.2.8：10000 → 30000。tcpUserTimeout 的语义是"数据未被确认超过 N 毫秒即断开"。
+  # 10 秒对跨境高 RTT、移动网络切换、或一次短暂拥塞事件来说太短，会误杀本来健康的
+  # 长连接——而 XHTTP 的设计前提正是长连接（hMaxReusableSecs 已设到 3600-6000），
+  # 两者在时间尺度上互相矛盾。30 秒仍能及时回收真正的死连接（配合上面的 keepalive
+  # 100/30），但不会因一次网络抖动就打断会话。代价仅是死连接回收晚 20 秒。
+  printf '%s"tcpUserTimeout": 30000\n' "$inner"
   printf '%s}' "$pad"
 }
 

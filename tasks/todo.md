@@ -361,3 +361,65 @@ Reality 域名，而 Reality 块**原本没有 XHTTP 的 `location`**，只改 s
 - 节点 3 把 `maxConcurrency` 提到 64-128 后的**实际吞吐方向**——CF 边缘的 HTTP/3
   `MAX_STREAMS` 若低于 128，quic-go 会阻塞在建流上而非另开连接，并行度可能反降。回滚值 32-64；
 - nginx 去掉 `443 quic` 监听后能否正常启动（预期只会更稳）。
+
+---
+
+## v1.2.8 · 基于 Xray v26.3.27 源码核对的调优修正（2026-07-28）
+
+### 方法学前提（本轮最重要的一条）
+
+**`xray -test` 不校验字段名。** 实测：
+
+```bash
+$ xray -test -config <含 "totallyFakeField":123 的配置>
+Configuration OK.
+```
+
+所以"`xray -test` 通过"**不能**证明某个参数存在或生效。本轮全部结论改为以 `v26.3.27`
+tag 的源码为准：`infra/conf/transport_internet.go`（合法字段与 `Build()` 默认值）、
+`transport/internet/splithttp/{mux,dialer,config}.go`。
+
+### 经源码核对后确认「保持现状」的项（不改，且不应改）
+
+- `cMaxReuseTimes: 0` → `mux.go:44-61` 中 `leftUsage` 保持 `-1` = **无限复用**，已最优。
+- `hMaxRequestTimes` 不写 → `LeftRequests = math.MaxInt32` = **无限**。
+- `hKeepAlivePeriod: 0` → h2 取 `ChromeH2KeepAlivePeriod`、h3 取 `QuicgoH3KeepAlivePeriod`，
+  只有负值才禁用。
+- `policy.bufferSize: 512`、xPadding 五项、`mode: auto`、`scMaxEachPostBytes` 不设 —— 均维持。
+
+**新发现的坑（我们恰好躲过了）**：`transport_internet.go:394` 的默认值
+`if c.Xmux == (XmuxConfig{})` **只在 xmux 整体为空时**生效，届时 `maxConcurrency` 会被设成
+`1-1`（等于不复用）。**绝不能"为了用默认值"而删掉整个 xmux 块。**
+
+### 本轮实际改动
+
+1. **h3 `maxConcurrency` 64-128 → 32-64**（`src/11-client-config.sh` 的 `XMUX_H3_ENC` +
+   同文件 mihomo heredoc + `templates/mihomo-proxies.yaml.tmpl` + `客户端模板-mihomo.yaml`，
+   **共 4 处**，按 L19 全部同步）。v1.2.7 那个"假设"已被 `mux.go:92-105` 证伪：xmux 只统计
+   自己的 `OpenUsage`，对对端 QUIC 的 `MAX_STREAMS` 无感知，只有自己的计数满了才另开连接。
+2. **新增 `dns` 段 + `freedom.domainStrategy`**（`templates/xray-config.json.tmpl` +
+   `src/05-base-env.sh` 按 `IP_CHOICE` 派生 `UseIPv4`/`UseIPv6`）。
+3. **`tcpUserTimeout` 10000 → 30000**（`src/06-net-tuning.sh` 的 `render_sockopt_kv`）。
+4. **nginx `keepalive_timeout` 75s → 620s**（`templates/nginx.conf.tmpl`）。
+5. **`log.loglevel` info → warning**（`templates/xray-config.json.tmpl`）。
+
+### 验证
+
+模板在 `FEATURE_TUNING` × `FEATURE_XPADDING` × `TUNING_BBR_OK` 的 **全部 8 种组合**下渲染，
+均通过 `json.load()` 与 `xray -test`（Xray 26.3.27 / linux-arm64）。
+
+### 记录在案但**未**采纳的项
+
+- `scMinPostsIntervalMs: 30` 是**冗余**的——`config.go:145-154` 的默认值就是 30，写与不写
+  等价。保留（显式优于隐式，且未来 Xray 若改默认值不受影响）。
+- `sessionPlacement` / `seqPlacement`（默认 `"path"`，会让每个请求 URL 唯一）改成 `"cookie"`
+  可显著改善流量特征，但需服务端与**所有**客户端同步改，且 mihomo 支持性未核实 —— 与
+  "保持最佳兼容性"冲突，不采纳。
+- REALITY 的 `mldsa65Seed`（后量子签名）需客户端同步加 `pqv`，否则节点直接挂 —— 与
+  "不影响现有节点可用性"冲突，不采纳。
+
+## 未验证项（v1.2.8，需 VPS / 客户端实测）
+
+- `keepalive_timeout 620s` 对 CF 回源握手次数的**定量**影响（机制清楚，未实测）；
+- `dns` 段带来的首字节延迟改善幅度（机制清楚，未实测）；
+- 32-64 相对 64-128 在 h3 节点上的实际吞吐方向 —— 现在有源码依据，但仍未实测。
