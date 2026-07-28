@@ -149,14 +149,6 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/i
 bash ~/install-xpadding.sh
 ```
 
-Alpine Linux：
-
-```sh
-doas -s
-apk add --no-cache bash curl
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
-bash ~/install-xpadding.sh
-```
 
 ### 不带 xpadding 的普通版
 
