@@ -9,7 +9,6 @@ MODULES=(
   03-xray-install.sh
   04-input.sh
   05-base-env.sh
-  06-net-tuning.sh
   07-acme-cert.sh
   08-nginx-install.sh
   09-server-config.sh

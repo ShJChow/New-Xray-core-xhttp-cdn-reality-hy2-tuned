@@ -1,19 +1,7 @@
 {
     "log": {
-        "loglevel": "warning",
-        "access": "none"
+        "loglevel": "info"
     },
-    "dns": {
-        "servers": [
-            "1.1.1.1",
-            "8.8.8.8",
-            "localhost"
-        ],
-        "queryStrategy": "${XRAY_DNS_QUERY_STRATEGY}",
-        "disableCache": false,
-        "disableFallback": false,
-        "tag": "dns-out"
-    },${XRAY_POLICY_JSON}
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
@@ -62,7 +50,7 @@
                     "shortIds": [
                         "${SHORT_ID}"
                     ]
-                }${XRAY_SOCKOPT_JSON}
+                }
             },
             "sniffing": {
                 "enabled": true,
@@ -90,7 +78,7 @@
                     "host": "",
                     "path": "${XHTTP_PATH}",
                     "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
-                }${XRAY_SOCKOPT_JSON}
+                }
             },
             "sniffing": {
                 "enabled": true,
@@ -103,10 +91,7 @@
     "outbounds": [
         {
             "protocol": "freedom",
-            "tag": "direct",
-            "settings": {
-                "domainStrategy": "${XRAY_FREEDOM_DOMAIN_STRATEGY}"
-            }${XRAY_SOCKOPT_OUT_JSON}
+            "tag": "direct"
         },
         {
             "protocol": "blackhole",

@@ -2,7 +2,7 @@
 # 证书申请与复用
 # ==================================================
 
-info "[3/8] 申请 / 复用 SSL 证书"
+info "[2/7] 申请 / 复用 SSL 证书"
 
 curl https://get.acme.sh | sh
 ln -sf /root/.acme.sh/acme.sh /usr/local/bin/acme.sh

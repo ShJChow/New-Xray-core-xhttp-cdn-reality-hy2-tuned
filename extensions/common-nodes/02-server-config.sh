@@ -14,6 +14,10 @@ XRAY_CONF="/usr/local/etc/xray/config.json"
 [[ -f /etc/ssl/private/fullchain.cer && -f /etc/ssl/private/private.key ]] || error "未找到证书文件，请先运行主脚本"
 info "XHTTP H3 复用 Xray 127.0.0.1:8001 入站"
 
+# main-h3 是主脚本 v2.0.0 之前生成的 UDP 443 quic 段（含它自己的
+# location ${XHTTP_PATH}）。v2.0.0 已不再生成，对新装机器这条 sed 是 no-op；
+# 保留它是为了让**从旧版本升级过来**的 nginx.conf 也能被正确清理——否则本扩展
+# 插入的 location 会与残留的那个同名，nginx -t 报 duplicate location。
 sed -i \
   -e '/^[[:space:]]*# BEGIN common-nodes h3$/,/^[[:space:]]*# END common-nodes h3$/d' \
   -e '/^[[:space:]]*# BEGIN quic xhttp$/,/^[[:space:]]*# END quic xhttp$/d' \

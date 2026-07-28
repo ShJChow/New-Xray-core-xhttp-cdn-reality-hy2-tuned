@@ -14,7 +14,6 @@ vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&secu
 # 用户在 Shadowrocket 下实测不通。想自行验证的用 FEATURE_H3_DIRECT=true 重跑脚本，
 # 此时需 Nginx 监听 UDP 443 quic 且防火墙放行 UDP 443；该监听曾在部分环境下导致
 # nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库）。手工配置前请先用一键脚本验证过。
-# vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?...&alpn=h3&...#Vless-xhttp-tls-UDP-direct-YOUR_HOST
 
 上下行分离（依赖 Xray 的 downloadSettings 字段）
 # 【客户端支持性未验证】downloadSettings 是 Xray-core 特有字段，Shadowrocket 能否解析

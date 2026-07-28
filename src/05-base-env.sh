@@ -2,7 +2,7 @@
 # 基础环境安装
 # ==================================================
 
-info "[1/8] 安装基础环境"
+info "[1/7] 安装基础环境"
 
 pkg_update
 
@@ -88,7 +88,6 @@ fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
   CDN_ECH_QUERY_ENC=$(echo "$CDN_ECH_QUERY" | sed -e 's/%/%25/g' -e 's/+/%2B/g' -e 's/:/%3A/g' -e 's/\//%2F/g')
-  CDN_ECH_URI_PARAM="&ech=${CDN_ECH_QUERY_ENC}"
 fi
 
 info "生成 VLESS Encryption 密钥..."

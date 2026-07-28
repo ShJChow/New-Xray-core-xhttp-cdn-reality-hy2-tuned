@@ -2,7 +2,7 @@
 # 启动服务与配置自检
 # ==================================================
 
-info "[6/8] 启动服务"
+info "[5/7] 启动服务"
 
 info "配置证书自动续签命令..."
 mkdir -p /etc/ssl/private
@@ -26,7 +26,7 @@ xray -test -config /usr/local/etc/xray/config.json
 # 启动失败"是完全可能的（端口占用、QUIC 运行时初始化、SELinux 拒绝……）。
 # v1.2.2 之前这里是裸调用 service_restart：它返回非零会被 `set -e` 直接中断，
 # 连下一行的 error 都执行不到，用户只看到 systemd 一句 "See systemctl status"，
-# 拿不到任何根因。下面改为捕获失败 → 打印诊断 → 自动降级重试。
+# 拿不到任何根因。下面改为捕获失败 → 打印诊断 → 报出根因。
 dump_nginx_failure() {
   echo ""
   echo -e "${YELLOW}[+] Nginx 启动失败诊断${NC}"
@@ -52,29 +52,7 @@ service_restart xray || warn "Xray 重启命令返回非零，下面会判定实
 if ! service_restart nginx || ! { sleep 1; service_is_active nginx; }; then
   dump_nginx_failure
 
-  # 自动降级：main-h3 段（UDP 443 quic + http3）是本配置里唯一有 SSL 库依赖、
-  # 且唯一在 `nginx -t` 阶段验证不到的部分。去掉它再试一次——这同时也是一次
-  # 干净的二分：起来了就是 quic 的问题，还起不来就与 quic 无关（诊断已在上方）。
-  if [[ "$FEATURE_H3_DIRECT" == true ]] && grep -q '# BEGIN main-h3' /etc/nginx/nginx.conf; then
-    warn "自动降级：移除 UDP 443 quic 监听（main-h3 段）后重试一次"
-    sed -i '/^[[:space:]]*# BEGIN main-h3$/,/^[[:space:]]*# END main-h3$/d' /etc/nginx/nginx.conf
-    nginx -t || error "移除 quic 段后 nginx -t 反而失败，请把上方输出反馈给项目"
-
-    if service_restart nginx && { sleep 1; service_is_active nginx; }; then
-      FEATURE_H3_DIRECT=false
-      # node.env 在 [5/8] 已按 true 写入，这里必须同步改回，否则 xh info / xh diag
-      # 会在一台没有该监听的机器上报告 H3 已启用。
-      sed -i 's/^FEATURE_H3_DIRECT=.*/FEATURE_H3_DIRECT=false/' "$NODE_ENV_FILE" 2>/dev/null || true
-      warn "降级成功：Nginx 已启动，但**节点 4（Vless-xhttp-tls-UDP-direct）已停用**"
-      warn "根因就是上方诊断里的 quic 相关报错；节点 1-3 不受影响"
-      warn "后续客户端配置不会生成该节点，避免留下连不上的死链接"
-    else
-      dump_nginx_failure
-      error "移除 quic 段后 Nginx 仍无法启动，根因与 quic 无关，请看上方两段诊断输出"
-    fi
-  else
-    error "Nginx 启动失败，根因见上方诊断输出"
-  fi
+  error "Nginx 启动失败，根因见上方诊断输出"
 fi
 
 service_is_active xray || error "Xray 启动失败"

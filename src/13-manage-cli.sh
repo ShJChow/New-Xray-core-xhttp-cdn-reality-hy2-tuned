@@ -2,7 +2,7 @@
 # 安装管理命令 xh + 保活自愈 + 内核自动更新
 # ==================================================
 
-info "[8/8] 安装管理命令 ${MANAGE_CMD}"
+info "[7/7] 安装管理命令 ${MANAGE_CMD}"
 
 cat > "$MANAGE_BIN" << 'XHMANAGEEOF'
 #!/bin/bash
@@ -19,6 +19,7 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 fail()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+MANAGE_CMD="xh"
 STATE_DIR="/etc/xhttp-cdn"
 NODE_ENV_FILE="${STATE_DIR}/node.env"
 SUB_TOKEN_FILE="${STATE_DIR}/sub_token"
@@ -39,6 +40,12 @@ fi
 
 if [[ -z "${SERVICE_TYPE:-}" ]]; then
   if command -v systemctl >/dev/null 2>&1; then SERVICE_TYPE="systemd"; else SERVICE_TYPE="openrc"; fi
+fi
+
+# 兜底：node.env 通常带这两项，但老版本或文件缺失时 tuning 仍要能跑
+PROJECT_NAME="${PROJECT_NAME:-xray-xhttp}"
+if [[ -z "${OS_ID:-}" && -f /etc/os-release ]]; then
+  OS_ID=$(. /etc/os-release && echo "$ID")
 fi
 
 svc() {
@@ -125,9 +132,11 @@ cmd_info() {
   [[ "${FEATURE_XPADDING:-false}" == true ]] && \
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
-  echo "  直连 H3 节点:    ${FEATURE_H3_DIRECT:-false}"
-  echo "  Xray 侧调优:     ${FEATURE_TUNING:-false}（bufferSize / sockopt）"
-  echo "  系统层调优:      ${FEATURE_SYSCTL:-false}（内核 / 句柄，BBR 可用: ${TUNING_BBR_OK:-false}）"
+  if [[ -f "$SYSCTL_CONF" ]]; then
+    echo "  系统层调优:      已开启（${MANAGE_CMD} tuning off 可回滚）"
+  else
+    echo "  系统层调优:      未开启（${MANAGE_CMD} tuning on 开启）"
+  fi
   echo ""
   echo -e "${YELLOW}[+] 客户端节点${NC}"
   local f="${USER_HOME:-/root}/client-config.txt"
@@ -223,8 +232,12 @@ cmd_conflict() {
   echo ""
 }
 
-# UDP / HTTP3 节点连不上时的服务端侧自检。
-# 目的是"排除服务端"：这里全绿说明问题在客户端网络或客户端内核。
+# UDP / HTTP3 节点连不上时的自检。
+#
+# v2.0.0：直连 h3 节点已删除，本项目唯一的 UDP 节点是经 CDN 的
+# Vless-xhttp-tls-UDP-cdn。它**不经过本机任何 QUIC 配置**——Cloudflare 边缘
+# 用 HTTP/3 面对客户端，回源到本机仍是 TCP。因此服务端侧只需确认常规 XHTTP
+# 链路健康，UDP 相关的排查全部在客户端网络一侧。
 cmd_diag() {
   cmd_conflict
   local ok=0 bad=0
@@ -233,103 +246,53 @@ cmd_diag() {
     else echo -e "  ${RED}[!!]${NC}   $1${3:+ — $3}"; bad=$((bad+1)); fi
   }
 
-  echo -e "${CYAN}[+] 直连 UDP 节点（Vless-xhttp-tls-UDP-direct）服务端自检${NC}"
-
-  # FEATURE_H3_DIRECT=false 是一个**有意的**状态（v1.2.7 起的默认值、用户主动
-  # 关闭、或安装期 nginx 启动失败后自动降级），不是异常：此时直连节点本就不该
-  # 存在，后面的 quic / server 块检查全部跳过，否则会刷出一屏假告警。
-  # 默认值同步改为 false，与 src/01-env.sh 一致，避免老 node.env 缺该字段时误判。
-  if [[ "${FEATURE_H3_DIRECT:-false}" != true ]]; then
-    echo -e "  ${YELLOW}[--]${NC}   FEATURE_H3_DIRECT 已关闭 — 直连 UDP 节点未部署，本项检查跳过"
-    echo ""
-    echo "  v1.2.7 起该节点默认停用：用户在 Shadowrocket 下实测直连 h3 不通。"
-    echo "  经 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）不受影响，仍然可用。"
-    echo "  想自行验证直连 h3，用 FEATURE_H3_DIRECT=true 重跑安装脚本。"
-    return 0
-  fi
-  chk "FEATURE_H3_DIRECT 已开启" 0
-
-  if grep -q '443 quic' /etc/nginx/nginx.conf 2>/dev/null; then
-    chk "nginx.conf 含 UDP 443 quic 监听" 0
-  else
-    chk "nginx.conf 无 UDP 443 quic 监听" 1 "重跑安装脚本，或确认未被 add-quic.sh 接管"
-  fi
-
-  # v1.2.1：quic 监听与 XHTTP 的 location 必须落在 **同一个** server 块里，
-  # 且该块的 server_name 要等于客户端节点的 sni（Reality 域名）。
-  # 两者分处不同 server_name 正是 v1.2.0 及之前直连 H3 节点不通的原因。
-  if [[ -n "${REALITY_DOMAIN:-}" ]] && [[ -n "${XHTTP_PATH:-}" ]]; then
-    if awk -v d="$REALITY_DOMAIN" -v p="$XHTTP_PATH" '
-          $0 ~ "^[[:space:]]*server[[:space:]]*\\{" { blk=""; }
-          { blk = blk $0 "\n" }
-          $0 ~ "^[[:space:]]*server_name[[:space:]]+" d ";[[:space:]]*$" { want=1 }
-          want && index(blk, "quic") && index(blk, "location " p) { found=1 }
-          $0 ~ "^[[:space:]]*\\}[[:space:]]*$" { want=0 }
-          END { exit(found ? 0 : 1) }
-        ' /etc/nginx/nginx.conf 2>/dev/null; then
-      chk "quic 监听与 location ${XHTTP_PATH} 同在 ${REALITY_DOMAIN} 的 server 块" 0
-    else
-      chk "quic 监听与 XHTTP location 未落在 ${REALITY_DOMAIN} 的同一 server 块" 1 \
-        "客户端 sni 与服务端 server_name 不一致会导致握手落到回落网站；重跑安装脚本"
-    fi
-  fi
+  echo -e "${CYAN}[+] 服务端侧自检${NC}"
 
   if nginx -t >/dev/null 2>&1; then
     chk "nginx -t 配置有效" 0
   else
-    chk "nginx -t 失败" 1 "执行 nginx -t 看具体报错；可用 FEATURE_H3_DIRECT=false 重装排除 quic"
+    chk "nginx -t 失败" 1 "执行 nginx -t 看具体报错"
   fi
 
+  if svc_active nginx; then chk "nginx 运行中" 0; else chk "nginx 未运行" 1 "${MANAGE_CMD} restart"; fi
+  if svc_active xray;  then chk "xray 运行中"  0; else chk "xray 未运行"  1 "${MANAGE_CMD} restart"; fi
+
+  # 全部 CDN 流量经 Xray:443 fallback 落到 nginx:8003，再 grpc_pass 到 127.0.0.1:8001
   if command -v ss >/dev/null 2>&1; then
-    if ss -lunp 2>/dev/null | grep -qE ':443\b'; then
-      chk "本机已监听 UDP 443" 0 "$(ss -lunp 2>/dev/null | grep -E ':443\b' | head -1 | tr -s ' ')"
-    else
-      chk "本机未监听 UDP 443" 1 "nginx 可能未加载 quic 监听，或服务未启动"
-    fi
+    ss -lntp 2>/dev/null | grep -qE ':443'  && chk "已监听 TCP 443"  0 || chk "未监听 TCP 443"  1 "Xray 未启动？"
+    ss -lntp 2>/dev/null | grep -qE ':8003' && chk "已监听 TCP 8003" 0 || chk "未监听 TCP 8003" 1 "nginx 未启动？"
   else
-    warn "未安装 ss，跳过 UDP 监听检查"
+    warn "未安装 ss，跳过端口监听检查"
   fi
 
-  # 防火墙：只做提示，不自动改规则
-  if command -v iptables >/dev/null 2>&1; then
-    if iptables -S INPUT 2>/dev/null | grep -qE 'udp.*(dport 443|--dport 443)'; then
-      chk "iptables 有 UDP 443 相关规则" 0
-    elif iptables -S INPUT 2>/dev/null | grep -qE '^-A INPUT -j (REJECT|DROP)'; then
-      chk "iptables 有兜底 REJECT/DROP 且未见 UDP 443 放行" 1 \
-        "Oracle 默认镜像常见；见 docs/12 第 3 节"
-    else
-      chk "iptables 未见明显拦截" 0
-    fi
-  fi
-  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
-    if firewall-cmd --list-ports 2>/dev/null | grep -q '443/udp'; then
-      chk "firewalld 已放行 443/udp" 0
-    else
-      chk "firewalld 未放行 443/udp" 1 "firewall-cmd --permanent --add-port=443/udp && firewall-cmd --reload"
-    fi
+  # location 的 gRPC 超时：缺失会让 XHTTP 长连接每 60 秒被 nginx 切断
+  if grep -q 'grpc_read_timeout' /etc/nginx/nginx.conf 2>/dev/null; then
+    chk "nginx location 已放大 grpc 读写超时" 0
+  else
+    chk "nginx location 缺少 grpc_read_timeout" 1 "XHTTP 长连接会每 60 秒断一次；重跑安装脚本"
   fi
 
   echo ""
   echo -e "${CYAN}[+] 结论与下一步${NC}"
   if [[ $bad -eq 0 ]]; then
     echo "  服务端侧未发现问题（$ok 项通过）。"
-    echo "  注意：云厂商的安全组/VCN 在机器外部，本地查不到，仍需自行确认已放行 UDP 443。"
   else
     echo "  发现 $bad 项异常，先按上面的提示处理。"
   fi
   echo ""
-  echo -e "${YELLOW}  经 CDN 的 UDP 节点（Vless-xhttp-tls-UDP-cdn）不经过本机任何配置${NC}"
+  echo -e "${YELLOW}  节点 Vless-xhttp-tls-UDP-cdn 不依赖本机任何 QUIC 配置${NC}"
   echo "  它只依赖：① Cloudflare 区域已开启 HTTP/3  ② 你的客户端网络允许 UDP 443 出站。"
   echo ""
-  echo "  在客户端机器上执行下面三条来区分（任一不通即为客户端侧网络封锁 QUIC）："
+  echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："
   echo "    curl -sI --http3-only https://cloudflare-quic.com/ | head -1"
   echo "    curl -sI --http3-only https://${CDN_DOMAIN:-你的CDN域名}/ | head -1"
-  echo "    curl -sI --http3-only --resolve ${REALITY_DOMAIN:-你的Reality域名}:443:${VPS_IP:-你的VPS_IP} https://${REALITY_DOMAIN:-你的Reality域名}/ | head -1"
-  echo "    （第三条直接打本机 UDP 443，走的正是直连节点的路径）"
   echo "  若 curl 不支持 --http3-only，用浏览器访问 https://cloudflare-quic.com/ 看是否显示 HTTP/3。"
   echo ""
-  echo "  两条 UDP 节点同时不通、而 TCP 节点正常 ⇒ 基本可判定为客户端侧 UDP 443 被封，"
+  echo "  UDP 节点不通而 TCP 节点正常 ⇒ 基本可判定为客户端侧 UDP 443 被封，"
   echo "  服务端无法解决；请改用 Vless-reality-vision / Vless-xhttp-reality 节点。"
+  echo ""
+  echo "  另：开启 TUN 时务必确认节点自身流量已豁免（client-config-mihomo-full.yaml"
+  echo "  已内置 route-exclude-address / 首条 DIRECT 规则），否则 QUIC 会在 TUN 里自环。"
 }
 
 cmd_log() {
@@ -443,37 +406,31 @@ cmd_tuning() {
         echo -e "${CYAN}[+] ${SYSCTL_CONF}${NC}"
         cat "$SYSCTL_CONF"
       else
-        info "未启用系统层调优（默认关闭，用 `xh tuning on` 查看开启方式）"
+        info "未开启系统层调优。安装期不做任何参数优化，需要时执行 ${MANAGE_CMD} tuning on"
       fi
       [[ -f "$LIMITS_CONF" ]] && { echo ""; echo -e "${CYAN}[+] ${LIMITS_CONF}${NC}"; cat "$LIMITS_CONF"; }
       ;;
     on)
-      [[ -f "$SYSCTL_CONF" ]] && { info "系统层调优已处于开启状态"; return 0; }
-      # v1.2.2：系统层调优（FEATURE_SYSCTL）默认关闭，等节点验证无误后再开。
-      # 调优含逐项能力探测（BBR / 只读 sysctl / limits.d 是否存在），只能由安装
-      # 脚本执行，这里给出带 FEATURE_SYSCTL=true 的现成命令，并复用已有参数重装。
-      warn "开启系统层调优需重跑安装脚本（其中包含逐项能力探测），已为你拼好命令："
-      echo ""
-      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh"
-      echo "  AUTO=1 FEATURE_SYSCTL=true \\"
-      echo "  REALITY_DOMAIN=${REALITY_DOMAIN} CDN_DOMAIN=${CDN_DOMAIN} IP_CHOICE=${IP_CHOICE} \\"
-      echo "  bash ~/install-xpadding.sh"
-      echo ""
-      info "Xray 侧的 bufferSize / sockopt 不受该开关影响，安装时已写入"
+      [[ -f "$SYSCTL_CONF" ]] && { info "系统层调优已处于开启状态（重跑请先 ${MANAGE_CMD} tuning off）"; return 0; }
+      # v2.0.0：调优逻辑内联在本命令里，不再需要重跑安装脚本。
+      # 全部 best-effort，逐项能力探测（BBR / 只读 sysctl / limits.d 是否存在），
+      # 任何一项失败只 warn，不影响已经跑通的节点。
+      apply_system_tuning
       ;;
     off)
       rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
-      rm -f /etc/systemd/system/xray.service.d/override.conf \
-            /etc/systemd/system/nginx.service.d/override.conf
+      rm -f /etc/systemd/system/xray.service.d/override.conf             /etc/systemd/system/nginx.service.d/override.conf
       rmdir /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d 2>/dev/null || true
       [[ "$SERVICE_TYPE" == "systemd" ]] && systemctl daemon-reload >/dev/null 2>&1
       sysctl --system >/dev/null 2>&1 || true
       info "已移除本项目写入的全部调优配置"
       warn "已生效的运行时内核参数需重启系统才能完全恢复默认值"
       ;;
-    *) fail "用法: xh tuning [show|on|off]" ;;
+    *) fail "用法: ${MANAGE_CMD} tuning [show|on|off]" ;;
   esac
 }
+
+@@include src/06-tuning-lib.sh
 
 # 健康检查：服务掉线则拉起（由 cron 每 5 分钟调用）
 cmd_guard() {
@@ -633,7 +590,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（默认关闭）
+  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（安装期不做，默认关闭）
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）

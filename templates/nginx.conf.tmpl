@@ -1,14 +1,11 @@
 user root;
 worker_processes auto;
-worker_rlimit_nofile 1048576;
 
 error_log /usr/local/nginx/logs/error.log notice;
 pid /run/nginx.pid;
 
 events {
-    worker_connections 65535;
-    multi_accept on;
-    use epoll;
+    worker_connections 1024;
 }
 
 http {
@@ -27,14 +24,7 @@ http {
     tcp_nodelay           on;
     tcp_nopush            on;
     client_max_body_size  0;
-    client_body_buffer_size 128k;
-    keepalive_timeout     620s;
-    keepalive_requests    10000;
     gzip                  on;
-
-    # XHTTP 是高频 POST，且 URL 携带上千字符的 x_padding：写 access_log 既是持续的
-    # 磁盘 IO，也把 padding 明文落盘。error_log 保留，排障不受影响。
-    access_log            off;
 
     add_header X-Content-Type-Options nosniff;
 
@@ -57,20 +47,10 @@ http {
     map \$http_forwarded \$proxy_add_forwarded {
         default "\$proxy_forwarded_elem";
     }
-    map \$http_upgrade \$connection_upgrade {
-        default upgrade;
-        ""      close;
-    }
-
     server {
-        # backlog=65535 对齐 net.core.somaxconn；nginx 默认仅 511，而全部 CDN 流量
-        # 都经 Xray:443 fallback 落到这里，是全链路唯一的浅队列。
-        # 注意：同一 address:port 的 backlog 只能声明一次，下面 CDN 那个 8003
-        # server 块不能重复写，否则 nginx -t 报 duplicate listen options。
-        listen       8003 ssl backlog=65535;
+        listen       8003 ssl;
         http2        on;
         server_name  ${REALITY_DOMAIN};
-${NGINX_H3_DIRECT_BLOCK}
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
@@ -120,7 +100,7 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
     }
 
     server {
-        listen  80 default_server backlog=65535;
+        listen  80 default_server;
         server_name _;
         return 301 https://\$host\$request_uri;
     }

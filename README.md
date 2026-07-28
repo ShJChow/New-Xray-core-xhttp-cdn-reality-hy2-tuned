@@ -40,32 +40,28 @@
 |---|---|---|---|
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice，速度最快**；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
-| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
-| 4 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，`downloadSettings`，alpn h2 |
+| 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，`downloadSettings`，alpn h2 |
+| 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
 | 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS / 下行经 CDN | 上下行分离，`downloadSettings`，alpn h2 |
 
-- 节点 1、2 走 TCP，是 UDP 被封时的兜底。
-- 节点 3 是本项目相对上游的主要改动：CDN 侧只保留 UDP（HTTP/3）版本。
-- 节点 4、5 是 v1.2.7 恢复的**上下行分离**节点：上行防封锁走 CDN、下行拿速度走直连（或反向）。二者依赖 Xray 的 `downloadSettings` 字段。
+**v2.0.0 起，节点集与上游 [`Yulinanami/my-xhttp-cdn-config`](https://github.com/Yulinanami/my-xhttp-cdn-config) 完全一致，只有两点差异：**
 
-> **节点 4/5 的客户端支持性未验证**：`downloadSettings` 是 Xray-core 特有字段。**Shadowrocket 能否解析未经实测**——推荐用 mihomo / onexray 使用这两条。若 SR 中显示异常，改用节点 1–3。
+1. 节点名改用英文（便于客户端列表与扩展脚本按名定位）；
+2. **节点 4** 是本项目唯一保留的自有改动——上游该槽位是纯 CDN 的 `alpn=h2`，这里换成 **`alpn=h3`（UDP + XHTTP + CDN）**。
+
+其余四条节点的 URI 正文与 mihomo 配置块与上游**逐字节相同**（已用离线渲染对比验证，normal / xpadding 两个版本均通过）。
+
+- 节点 1、2 走 TCP，是 UDP 被封时的兜底。
+- 节点 3、5 是**上下行分离**节点：上行防封锁走 CDN、下行拿速度走直连（或反向），依赖 Xray 的 `downloadSettings` 字段。
+
+> **节点 3/5 的客户端支持性未验证**：`downloadSettings` 是 Xray-core 特有字段。**Shadowrocket 能否解析未经实测**——推荐用 mihomo / onexray 使用这两条。若 SR 中显示异常，改用节点 1、2、4。
 
 > **关于 Vision**：`xtls-rprx-vision` 要求 TCP+TLS/REALITY 的 raw 传输，只有节点 1 满足。节点 2–5 是 XHTTP 传输，按 Xray 设计**不能带 flow**——给它们加 Vision 只会连接失败。详见 [docs/10 第 4 节](./docs/10.流控调优.md)。
 
 ### UDP（HTTP/3）节点
 
-- **节点 3** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（需 CF 区域已开启 HTTP/3，默认开启）。
+- **节点 4** 由 Cloudflare 边缘终结 h3，回源仍是 TCP，**服务端零改动**（需 CF 区域已开启 HTTP/3，默认开启）。
 - **`alpn` 必须恰好只有 `h3`**，Xray 与 Mihomo 才会走 HTTP/3（`decideHTTPVersion` 与 `transport/xhttp/client.go` 都要求 `len(alpn)==1`）。手工改配置时不要额外加 `h2`。
-
-#### 直连 h3 节点（`Vless-xhttp-tls-UDP-direct`）—— v1.2.7 起默认停用
-
-用户在 Shadowrocket 下实测，直连 VPS 的两条 h3 节点（本脚本的 `Vless-xhttp-tls-UDP-direct` 与 `add-quic.sh` 的 `Vless-xhttp-tls-h3-direct`）**均不通**。因此 `FEATURE_H3_DIRECT` 默认值自 v1.2.7 改为 `false`：
-
-- 客户端不再生成该节点链接与 mihomo 块，**不留死链接**；
-- Nginx 不再监听 `UDP 443 quic`——这原本是配置里唯一有 SSL 库依赖的指令（`http3` 需要支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足），曾在部分环境下导致 nginx 启动失败，默认关闭一并规避；
-- 代码路径完整保留，想自行验证的用 `FEATURE_H3_DIRECT=true bash ~/install-xpadding.sh` 重跑。此时需防火墙放行 **UDP 443**，Oracle 要在 VCN 安全列表和实例 iptables 两层都放行，见 [docs/12](./docs/12.机型调优-OracleARM.md#3-oracle-特有443-端口要放行两层)。
-
-> **历史**：v1.2.0 及之前该节点的 SNI 写的是 CDN 域名，而 QUIC 监听与 `location` 分处两个 `server_name`，TLS 握手会落到回落网站上——v1.2.1 已修复该错配，但客户端侧仍不通，故 v1.2.7 直接默认停用。
 
 ### 订阅在 Shadowrocket / onexray 里拉不到节点
 
@@ -93,7 +89,7 @@ https://<Reality域名>/sub/<token>/v2rayn-raw.txt    # 明文，每行一条
 xh diag     # 服务端侧自检：quic 监听 / nginx -t / UDP 443 / 防火墙，并给出客户端自测步骤
 ```
 
-**UDP 节点（节点 3）不通、而 TCP 节点正常**，先分清是不是 TUN 模式导致的：
+**UDP 节点（节点 4）不通、而 TCP 节点正常**，先分清是不是 TUN 模式导致的：
 
 #### 情况 A：只在开启 TUN 时不通（v1.2.3 已修）
 
@@ -107,7 +103,7 @@ TUN 用 `auto-route` 把默认路由指向自己，客户端**自己**发往节�
 | ② | `rules` 第一条 `IP-CIDR,<VPS_IP>/32,全局直连` | 万一进了 TUN，第一条就放出去 |
 | ③ | `sniffer.skip-dst-address` | 即使被捞到，也不许改写目标地址 |
 
-外加 `dns.fake-ip-filter` 补上两个域名——节点 3 的 `server` 是 CDN 域名，被 fake-ip 解析成 `198.18.x.x` 同样连不上。
+外加 `dns.fake-ip-filter` 补上两个域名——节点 4 的 `server` 是 CDN 域名，被 fake-ip 解析成 `198.18.x.x` 同样连不上。
 
 > **纯节点订阅（`mihomo-nodes.yaml`）不含这些**——它只有 `proxies` 段。用纯节点导入自己配置的话，请手动把上面三条抄进去。
 >
@@ -115,7 +111,7 @@ TUN 用 `auto-route` 把默认路由指向自己，客户端**自己**发往节�
 
 #### 情况 B：不开 TUN 也不通
 
-那就是客户端侧网络封锁了 UDP 443（QUIC）——节点 3 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2 / 4 / 5（全部走 TCP）。
+那就是客户端侧网络封锁了 UDP 443（QUIC）——节点 4 根本不经过本项目的任何服务端配置，服务端改不了。此时请改用节点 1 / 2 / 3 / 5（全部走 TCP）。
 
 > `add-quic.sh` 换非 443 UDP 端口这条路**不再推荐**：它产出的 `Vless-xhttp-tls-h3-direct` 同样在 Shadowrocket 下实测不通（见 [docs/8 勘误](./docs/8.拓展-QUIC添加.md)），该扩展现在只有 Hysteria2 那条节点可用。
 
@@ -202,9 +198,6 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_H3_DIRECT` | `true` 启用直连 VPS 的 h3 节点（`Vless-xhttp-tls-UDP-direct`）与对应 Nginx `443 quic` 监听。v1.2.7 起默认关闭：Shadowrocket 下实测不通 | `false` |
-| `FEATURE_TUNING` | `false` 关闭全部调优（含 Xray 侧 bufferSize / sockopt） | `true` |
-| `FEATURE_SYSCTL` | **系统层**调优（内核参数 / 句柄 / systemd drop-in），默认关闭，节点验证无误后再开 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |
 
@@ -218,14 +211,14 @@ bash ~/install-xpadding.sh
 
 ```text
 xh                     交互菜单
-xh status              服务状态 / 监听端口 / 流控参数 / 版本
+xh status              服务状态 / 监听端口 / 调优状态 / 版本
 xh info                节点参数与客户端节点链接
 xh sub                 订阅链接与二维码
 xh log [xray|nginx]    跟踪日志
 xh start|stop|restart  服务控制
 xh update [--auto]     更新 Xray-core（自检失败自动回滚）
 xh tuning [show|on|off] 查看 / 开启 / 回滚系统层调优
-xh diag                UDP / HTTP3 节点连不上时的服务端侧自检
+xh diag                节点连不上时的服务端侧自检
 xh conflict            检测 /etc/sysctl.d/ 中会覆盖本项目参数的其它配置文件
 xh keepalive [on|off]  保活开关
 xh autoupdate [on|off] 内核自动更新开关
@@ -236,25 +229,41 @@ xh uninstall           卸载全部组件
 
 ## 流控调优
 
-完整参数表、探测降级逻辑与回滚方式见 [docs/10.流控调优.md](./docs/10.流控调优.md)。要点：
+> **v2.0.0 起，安装脚本不做任何参数优化。**
+>
+> 之前版本会在安装期改写内核参数、Nginx 吞吐旋钮、Xray `policy.bufferSize` / `sockopt`
+> 与客户端 `xmux`。这些改动无法在本项目内验证收益，却增加了失败面。现在：
+>
+> - 渲染出的 `xray-config.json` 与上游**逐字节一致**；
+> - 客户端 `xmux` 用回上游的 `maxConcurrency 16-32` / `hMaxReusableSecs 1800-3000`；
+> - `nginx.conf` 只保留两处**正确性**修复（见下），吞吐旋钮全部移除；
+> - 内核 / 句柄 / systemd 层的调优收进管理命令，需要时执行 `xh tuning on`，
+>   `xh tuning off` 一键回滚。安装期**不触碰宿主机全局状态**。
 
-- **内核**：BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tcp_mtu_probing=1`、`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲（QUIC/H3）等，全部写入独立文件 `/etc/sysctl.d/99-xray-xhttp.conf`，**不改动你原有的 `sysctl.conf`**。
-- **Xray policy**：`bufferSize` 按档位取 512/256/64 KB。**ARM64（Oracle Ampere A1）默认只有 4 KB**，amd64 是 512 KB —— 不显式设置会形成巨大差异，详见 [docs/12](./docs/12.机型调优-OracleARM.md)。
-- **句柄**：`limits.d` + systemd drop-in（不改官方 Xray unit，内核更新不会被覆盖），`nofile=1048576`。
-- **Xray**：入站与 freedom 出站注入 `sockopt`（`tcpFastOpen` / `tcpcongestion: bbr` / keepalive / `tcpUserTimeout`）。`tcpcongestion` **仅在探测到 BBR 时写入**，否则省略以免 Xray 启动失败。
-- **Nginx**：`listen backlog=65535`（默认仅 511，而全部 CDN 流量都经此进入，是全链路唯一的浅队列）、`access_log off`（XHTTP 高频 POST 且 URL 带上千字符 x_padding，写盘既费 IO 又把 padding 明文落盘）、`resolver` 按出网协议族关掉 IPv6/IPv4 解析（避免回落站每次先失败一次）、`worker_rlimit_nofile`、`worker_connections 65535`，以及把 XHTTP 的 `grpc_read_timeout` / `grpc_send_timeout` 从默认 60s 放大到 `1h`（空闲超过该超时后 Nginx 会关闭到 Xray 的上游连接，放大可减少重连；未做定量实测）。
-- **客户端**：xpadding 版自动带 `xmux`（`maxConcurrency 32-64`、`hMaxReusableSecs 3600-6000`）。
+### 保留在 `nginx.conf` 里的两处改动（属于正确性，不是调优）
 
-**v1.2.2 起系统层与 Xray 层分开**：
+- **`grpc_read_timeout` / `grpc_send_timeout` = `1h`**（默认 60s）。XHTTP 是长连接，
+  用默认值会让上下行每 60 秒被 Nginx 切断一次。这是修 bug，不是提速。
+- **`resolver ... ipv6=off` / `ipv4=off`**，按出网协议族关掉对应解析。纯 IPv4 机器上
+  回落站若有 AAAA 记录，Nginx 会先试 IPv6 再失败回退，`error.log` 里能看到
+  `Network is unreachable`，每次伪装探测都白白多一次超时。
 
-| 层 | 开关 | 默认 | 内容 |
-|---|---|---|---|
-| 系统层 | `FEATURE_SYSCTL` | **`false`** | `sysctl.d` 内核参数、`limits.d`、systemd drop-in —— 唯一改动宿主机全局状态、也是最容易在 OpenVZ / LXC 上出问题的一段 |
-| Xray 层 | `FEATURE_TUNING` | `true` | `policy.bufferSize`、入站/出站 `sockopt` —— 只写本项目的配置文件，无失败风险 |
+### `xh tuning on` 会做什么
 
-先把节点跑通、确认无误，再用 `xh tuning on`（会给出带 `FEATURE_SYSCTL=true` 的现成重装命令）打开系统层。ARM64 的 `bufferSize` 属于 Xray 层，默认就已生效，不会因为系统层关闭而丢失。
+BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tcp_mtu_probing=1`、
+`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲（QUIC/H3）、
+`limits.d` + systemd drop-in（`nofile=1048576`）。
 
-全部调优均为 **best-effort**：OpenVZ / LXC 等只读 sysctl 环境会逐项跳过并告警，不会中断部署。回滚只需 `xh tuning off`。
+全部写入独立文件 `/etc/sysctl.d/99-xray-xhttp.conf` 与
+`/etc/security/limits.d/99-xray-xhttp.conf`，**不改动你原有的 `sysctl.conf`**，
+也不改官方 Xray unit（用 drop-in，内核更新不会被覆盖）。
+
+全部调优均为 **best-effort**：OpenVZ / LXC 等只读 sysctl 环境会逐项跳过并告警，
+不会中断。回滚只需 `xh tuning off`。完整参数表见
+[docs/10.流控调优.md](./docs/10.流控调优.md)。
+
+> **未验证**：这些参数在你的机器上是否真的提升吞吐，本项目没有做过对照测量。
+> 默认不开启正是因为如此——先把节点跑通，有需要再自行开启并对比。
 
 ---
 

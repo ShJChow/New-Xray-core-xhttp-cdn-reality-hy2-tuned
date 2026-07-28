@@ -38,43 +38,10 @@ proxies:
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
-  # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3（transport/xhttp/client.go:159）
-  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
-    type: vless
-    server: ${CDN_DOMAIN}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    network: xhttp
-    alpn:
-      - h3
-    servername: ${CDN_DOMAIN}
-    client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
-      reuse-settings:
-        # v1.2.8 回滚到 32-64（与其余节点统一）。此前的 64-128 是一个未经验证的假设，
-        # 现已由 Xray 源码证伪：transport/internet/splithttp/mux.go:92-105 中 xmux 只
-        # 统计自己的 OpenUsage，对对端 QUIC 的 MAX_STREAMS 毫无感知，只会在**自己的**
-        # 计数达到 concurrency 时才另开连接。因此若 CF 边缘授予的流数低于 128，
-        # quic-go 会阻塞在建流上而 xmux 不会补开连接，实际并行度反而低于 32-64。
-        # CF 边缘的并发流上限通常在 100 附近，128 落在危险区。
-        max-concurrency: "32-64"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-
-  # 上下行分离：上行经 CDN（h2），下行直连 VPS 走 Reality。
-  # 上行腿 sni=CDN 域名 → 命中 nginx 的 ${CDN_DOMAIN} server 块（含 location）；
-  # 下行腿走 Reality → 由 Xray 直接在 TCP 443 处理，不经 nginx。
   - name: Vless-xhttp-split-cdnup-realitydown-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -94,9 +61,9 @@ proxies:
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
       download-settings:
         path: ${XHTTP_PATH}
         server: ${VPS_IP}
@@ -110,11 +77,35 @@ proxies:
           public-key: ${PUBLIC_KEY}
           short-id: ${SHORT_ID}
         reuse-settings:
-          max-concurrency: "32-64"
+          max-concurrency: "16-32"
           c-max-reuse-times: "0"
-          h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
 
-  # 上下行分离：上行直连 VPS 走 Reality，下行经 CDN（h2）。与上一条互为反向。
+  # 本项目唯一保留的自有节点：UDP + XHTTP + CDN。
+  # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3（transport/xhttp/client.go:159）。
+  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
+    type: vless
+    server: ${CDN_DOMAIN}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h3
+    servername: ${CDN_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
   - name: Vless-xhttp-split-realityup-cdndown-${HOSTNAME_TAG}
     type: vless
     server: ${VPS_IP}
@@ -137,9 +128,9 @@ proxies:
       path: ${XHTTP_PATH}
       mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
       download-settings:
         host: ${CDN_DOMAIN}
         path: ${XHTTP_PATH}
@@ -152,6 +143,6 @@ proxies:
         client-fingerprint: chrome${MIHOMO_ECH_DOWNLOAD_BLOCK}${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
         reality-opts: { public-key: "" }
         reuse-settings:
-          max-concurrency: "32-64"
+          max-concurrency: "16-32"
           c-max-reuse-times: "0"
-          h-max-reusable-secs: "3600-6000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}${MIHOMO_UDP_DIRECT_BLOCK}
+          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}

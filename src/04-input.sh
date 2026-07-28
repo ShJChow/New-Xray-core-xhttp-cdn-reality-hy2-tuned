@@ -179,9 +179,5 @@ if [[ "$FEATURE_CDN_ECH" == true ]]; then
     info "CDN ECH:          未开启"
   fi
 fi
-if [[ "$FEATURE_TUNING" == true ]]; then
-  info "流控调优:          开启（BBR + fq + 缓冲区 + 句柄，可用 ${MANAGE_CMD} tuning off 回滚）"
-else
-  info "流控调优:          关闭"
-fi
+info "流控调优:          安装期不做，按需执行 ${MANAGE_CMD} tuning on"
 echo ""

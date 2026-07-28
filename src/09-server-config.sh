@@ -2,7 +2,7 @@
 # 服务端配置生成
 # ==================================================
 
-info "[5/8] 生成配置文件"
+info "[4/7] 生成配置文件"
 
 if [[ "$FALLBACK_MODE" == "static" ]]; then
   [[ -f "${STATIC_SITE_DIR}/${REALITY_DOMAIN}/index.html" ]] || error "未找到 Reality 域名页面"
@@ -41,48 +41,6 @@ EOF
 EOF
   fi
 }
-
-# 直连 VPS 的 XHTTP-over-H3（节点 Vless-xhttp-tls-UDP-direct）需要 Nginx 监听
-# UDP 443 quic。http3 依赖支持 QUIC 的 TLS 库，标准 OpenSSL 未必满足，曾在部分
-# 环境下导致 nginx 启动失败。FEATURE_H3_DIRECT=false 可跳过该监听（对应客户端
-# 节点也不生成，见 src/11-client-config.sh）。add-quic.sh 扩展会接管并移除本段。
-#
-# v1.2.1：本段落挂在 **Reality 域名（灰云、DNS 直指 VPS）** 的 server 块内，
-# 直连节点的 sni/host 随之改为 Reality 域名。此前监听在 CDN 域名块、而
-# extensions/common-nodes/02 又把 location 插进 Reality 块，服务端与客户端
-# 分处两个 server_name，是 h3-direct 节点不通的结构性原因。
-# 由于 Reality 块原本没有 XHTTP 的 location，这里必须连 location 一起生成；
-# 且必须留在 BEGIN/END main-h3 标记内 —— add-quic.sh 会整段删除后自行插入，
-# 若 location 落在标记外会造成同一 server 块两个同名 location，nginx -t 失败。
-if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  NGINX_H3_DIRECT_BLOCK=$(cat <<EOF
-        # BEGIN main-h3
-        # 直连 VPS 的 XHTTP over HTTP/3（节点 Vless-xhttp-tls-UDP-direct）
-        # Xray 占用的是 TCP 443，这里占用 UDP 443，互不冲突。
-        # 需要防火墙放行 UDP 443；add-quic.sh 会接管并移除本段。
-        listen       443 quic reuseport;
-        http3        on;
-        add_header Alt-Svc 'h3=":443"; ma=86400' always;
-
-        location ${XHTTP_PATH} {
-            grpc_pass 127.0.0.1:8001;
-            # XHTTP 是长连接：Nginx 默认 60s 读写超时会直接切断上下行，必须放大
-            grpc_socket_keepalive on;
-            grpc_read_timeout     1h;
-            grpc_send_timeout     1h;
-            grpc_connect_timeout  15s;
-            grpc_set_header Host                  \$host;
-            grpc_set_header X-Real-IP             \$real_client_ip;
-            grpc_set_header Forwarded             \$proxy_add_forwarded;
-            grpc_set_header X-Forwarded-For       \$proxy_add_x_forwarded_for;
-            grpc_set_header X-Forwarded-Proto     \$scheme;
-        }
-        # END main-h3
-EOF
-)
-else
-  NGINX_H3_DIRECT_BLOCK=""
-fi
 
 info "写入 /etc/nginx/nginx.conf ..."
 cat > /etc/nginx/nginx.conf << NGINXEOF
@@ -132,15 +90,6 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
-  printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
-  printf 'FEATURE_TUNING=%q\n'    "$FEATURE_TUNING"
-  printf 'FEATURE_SYSCTL=%q\n'    "$FEATURE_SYSCTL"
-  printf 'TUNING_BBR_OK=%q\n'     "${TUNING_BBR_OK:-false}"
-  printf 'TUNE_TIER=%q\n'         "${TUNE_TIER:-none}"
-  printf 'XRAY_BUFFER_KB=%q\n'    "${XRAY_BUFFER_KB:-0}"
-  printf 'MEM_MB=%q\n'            "${MEM_MB:-0}"
-  printf 'CPU_CORES=%q\n'         "${CPU_CORES:-0}"
-  printf 'ARCH=%q\n'              "${ARCH:-unknown}"
   if [[ "$FEATURE_XPADDING" == true ]]; then
     printf 'XHTTP_PADDING_HEADER=%q\n' "$XHTTP_PADDING_HEADER"
     printf 'XHTTP_PADDING_KEY=%q\n'    "$XHTTP_PADDING_KEY"

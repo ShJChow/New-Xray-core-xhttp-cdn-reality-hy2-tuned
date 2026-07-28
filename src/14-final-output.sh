@@ -64,9 +64,7 @@ echo "  ${MANAGE_CMD} status         服务状态 / 监听端口 / 流控参数"
 echo "  ${MANAGE_CMD} info           节点参数与客户端链接"
 echo "  ${MANAGE_CMD} sub            订阅链接与二维码"
 echo "  ${MANAGE_CMD} update         更新 Xray-core（自检失败自动回滚）"
-echo "  ${MANAGE_CMD} tuning off     回滚本项目写入的全部流控调优"
+echo "  ${MANAGE_CMD} tuning on      开启系统层调优（BBR / 缓冲区 / 句柄，可 tuning off 回滚）"
 echo "  ${MANAGE_CMD} uninstall      卸载全部组件"
-if [[ "$FEATURE_TUNING" == true && "${TUNING_BBR_OK:-false}" != true ]]; then
-  echo ""
-  warn "本机内核未提供 BBR，拥塞算法保持系统默认；其余缓冲区与句柄调优已生效"
-fi
+echo ""
+info "安装期不做任何参数优化：xray-config.json 与上游一致，未改动宿主机内核参数"

@@ -101,9 +101,9 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"
+        h-max-reusable-secs: "1800-3000"
 
   # 经 CDN 的 h3 节点。servername/host 必须是 CDN 域名——TLS 握手按 SNI 选服务端
   # server 块，写成 Reality 域名会落到回落网站上，节点必然不通。
@@ -127,19 +127,13 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        # v1.2.8：曾用 64-128，现回滚为 32-64。核对 Xray v26.3.27 源码
-        # （transport/internet/splithttp/mux.go:92-105）确认：xmux 只统计自己的
-        # OpenUsage，对对端 QUIC 的 MAX_STREAMS 无感知，只有自己的计数满了才另开连接。
-        # 若 CF 边缘授予的流数低于 128，quic-go 会阻塞在建流上而 xmux 不补开连接，
-        # 并行度反而低于 32-64。CF 的并发流上限通常在 100 附近，故取 64 上限。
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"
+        h-max-reusable-secs: "1800-3000"
 
   # ------------------------------------------------------------------
   # 上下行分离节点（依赖 download-settings）
-  # 直连 VPS 的 h3 节点 Vless-xhttp-tls-UDP-direct 已在 v1.2.7 默认停用
-  # （Shadowrocket 下实测不通），改由下面两条上下行分离节点提供直连侧的速度。
+  # 直连侧的速度由下面两条上下行分离节点提供。
   # ------------------------------------------------------------------
 
   # 上行经 CDN（防封锁）/ 下行直连 VPS 走 Reality（拿速度）
@@ -163,9 +157,9 @@ proxies:
       mode: auto
       sc-min-posts-interval-ms: 30
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"
+        h-max-reusable-secs: "1800-3000"
       download-settings:
         path: YOUR_PATH
         server: YOUR_VPS_IP
@@ -179,9 +173,9 @@ proxies:
           public-key: YOUR_PUBILC_KEY
           short-id: YOUR_SHORT_ID
         reuse-settings:
-          max-concurrency: "32-64"
+          max-concurrency: "16-32"
           c-max-reuse-times: "0"
-          h-max-reusable-secs: "3600-6000"
+          h-max-reusable-secs: "1800-3000"
 
   # 上行直连 VPS 走 Reality / 下行经 CDN。与上一条互为反向。
   - name: Vless-xhttp-split-realityup-cdndown-YOUR_HOST
@@ -206,9 +200,9 @@ proxies:
       path: YOUR_PATH
       mode: auto
       reuse-settings:
-        max-concurrency: "32-64"
+        max-concurrency: "16-32"
         c-max-reuse-times: "0"
-        h-max-reusable-secs: "3600-6000"
+        h-max-reusable-secs: "1800-3000"
       download-settings:
         host: YOUR_CDN_DOMAIN
         path: YOUR_PATH
@@ -221,9 +215,9 @@ proxies:
         client-fingerprint: chrome
         reality-opts: { public-key: "" }
         reuse-settings:
-          max-concurrency: "32-64"
+          max-concurrency: "16-32"
           c-max-reuse-times: "0"
-          h-max-reusable-secs: "3600-6000"
+          h-max-reusable-secs: "1800-3000"
 
 proxy-groups:
   - name: 前置代理
