@@ -454,7 +454,7 @@ cmd_tuning() {
       # 脚本执行，这里给出带 FEATURE_SYSCTL=true 的现成命令，并复用已有参数重装。
       warn "开启系统层调优需重跑安装脚本（其中包含逐项能力探测），已为你拼好命令："
       echo ""
-      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow26/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh"
+      echo "  curl -fsSL https://github.com/${PROJECT_REPO:-ShJChow/xhttp-cdn-tuned}/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh"
       echo "  AUTO=1 FEATURE_SYSCTL=true \\"
       echo "  REALITY_DOMAIN=${REALITY_DOMAIN} CDN_DOMAIN=${CDN_DOMAIN} IP_CHOICE=${IP_CHOICE} \\"
       echo "  bash ~/install-xpadding.sh"

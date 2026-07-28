@@ -145,7 +145,7 @@ Debian / Ubuntu：
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 bash ~/install-xpadding.sh
 ```
 
@@ -154,7 +154,7 @@ Alpine Linux：
 ```sh
 doas -s
 apk add --no-cache bash curl
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 bash ~/install-xpadding.sh
 ```
 
@@ -163,7 +163,7 @@ bash ~/install-xpadding.sh
 > Mihomo 内核 ≥ `1.19.23` 即可。
 
 ```bash
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -175,7 +175,7 @@ bash ~/install.sh
 
 ```bash
 # Hysteria2 直连（同扩展的 XHTTP+TLS+H3 节点已知不通，见下）
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
 
 > 该扩展产出两条节点：`Hysteria2-direct` 与 `Vless-xhttp-tls-h3-direct`。
@@ -186,7 +186,7 @@ curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow26/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
 AUTO=1 \
 REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \
@@ -316,7 +316,7 @@ bash .github/scripts/build-quic.sh       # dist/add-quic.sh
 ## 致谢与许可
 
 本项目以 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config)（MIT）为基础衍生；
-管理命令、非交互部署、保活自愈与内核自动更新等产品形态借鉴自 [ShJChow26/argosbx](https://github.com/ShJChow26/argosbx)，相关代码为本项目自行实现。
+管理命令、非交互部署、保活自愈与内核自动更新等产品形态借鉴自 [yonggekkk/argosbx](https://github.com/yonggekkk/argosbx)（GPL-3.0），相关代码为本项目自行实现，未复制其源码。
 
 详见 [NOTICE.md](./NOTICE.md)。许可证：[MIT](./LICENSE)。
 

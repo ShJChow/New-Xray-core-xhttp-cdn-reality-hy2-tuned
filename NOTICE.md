@@ -26,7 +26,7 @@
 
 ## 借鉴但未复制代码的项目
 
-[ShJChow26/argosbx](https://github.com/ShJChow26/argosbx) 提供了本项目在**产品形态**上的参考：常驻管理命令、一键无交互部署、保活自愈、内核自动更新、内建卸载。
+[yonggekkk/argosbx](https://github.com/yonggekkk/argosbx)（GPL-3.0）提供了本项目在**产品形态**上的参考：常驻管理命令、一键无交互部署、保活自愈、内核自动更新、内建卸载。
 
 该项目采用 GPL 系许可证。本项目**未复制其任何源代码**，上述能力均为独立实现。
 
