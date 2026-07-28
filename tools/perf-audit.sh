@@ -6,6 +6,20 @@
 # 安全性：全程只读。没有任何 sysctl -w / 文件写入 / 服务重启 / 包安装。
 #         每一项都是 best-effort，命令缺失只打印 n/a，绝不中断（见 tasks/lessons.md L1）。
 #
+# ---- v2.0.0 起如何读这份报告 ----
+# 安装脚本**不再做任何参数优化**：装完之后本机的内核参数就是发行版默认值，
+# xray-config.json 与上游 Yulinanami/my-xhttp-cdn-config 逐字节一致（不含
+# policy.bufferSize / sockopt），nginx 也没有吞吐旋钮。
+# 因此在**未执行 `xh tuning on`** 的机器上，第 1 节读到的全是系统默认值，
+# 第 5 节读不到 policy / sockopt —— 这是**预期状态，不是缺陷**。
+# 报告开头的「调优状态」一行会明确告诉你当前处于哪一侧。
+#
+# 最有价值的用法是跑两次做对照：
+#   sudo bash perf-audit.sh > before.txt 2>&1
+#   xh tuning on
+#   sudo bash perf-audit.sh > after.txt 2>&1
+#   diff before.txt after.txt
+#
 # 用法：
 #   curl -fsSL <raw-url>/tools/perf-audit.sh -o perf-audit.sh
 #   sudo bash perf-audit.sh > perf-report.txt 2>&1
@@ -33,19 +47,34 @@ kv "uptime"   "$(uptime -p 2>/dev/null)"
 kv "MemTotal" "$(awk '/^MemTotal:/{printf "%d MB", $2/1024}' /proc/meminfo 2>/dev/null)"
 have systemd-detect-virt && kv "virt" "$(systemd-detect-virt 2>/dev/null)"
 
+sub "调优状态（判读全文的前提）"
+# v2.0.0 起 node.env 不再记录调优字段，唯一可信的判据是这两个文件是否存在——
+# 它们只由 `xh tuning on` 创建，`xh tuning off` 删除。
+TUNED=no
+[[ -f /etc/sysctl.d/99-xray-xhttp.conf ]] && TUNED=yes
+if [[ "$TUNED" == yes ]]; then
+  kv "xh tuning" "已开启 —— 第 1 节的内核参数含本项目写入的值"
+else
+  kv "xh tuning" "未开启 —— 第 1 节全是系统默认值，第 5 节无 policy/sockopt（预期状态）"
+fi
+
 sub "本项目写入的调优文件"
 for f in /etc/sysctl.d/99-xray-xhttp.conf /etc/security/limits.d/99-xray-xhttp.conf; do
   if [[ -f "$f" ]]; then
     echo "[存在] $f"
     sed 's/^/    /' "$f"
   else
-    echo "[不存在] $f"
+    echo "[不存在] $f   （未执行 xh tuning on 时本就不存在）"
   fi
 done
 
 sub "node.env（本项目安装状态）"
+# v2.0.0 移除了 TUNE_TIER / XRAY_BUFFER_KB / TUNING_BBR_OK / FEATURE_TUNING /
+# FEATURE_SYSCTL / FEATURE_H3_DIRECT 这些字段——安装期不再做调优，也就无从记录。
+# 继续 grep 它们只会在每台机器上打印空行，造成"调优丢了"的错觉。
 if [[ -f /etc/xhttp-cdn/node.env ]]; then
-  grep -E '^(FEATURE_|TUNE_TIER|XRAY_BUFFER_KB|MEM_MB|CPU_CORES|ARCH|TUNING_BBR_OK)' /etc/xhttp-cdn/node.env
+  grep -E '^(PROJECT_NAME|INSTALL_TIME|OS_ID|SERVICE_TYPE|IP_CHOICE|FALLBACK_MODE|FEATURE_XPADDING|FEATURE_CDN_ECH|CDN_ECH_ENABLED)=' \
+    /etc/xhttp-cdn/node.env
 else
   echo "n/a"
 fi
@@ -323,6 +352,9 @@ have xray && xray version 2>/dev/null | head -1 | sed 's/^/  /'
 XC=/usr/local/etc/xray/config.json
 if [[ -f "$XC" ]]; then
   sub "policy / sockopt / xhttp（脱敏：不输出 UUID / 密钥）"
+  # v2.0.0 起本项目不再注入 policy 与 sockopt，配置与上游逐字节一致。
+  # 所以 policy 为 {}、sockopt 为空是**正确结果**；若这里有值，说明是你自己
+  # 或旧版本安装留下的，需要对照 /usr/local/etc/xray/config.json 确认来源。
   if have python3; then
     python3 -c '
 import json,sys
@@ -381,3 +413,11 @@ echo "  [xray journal warning 及以上，最后 15 条]"
 sec "采集完成"
 echo "把本文件完整内容贴回对话即可。"
 echo "全程只读：未执行任何 sysctl -w、未写入任何文件、未重启任何服务。"
+echo ""
+if [[ "$TUNED" == yes ]]; then
+  echo "本机已执行过 xh tuning on：第 1 节的内核参数含本项目写入的值，"
+  echo "可与 xh tuning off 之后的一次采集做 diff 来量化差异。"
+else
+  echo "本机未执行 xh tuning on：第 1 节读到的是系统默认值，第 5 节无 policy/sockopt，"
+  echo "这是 v2.0.0 的预期状态。要评估调优收益，请按脚本头部的两次采集法做对照。"
+fi
