@@ -73,9 +73,13 @@ if [[ "$MODE" == rollback ]]; then
   rmdir /etc/systemd/system/nginx.service.d /etc/systemd/system/xray.service.d 2>/dev/null
   ok "已移除 sysctl / limits / systemd drop-in"
 
-  # nginx 配置回滚到最近一次备份
-  LAST_NGINX=$(ls -1t "${BACKUP_DIR}"/nginx.conf.* 2>/dev/null | head -1)
-  if [[ -n "$LAST_NGINX" ]]; then
+  # nginx 配置还原。**必须优先用 .orig（首次运行前的原始副本）**：
+  # 带时间戳的备份是每次 apply 都会重新生成的，第二次运行时抓到的已经是被本脚本
+  # 改过的文件，用它还原等于「回滚成调优后的状态」并报告成功——那会让整个
+  # 「可回滚」的设计前提落空。
+  LAST_NGINX="${BACKUP_DIR}/nginx.conf.orig"
+  [[ -f "$LAST_NGINX" ]] || LAST_NGINX=$(ls -1tr "${BACKUP_DIR}"/nginx.conf.* 2>/dev/null | head -1)
+  if [[ -n "$LAST_NGINX" && -f "$LAST_NGINX" ]]; then
     cp -a "$LAST_NGINX" /etc/nginx/nginx.conf && ok "nginx.conf 已还原自 ${LAST_NGINX}"
     if have nginx && nginx -t >/dev/null 2>&1; then
       systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1
@@ -163,7 +167,10 @@ note() { warn "$*"; ISSUES=$((ISSUES+1)); }
 [[ "$(sysget net.core.somaxconn)" -ge 4096 ]] 2>/dev/null || note "somaxconn 偏低，高并发下 accept 队列会溢出"
 [[ "$(ulimit -n)" -ge 65536 ]] 2>/dev/null || note "ulimit -n 偏低（$(ulimit -n)），nginx worker_connections 会被它压住"
 if [[ "$MEM_MB" -lt 2048 && "$SWAP_MB" -eq 0 ]]; then note "内存 ${MEM_MB} MB 且无 swap —— OOM 时内核会直接杀进程"; fi
-[[ "$KMAJ" -ge 4 ]] || note "内核 ${KERNEL} 过旧，BBR 需要 4.9+"
+# BBR 需要 4.9+，所以主版本 4 还要看次版本；5 以上一律满足
+if [[ "$KMAJ" -lt 4 ]] || { [[ "$KMAJ" -eq 4 ]] && [[ "${KMIN:-0}" -lt 9 ]]; }; then
+  note "内核 ${KERNEL} 过旧，BBR 需要 4.9+"
+fi
 [[ $ISSUES -eq 0 ]] && ok "未发现明显问题"
 
 # ---- 冲突检测：与 xh tuning 二选一，否则回滚会失真 ----
@@ -186,7 +193,11 @@ if ! $DRY_RUN; then
   mkdir -p "$BACKUP_DIR"
   sysctl -a > "${BACKUP_DIR}/sysctl-all.${STAMP}.txt" 2>/dev/null || warn "sysctl 快照导出失败（不影响后续）"
   for f in /etc/sysctl.conf /etc/security/limits.conf /etc/nginx/nginx.conf /etc/fstab; do
-    [[ -f "$f" ]] && cp -a "$f" "${BACKUP_DIR}/$(basename "$f").${STAMP}"
+    [[ -f "$f" ]] || continue
+    cp -a "$f" "${BACKUP_DIR}/$(basename "$f").${STAMP}"
+    # .orig 只在首次创建，之后永不覆盖 —— 这是回滚唯一可信的基准。
+    # 带时间戳的那份只是历史留档，重复运行时它已经是被改过的内容。
+    [[ -f "${BACKUP_DIR}/$(basename "$f").orig" ]] || cp -a "$f" "${BACKUP_DIR}/$(basename "$f").orig"
   done
   ok "备份 → ${BACKUP_DIR}（时间戳 ${STAMP}）"
 else
@@ -206,7 +217,19 @@ try() {  # try KEY VALUE —— 试写，成功才记入落盘清单
 
 # ---- BBR：先探测再写。没有 bbr 就保持系统默认，不硬塞 ----
 AVAIL=$(sysget net.ipv4.tcp_available_congestion_control)
-if [[ "$AVAIL" != *bbr* ]]; then modprobe tcp_bbr >/dev/null 2>&1; AVAIL=$(sysget net.ipv4.tcp_available_congestion_control); fi
+if [[ "$AVAIL" != *bbr* ]]; then
+  if $DRY_RUN; then
+    # 加载内核模块是状态变更，--dry-run 承诺「不写任何东西」，这里不能 modprobe。
+    # 改为只读判断模块是否可用。
+    if [[ -d /lib/modules/$(uname -r) ]] && modinfo tcp_bbr >/dev/null 2>&1; then
+      info "tcp_bbr 模块存在但未加载；实际运行时会 modprobe 后启用"
+      AVAIL="${AVAIL} bbr"
+    fi
+  else
+    modprobe tcp_bbr >/dev/null 2>&1
+    AVAIL=$(sysget net.ipv4.tcp_available_congestion_control)
+  fi
+fi
 if [[ "$AVAIL" == *bbr* ]]; then
   try net.core.default_qdisc fq                 # BBR 依赖的公平队列，缺它 BBR 退化
   try net.ipv4.tcp_congestion_control bbr       # 基于 BDP 估计，跨境高丢包链路收益最大
@@ -269,7 +292,9 @@ try fs.nr_open 1048576
 # 调它们没有可作用的负载，属于「无意义参数」，故意不写。
 if [[ "$MEM_MB" -ge 4096 ]]; then try vm.swappiness 10; else try vm.swappiness 30; fi
 try vm.vfs_cache_pressure 50                    # 降低 dentry/inode 回收倾向，连接数多时有实际收益
-try vm.overcommit_memory 1                      # Xray/nginx 大量小分配，严格 overcommit 反而误杀
+# 故意不设 vm.overcommit_memory：Linux 默认是 0（启发式），不是 2（严格）。
+# 设成 1 是「总是允许」，那是 Redis fork 快照场景的建议，不是转发型负载的。
+# 从 0 改到 1 并没有解除什么限制，只是关掉了启发式拒绝——收益无从证实。
 
 # ---- 落盘 ----
 if $DRY_RUN; then
