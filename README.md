@@ -38,7 +38,7 @@
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，**唯一支持 Splice，速度最快**；UDP 被封时的兜底 |
+| 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，`downloadSettings`，alpn h2 |
 | 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，**alpn h3** |
