@@ -1,90 +1,92 @@
-# v2.0.0 · 回归上游基线，只保留 UDP+XHTTP+CDN 节点
+# v2.0.1 · 外部优化建议的分类落实
 
 ## Goal
 
-1. 节点集 = 上游 `Yulinanami/my-xhttp-cdn-config` 的 5 条，唯一保留的本项目改动是
-   把上游那条「纯 CDN，alpn=h2」换成 **UDP + XHTTP + CDN（alpn=h3）**。
-2. 删除直连 h3 节点（`Vless-xhttp-tls-UDP-direct`）及其全部支撑代码。
-3. 安装期**不做任何参数优化**：渲染出的 `xray-config.json` 与上游逐字节一致；
-   `nginx.conf` 只保留「正确性」改动，吞吐旋钮全部回退。
-4. 全部系统层优化收进 `xh tuning on/off`，安装流程不再触碰宿主机全局状态。
-5. 节点名保持英文。
-6. 简化安装步骤：8 步 → 7 步（移除「网络与流控调优」）。
+把一份外部审查提出的 7 条优化建议，按 L25 的判据（**不做会坏** vs **不做只是慢一点**）
+逐条裁决，只落实经得起核对的部分，并在提交说明里写清每条的取舍理由。
 
 ## Current State
 
-- `src/06-net-tuning.sh` 在安装期写 sysctl / limits / systemd drop-in，并向
-  `xray-config.json` 注入 `policy.bufferSize` 与 `sockopt`。
-- `FEATURE_TUNING`（默认 true）、`FEATURE_SYSCTL`（默认 false）、
-  `FEATURE_H3_DIRECT`（默认 false）三个开关交织。
-- `templates/mihomo-proxies.yaml.tmpl` 与 `src/11-client-config.sh` 里的 xmux
-  被硬编码为 `32-64` / `3600-6000`，h3 节点 `64-128`——**不受任何开关控制**。
-- `templates/nginx.conf.tmpl` 混合了吞吐旋钮与正确性修复。
+v2.0.0（03a26b7 + 5dfc54a）刚确立了两条基线，本次不得无声推翻：
+
+1. **安装期不做任何参数优化**——`src/06-tuning-lib.sh` 已不是安装模块，
+   内联进 `xh`，只在用户显式 `xh tuning on` 时执行。
+2. `templates/nginx.conf.tmpl` 已按作用机制回退过一次：
+   `worker_connections 65535` / `use epoll` / `multi_accept` / `worker_rlimit_nofile`
+   正是 03a26b7 明确回退掉的那批。
+
+于是建议 #1–#3 落在 **opt-in 的调优模块内**（不触碰基线 1，改的只是用户显式开启后的取值），
+而 #4/#5/#7 落在**安装期无条件渲染**的 nginx 模板里（与基线 2 正面冲突，需单独判定）。
 
 ## Assumptions
 
-- A1「只保留 udp+xhttp+cdn 那个节点」= 只保留**这一条本项目特有的节点**，
-  其余回归上游；不是「整个订阅只有一条节点」（否则「其它的节点」无所指）。
-- A2「参数优化都不要做」指安装期默认不做；`xh tuning` 手动开启仍保留。
-- A3 nginx 的 `grpc_read_timeout/send_timeout/socket_keepalive` 与
-  `resolver ipv6=off/ipv4=off` 属于**正确性**而非调优（前者对应 L11 记录的
-  60 秒断流，后者对应纯 v4 机器 `Network is unreachable`），不回退。
-- A4 `user root` + `STATIC_SITE_DIR=${USER_HOME}/dist` 是成对的选择，一起保留
-  （上游 `user nobody` 读不了 `/root/dist`）。
+- A1 `dist/` 未被 git 追踪（`.gitignore` 含 `dist/`），产物由 CI 的
+  `.github/scripts/build-install.sh` 构建；本地重建仅用于验证，不入库。
+- A2 `xh tuning off` 是整文件 `rm -f "$SYSCTL_CONF"`（13-manage-cli.sh:422），
+  新增 sysctl key 无需另行登记回滚项。
+- A3 `LimitNOFILE=1048576` 只在 `xh tuning on` 时写入 systemd drop-in
+  （06-tuning-lib.sh:159）；**默认安装的 nginx 走 unit 默认句柄上限**。
+- A4 nginx `gzip` 是 HTTP 输出过滤器，默认 `gzip_types` 仅 `text/html`；
+  XHTTP 走 `grpc_pass`，响应 `content-type: application/grpc`，不进压缩路径。
+- A5 `user root` 与 `STATIC_SITE_DIR=${USER_HOME}/dist` 是成对选择（见 v2.0.0 的 A4），
+  上游 `user nobody` 读不了 `/root/dist`。
+
+## 逐条裁决
+
+| # | 建议 | 裁决 | 理由 |
+|---|------|------|------|
+| 1 | `tcp_notsent_lowat` 131072 → 16384 | **采纳，改写理由** | 取值可取（16KB 是通行值），但原文机制说反了：调小是**减少**本地套接字排队、降低 HoL 延迟，而非"吞吐 +20~40%"。按能证实的写（L23）。 |
+| 2 | `tcp_rmem/wmem` 中间值 → 262144 | **采纳，两项都改** | 原文只点了 rmem 的 87380；`tcp_wmem` 中间值 65536 同样偏小。措辞限定为"**初始**默认值，autotuning 会向 max 增长"，收益在连接启动与短流。 |
+| 3 | 新增 `tcp_adv_win_scale = -2` | **采纳但降级表述** | `try_sysctl` 天然 best-effort；新内核语义已重排且 `tcp_moderate_rcvbuf` 覆盖多数场景，注释不断言收益。 |
+| 4 | `worker_connections` 1024 → 65535 | **采纳（推翻 v2.0.0 该项）** | 能指名故障现象——并发 XHTTP 长连接触顶 → 502，按 L25 属正确性而非提速。**但"一行改动"是错的**：须同时加 `worker_rlimit_nofile`，否则 nginx 报 `worker_connections exceed open file resource limit`。 |
+| 5 | 限制 `gzip_types` / `gzip_proxied off` | **驳回** | 前提不成立，见 A4：代理密文根本没进压缩路径。 |
+| 6 | 回落站 `proxy_pass` 缺超时 | **采纳** | 慢响应伪装源会按默认 60s 占住 worker，是可指名的故障现象。 |
+| 7 | nginx 降权非 root | **驳回（非本次推迟）** | 见 A5，与静态站目录成对；改动须连带 `/etc/ssl/private/*`、日志、pid 权限，本机无法验证，且 L14 已记录 `nginx -t` 抓不到启动期失败。 |
 
 ## Change Scope
 
 | 文件 | 改动 |
 |---|---|
-| `src/01-env.sh` | 删 `FEATURE_TUNING` / `FEATURE_SYSCTL` / `FEATURE_H3_DIRECT` |
-| `src/04-input.sh` | 删调优摘要行 |
-| `src/05,07,08,09,10,11,13-*.sh` | 步骤号 `[n/8]` → `[n/7]` |
-| `src/06-net-tuning.sh` | 重写为**纯函数库**，不再在安装期执行，由 `xh` 内联 |
-| `src/09-server-config.sh` | 删 `NGINX_H3_DIRECT_BLOCK`；`node.env` 删调优字段 |
-| `src/10-service-check.sh` | 删 h3 自动降级分支 |
-| `src/11-client-config.sh` | 删直连 h3 节点；xmux 回退 `16-32`/`1800-3000`；删 `XMUX_H3_ENC` |
-| `src/13-manage-cli.sh` | `xh tuning on` 真正执行调优；删 h3 相关诊断 |
-| `templates/xray-config.json.tmpl` | 回退到与上游逐字节一致 |
-| `templates/nginx.conf.tmpl` | 回退吞吐旋钮，保留 A3 两项 |
-| `templates/mihomo-proxies.yaml.tmpl` | xmux 回退；删 `MIHOMO_UDP_DIRECT_BLOCK` |
-| `.github/scripts/build-install.sh` | `MODULES` 移除 `06-net-tuning.sh` |
-| `README.md` / `docs/` | 同步 |
+| `src/06-tuning-lib.sh` | L83/84 rmem/wmem 中间值；L109 notsent_lowat；新增 adv_win_scale |
+| `templates/nginx.conf.tmpl` | 新增 `worker_rlimit_nofile`；events 块 `worker_connections`（不加 `use epoll` / `multi_accept`，理由见 Review） |
+| `src/09-server-config.sh` | `nginx_fallback_config()` 补 proxy 超时三项 |
+| `tasks/lessons.md` | 新增 L27 / L28 |
 
 ## Verification
 
-- V1 `bash -n` 全部 `dist/*.sh` 与 `src/*.sh`。
-- V2 离线渲染 `xray-config.json`：与上游同 env 渲染结果 **`diff` 为空**。
-- V3 离线渲染 `client-config.txt`：5 行；第 1/2/4/5 行与上游对应行仅节点名不同；
-  第 3 行与上游「纯 CDN」行仅 `alpn=h2`→`h3` 与节点名不同。
-- V4 xmux 交叉断言（L19）：URI 与 mihomo YAML 中所有 `max-concurrency` 均为
-  `16-32`、`h-max-reusable-secs` 均为 `1800-3000`，`64-128` / `32-64` / `3600-6000`
-  出现次数为 0。
-- V5 两个 profile（normal / xpadding）各跑一遍 V2–V4（L18）。
-- V6 `grep -c 'UDP-direct' dist/` == 0；`NODE_RE_*` 引用的节点名全部仍存在（L10）。
-- V7 未验证项（L8）：证书签发、`xray -test`、nginx 实际启动、链路连通性——本机无法验证。
+- V1 `grep '\$' templates/nginx.conf.tmpl | grep -v '\\\$'` —— L2 未转义变量复查
+- V2 本地跑 `.github/scripts/build-install.sh`，`bash -n` 覆盖 `dist/ + src/ + extensions/`
+- V3 渲染 `nginx.conf` 改动前后 diff，断言变更集恰好等于声明范围
+- V4 断言 `xray-config.json` 渲染结果本次**未被触碰**
+- V5 未验证项（L8）：真实内核上的 sysctl 逐项写入结果、nginx 实际启动、链路吞吐
 
 ---
 
 ## Review
 
-全部 Change Scope 项已完成。验证结果：
+全部 Change Scope 项已完成。7 条建议中采纳 4 条（#1/#2/#3/#6）、
+部分采纳 1 条（#4，去掉其中的 epoll/multi_accept）、驳回 2 条（#5/#7）。
 
 | 项 | 结果 |
 |---|---|
-| V1 `bash -n` dist/ + src/ + extensions/ | ✅ 全部通过 |
-| V2 `xray-config.json` 与上游逐字节对比 | ✅ normal / xpadding **均 IDENTICAL** |
-| V3 `client-config.txt` 5 条节点 | ✅ 节点 1/2/3/5 正文与上游**完全一致**，仅节点名不同；节点 4 唯一差异是 `alpn=h2→h3` |
-| V4 xmux 交叉断言（URI + mihomo YAML） | ✅ `64-128` / `32-64` / `3600-6000` 出现 0 次；6 处 `16-32`、6 处 `1800-3000` |
-| V5 两个 profile 各跑一遍 | ✅ 均通过 |
-| V6 `UDP-direct` / `FEATURE_*` 残留 | ✅ dist 中均为 0；5 个 `NODE_RE_*` 目标节点名全部仍存在 |
-| nginx.conf 与上游差异 | ✅ 仅 3 处：`user root`（配 `$USER_HOME/dist` 静态目录）、`resolver` 协议族、`grpc_*` 超时 |
-| xh 内联调优 | ✅ `bash -n` 通过，`apply_system_tuning` 已内联进 heredoc（引号 heredoc，`$` 不被展开） |
+| V1 L2 未转义变量复查 | ✅ 剩余 `$` 全是有意的 `${VAR}` shell 插值；新增行不含任何 `$` |
+| V2 build + `bash -n`（dist/ + src/ + extensions/） | ✅ 全部通过 |
+| V3 渲染 nginx.conf 前后 diff | ✅ 变更集**恰好等于**声明范围：worker_rlimit_nofile / worker_connections / 两处 proxy 超时；`$host` 等 nginx 变量渲染正常 |
+| V4 xray-config.json 与客户端节点 | ✅ 零改动，与上游仍逐字节一致 |
+| 调优值内联进 `xh` | ✅ dist/install.sh:2580/2581/2585/2613 |
+| 旧值残留（131072 / 87380 / worker_connections 1024） | ✅ 0 |
 
-### V7 未验证项（本机无法验证，L8）
+### #4 的取舍
 
-- 证书签发（acme.sh）、`xray -test`、nginx 实际启动、服务保活
-- `xh tuning on` 在真实 Linux 上的逐项 sysctl 写入结果
-- 「所有版本都很卡」是否因本次回退而缓解——**这是一个假设，不是结论**。
-  本项目安装完即退出，链路上跑的是 Xray-core / nginx / 内核，本次改动的作用路径
-  是「安装期写进去的那些数值」。若回退后仍卡，说明根因在链路侧（晚高峰拥塞、
-  CDN 线路），与本仓库无关，可用同机同时刻的 CDN vs 直连节点对比来定位。
+采纳 `worker_connections 65535`（能指名 502，L25 判为正确性），
+**同时**新增 `worker_rlimit_nofile 65535`——原建议称一行改动是错的，见 L28。
+不采纳 `use epoll`（Linux 上 nginx 本就自动选择该事件模型，写出来是冗余）与
+`multi_accept on`（纯吞吐旋钮，指不出故障现象，按 L25 应留在回退侧）。
+
+### V5 未验证项（本机无法执行，L8）
+
+- `xh tuning on` 在真实内核上的逐项 sysctl 写入结果（`tcp_adv_win_scale -2` 在
+  新内核上可能被 SKIPPED，这是预期行为）
+- nginx 实际启动（L14：`nginx -t` 抓不到启动期失败）
+- 上述参数对实际吞吐/延迟的影响——**未测量**。#1/#2/#3 属于 opt-in 路径下的
+  取值调整，收益是推断而非实测。

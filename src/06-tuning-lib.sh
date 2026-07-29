@@ -80,8 +80,14 @@ apply_system_tuning() {
   try_sysctl net.core.wmem_max "$SOCK_MEM_MAX"
   try_sysctl net.core.rmem_default 1048576
   try_sysctl net.core.wmem_default 1048576
-  try_sysctl net.ipv4.tcp_rmem "4096 87380 ${TCP_MEM_MAX}"
-  try_sysctl net.ipv4.tcp_wmem "4096 65536 ${TCP_MEM_MAX}"
+  # 中间值是**初始**默认值，autotuning 会在 min~max 之间增长；调大它影响的是
+  # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
+  try_sysctl net.ipv4.tcp_rmem "4096 262144 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_wmem "4096 262144 ${TCP_MEM_MAX}"
+  # 接收缓冲中留给协议开销的比例。负值表示按 1/2^|n| 计，-2 会让通告窗口更接近
+  # rmem 实际大小。新内核语义几经调整且 tcp_moderate_rcvbuf 已覆盖多数场景，
+  # 这里不断言收益；try_sysctl 在不支持的内核上只会记进 SKIPPED。
+  try_sysctl net.ipv4.tcp_adv_win_scale -2
   # 按物理内存的 6% / 8% / 12% 推算（单位是页，已按 PAGESIZE 换算）
   try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
   # QUIC / HTTP3：本项目保留的 UDP+XHTTP+CDN 节点与 Hysteria2 扩展都会用到
@@ -106,7 +112,10 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_fastopen 3
   try_sysctl net.ipv4.tcp_mtu_probing 1
   try_sysctl net.ipv4.tcp_slow_start_after_idle 0
-  try_sysctl net.ipv4.tcp_notsent_lowat 131072
+  # 套接字里允许积压的未发送字节数。调小 = Xray 更早被唤醒补数据，本地排队更少，
+  # 降低队头阻塞与写入延迟（16KB 是通行取值）。这是**延迟**收益，不是吞吐收益：
+  # 拥塞窗口由 BBR 与 rmem/wmem 决定，与本项无关。
+  try_sysctl net.ipv4.tcp_notsent_lowat 16384
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
   try_sysctl net.ipv4.tcp_fin_timeout 15

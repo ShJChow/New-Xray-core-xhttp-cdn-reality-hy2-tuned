@@ -29,6 +29,12 @@ EOF
   else
     cat <<EOF
             proxy_pass $2;
+            # 伪装源是第三方站点，慢响应/黑洞时按默认 60s 占住 worker，并发探测下
+            # 会把连接池拖满，连带影响正常的 XHTTP 流量。回落站只用于应付主动探测，
+            # 不需要长超时，这里收紧到秒级。
+            proxy_connect_timeout 5s;
+            proxy_send_timeout    10s;
+            proxy_read_timeout    10s;
             proxy_ssl_server_name on;
             proxy_ssl_name $3;
             proxy_redirect http://$3/ https://\$host/;
