@@ -156,24 +156,6 @@ xh uninstall           卸载全部组件
 
 ## 流控调优
 
-> **v2.0.0 起，安装脚本不做任何参数优化。**
->
-> 之前版本会在安装期改写内核参数、Nginx 吞吐旋钮、Xray `policy.bufferSize` / `sockopt`
-> 与客户端 `xmux`。这些改动无法在本项目内验证收益，却增加了失败面。现在：
->
-> - 渲染出的 `xray-config.json` 与上游**逐字节一致**；
-> - 客户端 `xmux` 用回上游的 `maxConcurrency 16-32` / `hMaxReusableSecs 1800-3000`；
-> - `nginx.conf` 只保留两处**正确性**修复（见下），吞吐旋钮全部移除；
-> - 内核 / 句柄 / systemd 层的调优收进管理命令，需要时执行 `xh tuning on`，
->   `xh tuning off` 一键回滚。安装期**不触碰宿主机全局状态**。
-
-### 保留在 `nginx.conf` 里的两处改动（属于正确性，不是调优）
-
-- **`grpc_read_timeout` / `grpc_send_timeout` = `1h`**（默认 60s）。XHTTP 是长连接，
-  用默认值会让上下行每 60 秒被 Nginx 切断一次。这是修 bug，不是提速。
-- **`resolver ... ipv6=off` / `ipv4=off`**，按出网协议族关掉对应解析。纯 IPv4 机器上
-  回落站若有 AAAA 记录，Nginx 会先试 IPv6 再失败回退，`error.log` 里能看到
-  `Network is unreachable`，每次伪装探测都白白多一次超时。
 
 ### `xh tuning on` 会做什么
 
