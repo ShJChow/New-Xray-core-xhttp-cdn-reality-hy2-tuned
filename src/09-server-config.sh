@@ -30,11 +30,14 @@ EOF
     cat <<EOF
             proxy_pass $2;
             # 伪装源是第三方站点，慢响应/黑洞时按默认 60s 占住 worker，并发探测下
-            # 会把连接池拖满，连带影响正常的 XHTTP 流量。回落站只用于应付主动探测，
-            # 不需要长超时，这里收紧到秒级。
-            proxy_connect_timeout 5s;
-            proxy_send_timeout    10s;
-            proxy_read_timeout    10s;
+            # 会把连接池拖满，连带影响正常的 XHTTP 流量。
+            # 但不能收得太紧：回落站的用途就是让主动探测看到真实站点内容，超时提前
+            # 返回 504 而真站返回正文，本身就是一个指纹差异——而拖满连接池需要有人
+            # 刻意冲刷回落站。两害相权，这里只砍掉「明显异常」的那一段：
+            # connect 10s 覆盖国际链路握手，读写 30s 兜住慢站，仍比默认 60s 减半。
+            proxy_connect_timeout 10s;
+            proxy_send_timeout    30s;
+            proxy_read_timeout    30s;
             proxy_ssl_server_name on;
             proxy_ssl_name $3;
             proxy_redirect http://$3/ https://\$host/;

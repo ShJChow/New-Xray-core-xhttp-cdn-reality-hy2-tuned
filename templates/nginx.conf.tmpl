@@ -4,7 +4,9 @@ worker_processes auto;
 # nginx 会报 "worker_connections exceed open file resource limit"，实际上限
 # 仍是 systemd unit 的默认值。安装期不写 systemd drop-in（那是 xh tuning on
 # 的事），所以这一行必须在配置里自己声明。
-worker_rlimit_nofile 65535;
+# 取 worker_connections 的 2 倍：本项目所有连接都是代理（grpc_pass / proxy_pass），
+# 每条连接同时占用「客户端 + 上游」两个描述符，1:1 会在半数连接处触顶。
+worker_rlimit_nofile 131072;
 
 error_log /usr/local/nginx/logs/error.log notice;
 pid /run/nginx.pid;
@@ -13,6 +15,8 @@ events {
     # XHTTP 是持久长连接，每条客户端连接在 worker 里长期占位；1024 是 nginx 默认
     # 值，并发稍高就触顶，表现为客户端 502。这是可指名的故障现象，按 tasks/
     # lessons.md L25 归为正确性修复，而非吞吐旋钮。
+    # 代价：连接槽按此值预分配，约 15~20 MB/worker，worker_processes auto 下
+    # 乘以核心数。小内存 VPS（< 1 GB）若觉得占用偏高，可自行调小到 8192。
     worker_connections 65535;
 }
 
