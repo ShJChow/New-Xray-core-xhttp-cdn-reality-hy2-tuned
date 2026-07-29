@@ -338,6 +338,27 @@ done
 kv "listen 指令" "$(grep -RhE '^[[:space:]]*listen' /etc/nginx/nginx.conf 2>/dev/null | sed 's/^[[:space:]]*//' | tr '\n' '|')"
 kv "http2 / http3" "$(grep -RhE '^[[:space:]]*http[23][[:space:]]' /etc/nginx/nginx.conf 2>/dev/null | sed 's/^[[:space:]]*//' | tr '\n' '|')"
 
+sub "!! 文件描述符上限（worker_connections 的实际天花板）"
+# worker_rlimit_nofile 只是 nginx 自己的请求值，真正生效的上限由 systemd unit /
+# limits.d 决定。二者取小。若 nofile < worker_connections*2，配置里写多大都没用，
+# error.log 会出现 "worker_connections exceed open file resource limit"。
+# 本项目所有连接都是代理（grpc_pass / proxy_pass），每条占「客户端+上游」两个 fd。
+for unit in nginx xray; do
+  kv "systemd ${unit} LimitNOFILE" \
+     "$(systemctl show "$unit" -p LimitNOFILE --value 2>/dev/null)"
+done
+for p in nginx xray; do
+  pid=$(pgrep -o -x "$p" 2>/dev/null)
+  [[ -n "$pid" ]] && kv "运行中 ${p}(pid ${pid}) Max open files" \
+     "$(awk '/^Max open files/{print $4" (soft) / "$5" (hard)"}' "/proc/${pid}/limits" 2>/dev/null)"
+done
+kv "当前 shell ulimit -n" "$(ulimit -n 2>/dev/null)"
+echo "  /etc/security/limits.d/ 内容:"
+grep -rhE '^[^#]*nofile' /etc/security/limits.d/ /etc/security/limits.conf 2>/dev/null |
+  sed 's/^/    /' || echo "    <无 nofile 配置>"
+sy fs.file-max
+sy fs.nr_open
+
 sub "!! worker 进程与实际所在 CPU（psr 列）"
 ps -eo pid,psr,pcpu,pmem,nlwp,comm 2>/dev/null | awk 'NR==1 || /nginx|xray/' | sed 's/^/  /'
 echo "  若 nginx worker 的 psr 全相同或集中在少数几个，说明未做 worker_cpu_affinity"
