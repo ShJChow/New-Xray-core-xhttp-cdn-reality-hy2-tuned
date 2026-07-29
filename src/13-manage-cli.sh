@@ -530,8 +530,10 @@ cmd_uninstall() {
 
   local home="${USER_HOME:-/root}"
   rm -f "${home}"/client-config.txt "${home}"/client-config-mihomo-*.yaml \
+        "${home}"/client-config-v2rayn-tun.txt \
         "${home}"/subscription-links.txt "${home}"/subscription-*.png
   rm -f /root/client-config.txt /root/client-config-mihomo-*.yaml \
+        /root/client-config-v2rayn-tun.txt \
         /root/subscription-links.txt /root/subscription-*.png
   rm -rf "$STATE_DIR"
 

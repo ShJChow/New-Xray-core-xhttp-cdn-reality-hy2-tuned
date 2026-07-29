@@ -98,6 +98,13 @@ cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
 CLIENTEOF
 
+# v2rayN TUN 绕行清单。**不能并进 client-config.txt**——那份文件会被整体
+# base64 成 v2rayN 订阅（12-subscription.sh:18），混入非节点行会污染订阅。
+V2RAYN_TUN_FILE="$USER_HOME/client-config-v2rayn-tun.txt"
+cat > "$V2RAYN_TUN_FILE" << V2RAYNTUNEOF
+@@include templates/v2rayn-tun.txt.tmpl
+V2RAYNTUNEOF
+
 MIHOMO_FULL_FILE="$USER_HOME/client-config-mihomo-full.yaml"
 MIHOMO_NODES_FILE="$USER_HOME/client-config-mihomo-nodes.yaml"
 
@@ -112,5 +119,6 @@ MIHOMOEOF
 
 chown "$(stat -c '%u:%g' "$USER_HOME")" \
   "$USER_HOME/client-config.txt" \
+  "$V2RAYN_TUN_FILE" \
   "$MIHOMO_FULL_FILE" \
   "$MIHOMO_NODES_FILE"
