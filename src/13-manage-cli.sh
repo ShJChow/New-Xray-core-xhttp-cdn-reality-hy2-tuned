@@ -497,19 +497,42 @@ cmd_uninstall() {
   read -rp "确认卸载？输入 yes 继续: " reply
   [[ "$reply" == "yes" ]] || { info "已取消"; return 0; }
 
+  # 停服务后**必须复核进程真的死了**再删文件。
+  # 原先是 `systemctl stop ... || true` 一笔带过：stop 失败被吞掉，随后单元文件与
+  # /usr/local/bin/xray 照删不误，留下「进程还活着、unit 和二进制都没了」的中间态
+  # （Linux 上删掉正在运行的二进制，进程照常从内存继续跑）。
+  # 下次装官方 Xray-install 时，它检测到 pidof xray 非空就去 systemctl stop xray.service，
+  # 而单元已被删 → "Unit xray.service not loaded" → 脚本 exit 1，安装直接卡死。
+  # 这个中间态用户自己看不出问题在哪，只能看到官方脚本报错。
+  ensure_stopped() {  # ensure_stopped 进程名... —— 温和停不掉就强杀，并等它真的消失
+    local p
+    for p in "$@"; do
+      pgrep -x "$p" >/dev/null 2>&1 || continue
+      warn "${p} 在停止服务后仍在运行，强制结束"
+      pkill -x "$p" >/dev/null 2>&1 || true
+      sleep 1
+      pgrep -x "$p" >/dev/null 2>&1 && { pkill -9 -x "$p" >/dev/null 2>&1 || true; sleep 1; }
+      pgrep -x "$p" >/dev/null 2>&1 && warn "${p} 仍无法结束，请手动检查 pgrep -a ${p}"
+    done
+  }
+
   if [[ "$SERVICE_TYPE" == "openrc" ]]; then
     for s in xray nginx hysteria-server; do
       rc-service "$s" stop >/dev/null 2>&1 || true
       rc-update del "$s" default >/dev/null 2>&1 || true
       rm -f "/etc/init.d/$s"
     done
+    ensure_stopped xray nginx hysteria
   else
     systemctl stop xray nginx hysteria-server >/dev/null 2>&1 || true
     systemctl disable xray nginx hysteria-server >/dev/null 2>&1 || true
+    ensure_stopped xray nginx hysteria
     rm -f /etc/systemd/system/xray.service \
+          /etc/systemd/system/xray@.service \
           /etc/systemd/system/nginx.service \
           /etc/systemd/system/hysteria-server.service
-    rm -rf /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d
+    rm -rf /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d \
+           /etc/systemd/system/nginx.service.d
   fi
 
   rm -f  /usr/local/bin/xray /usr/local/bin/xray.bak-*
@@ -537,7 +560,16 @@ cmd_uninstall() {
         /root/subscription-links.txt /root/subscription-*.png
   rm -rf "$STATE_DIR"
 
-  [[ "$SERVICE_TYPE" == "systemd" ]] && systemctl daemon-reload >/dev/null 2>&1 || true
+  if [[ "$SERVICE_TYPE" == "systemd" ]]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    # 不 reset-failed 的话，被删掉的 unit 会以 not-found/failed 状态挂在 systemctl 里，
+    # 干扰下次安装时的状态判断
+    systemctl reset-failed >/dev/null 2>&1 || true
+  fi
+  # 收尾自检：卸载后仍有残留进程是下次安装失败的主要来源，这里必须说出来
+  for p in xray nginx hysteria; do
+    pgrep -x "$p" >/dev/null 2>&1 && warn "注意：仍检测到 ${p} 进程，请手动确认: pgrep -a ${p}"
+  done
   info "卸载完成（保留了 ${home}/dist 下你自己上传的回落页面）"
   rm -f /usr/local/bin/xh
 }

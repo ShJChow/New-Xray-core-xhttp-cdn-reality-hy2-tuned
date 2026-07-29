@@ -11,6 +11,24 @@ install_xray() {
   fi
 
   if [[ "$OS_ID" != "alpine" ]]; then
+    # 官方 install-release.sh 在 `pidof xray` 非空时会去 systemctl stop xray.service，
+    # 单元文件不存在就直接 exit 1（"Unit xray.service not loaded"）。
+    # 这个中间态由「上一次卸载删了 unit 和二进制、却没杀掉进程」造成——旧版本的
+    # 卸载脚本已经装在用户机器上，改不了，所以安装侧必须自己兜住。
+    if [[ "$SERVICE_TYPE" == "systemd" ]] && pgrep -x xray >/dev/null 2>&1; then
+      if ! systemctl cat xray.service >/dev/null 2>&1; then
+        warn "检测到残留的 xray 进程，但 xray.service 单元已不存在"
+        warn "该中间态会让官方安装脚本报 'Unit xray.service not loaded' 并中止，先清理"
+        pkill -x xray >/dev/null 2>&1 || true
+        sleep 1
+        pgrep -x xray >/dev/null 2>&1 && { pkill -9 -x xray >/dev/null 2>&1 || true; sleep 1; }
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl reset-failed >/dev/null 2>&1 || true
+        pgrep -x xray >/dev/null 2>&1 && \
+          error "无法结束残留的 xray 进程，请手动执行: pkill -9 -x xray 后重跑"
+        info "残留进程已清理"
+      fi
+    fi
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
     return
   fi
