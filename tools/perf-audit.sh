@@ -176,12 +176,32 @@ have ss && ss -lnt 2>/dev/null | sed 's/^/  /'
 sub "UDP 监听（QUIC / HTTP3）"
 have ss && ss -lnu 2>/dev/null | sed 's/^/  /'
 
-sub "!! Accept / SYN 队列溢出（非 0 说明 somaxconn / backlog 不足）"
+sub "!! Accept / SYN 队列溢出（判定 nginx listen backlog 该不该调的唯一依据）"
+# 实际生效的 accept 队列 = min(listen backlog, somaxconn)。
+# nginx 不写 backlog= 时默认 511，即使 somaxconn 是 65535 也按 511 生效
+# （上面「TCP 监听队列」里 nginx 那几行的 Send-Q 就是这个值）。
+kv "net.core.somaxconn" "$(sysctl -n net.core.somaxconn 2>/dev/null)"
+kv "nginx listen backlog" "$(grep -rhoE 'backlog=[0-9]+' /etc/nginx/ 2>/dev/null | sort -u | tr '\n' ' ' || true)"
+echo "  （nginx 未显式写 backlog= 时为 511，与 somaxconn 取小）"
+echo ""
 if have nstat; then
   nstat -az 2>/dev/null | grep -E 'ListenOverflows|ListenDrops|TCPReqQFullDrop|TCPBacklogDrop|SyncookiesSent' | sed 's/^/  /'
+  OVF=$(nstat -az 2>/dev/null | awk '/TcpExtListenOverflows/{print $2; exit}')
 else
   grep -E 'ListenOverflows|ListenDrops' /proc/net/netstat 2>/dev/null | sed 's/^/  /' || echo "  n/a"
+  OVF=""
 fi
+echo ""
+echo "  判读规则（这几个计数器是自开机累计值）:"
+if [[ -n "${OVF:-}" && "${OVF:-0}" -gt 0 ]] 2>/dev/null; then
+  echo "    ListenOverflows = ${OVF} > 0  →  accept 队列**确实**溢出过。"
+  echo "    此时把 nginx 的 listen 加上 backlog=65535 属于有故障现象支撑的正确性修复。"
+else
+  echo "    ListenOverflows = ${OVF:-0}  →  队列从未溢出过，backlog 511 对当前负载够用。"
+  echo "    此时调大 backlog 是没有故障现象支撑的吞吐旋钮，按 tasks/lessons.md L25 不应改。"
+fi
+echo "    注意：XHTTP 是长连接，backlog 影响的是**建连速率**而非并发连接数——"
+echo "    与 worker_connections（并发数的硬上限）是两回事，不能类比着一起调。"
 
 sub "!! UDP 错误（RcvbufErrors 非 0 = UDP 收缓冲不足，直接影响 h3 节点）"
 have nstat && nstat -az 2>/dev/null | grep -E 'UdpInErrors|UdpRcvbufErrors|UdpSndbufErrors|UdpNoPorts' | sed 's/^/  /'
