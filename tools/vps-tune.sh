@@ -60,7 +60,8 @@ esac
 
 [[ "$(id -u)" -eq 0 ]] || die "需要 root 权限（sudo bash $0）"
 mkdir -p "$(dirname "$LOG")" 2>/dev/null
-log ""; log "===== ${TAG} ${MODE} @ $(date -Is 2>/dev/null) ====="
+$DRY_RUN && MODE_LABEL="dry-run" || MODE_LABEL="$MODE"
+log ""; log "===== ${TAG} ${MODE_LABEL} @ $(date -Is 2>/dev/null) ====="
 
 # ==================================================
 # 回滚
@@ -110,7 +111,11 @@ KERNEL=$(uname -r 2>/dev/null)
 KMAJ=${KERNEL%%.*}; KMIN=$(echo "$KERNEL" | cut -d. -f2 | tr -cd '0-9')
 ARCH=$(uname -m 2>/dev/null)
 CPU_CORES=$(nproc 2>/dev/null || echo 1)
-CPU_MODEL=$(awk -F: '/^(model name|Model)/{print $2; exit}' /proc/cpuinfo 2>/dev/null | sed 's/^ *//')
+# aarch64 的 /proc/cpuinfo 没有 model name，只有 CPU implementer/part 编码，
+# 所以 x86 那套 awk 在 ARM 机器上必然输出 unknown。lscpu 会把编码解析成型号名。
+CPU_MODEL=$(awk -F: '/^(model name|Model)[[:space:]]*:/{gsub(/^ +/,"",$2); print $2; exit}' /proc/cpuinfo 2>/dev/null)
+[[ -n "$CPU_MODEL" ]] || CPU_MODEL=$(lscpu 2>/dev/null | awk -F: '/^Model name/{gsub(/^ +/,"",$2); print $2; exit}')
+[[ -n "$CPU_MODEL" ]] || CPU_MODEL=$(awk -F: '/^CPU part/{gsub(/^ +/,"",$2); print "ARM part "$2; exit}' /proc/cpuinfo 2>/dev/null)
 PAGE_SIZE=$(getconf PAGESIZE 2>/dev/null || echo 4096)
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
 MEM_PAGES=$(awk -v ps="$PAGE_SIZE" '/^MemTotal:/{printf "%d", $2*1024/ps}' /proc/meminfo 2>/dev/null || echo 262144)
@@ -176,11 +181,18 @@ fi
 # ---- 冲突检测：与 xh tuning 二选一，否则回滚会失真 ----
 if [[ -f "$XH_SYSCTL" ]]; then
   log ""
+  log "  当前 ${XH_SYSCTL} 内容:"
+  logcmd cat "$XH_SYSCTL"
   die "检测到 ${XH_SYSCTL}（xh tuning on 已开启）。
     两者写同一批 sysctl key，同时存在会互相覆盖，且各自的回滚都清不掉对方，
-    「可回滚」这条会失效。请二选一：
-      保留 xh：       不要跑本脚本，直接用 xh tuning on/off
-      改用本脚本：    先执行  xh tuning off  再重跑本脚本"
+    「可回滚」这条会失效。
+
+    多数情况下**建议保留 xh**：内核/TCP/BBR/limits 这一层两者做的事几乎相同，
+    而 xh 与本仓库的安装/升级流程是一体的。本脚本相对 xh 多出来的只有
+    swappiness、vfs_cache_pressure、swap 创建、网卡特性报告这几项。
+    要拿到最新的调优取值，执行:  xh tuning off && xh tuning on
+
+    确实要改用本脚本:  先  xh tuning off  再重跑本脚本"
 fi
 
 if $DRY_RUN; then log ""; warn "--dry-run：以下为计划应用的内容，不会写入任何文件"; fi
