@@ -59,7 +59,7 @@ v2.0.2 起默认输出**下表 3 条**，加上 Hysteria2 扩展共 4 条。
 
 ## 前置条件
 
-运行脚本前需在 Cloudflare 完成：
+运行脚本前需在 Cloudflare 完成（申请一个能托管到cloudflare 的[免费]域名：https://my.dnshe.com/index.php?m=domain_hub 或https://dash.domain.digitalplat.org/dashboard）：
 
 1. Reality 域名 DNS → **仅 DNS**（灰色云朵）
 2. CDN 域名 DNS → **代理开启**（橙色云朵）
