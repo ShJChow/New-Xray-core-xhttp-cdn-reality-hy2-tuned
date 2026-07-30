@@ -94,24 +94,26 @@ EOF
 )
 fi
 
-# 三条涉及 CDN 的节点按 FEATURE_CDN_NODES 决定是否输出（v2.0.1，见 01-env.sh）。
-# 用 heredoc 先渲染成一个变量，再插进 client-config.txt——关闭时变量为空，
-# 随后的 sed 会把留下的空行删掉。空行会被 base64 进订阅，v2rayN 解析时多一条空节点。
+# 两条上下行分离节点按 FEATURE_SPLIT_NODES 决定是否输出（v2.0.2，见 01-env.sh）。
+# Vless-xhttp-tls-UDP-cdn 不受本开关控制，它是默认节点集的一员（实测最快）。
+# 用 heredoc 先渲染成变量再插进 client-config.txt——关闭时变量为空，
+# 随后的 sed 会删掉留下的空行。空行会被 base64 进订阅，v2rayN 里会多出一条空节点。
 # L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理，
 # 否则会出现「订阅里没有、mihomo 配置里还有」的不一致。
-if [[ "$FEATURE_CDN_NODES" == true ]]; then
-  CDN_NODE_LINES=$(cat << CDNNODEEOF
+if [[ "$FEATURE_SPLIT_NODES" == true ]]; then
+  SPLIT_NODE_LINES=$(cat << SPLITNODEEOF
 @@include templates/cdn-node-lines.txt.tmpl
-CDNNODEEOF
+SPLITNODEEOF
 )
-  MIHOMO_CDN_PROXIES=$(cat << MIHOMOCDNEOF
+  MIHOMO_SPLIT_PROXIES=$(cat << MIHOMOSPLITEOF
 @@include templates/mihomo-cdn-proxies.yaml.tmpl
-MIHOMOCDNEOF
+MIHOMOSPLITEOF
 )
+  info "节点集: Reality x2 + xhttp-tls-UDP-cdn + 上下行分离 x2"
 else
-  CDN_NODE_LINES=""
-  MIHOMO_CDN_PROXIES=""
-  info "节点集: Reality x2（CDN 节点已按 FEATURE_CDN_NODES=false 关闭）"
+  SPLIT_NODE_LINES=""
+  MIHOMO_SPLIT_PROXIES=""
+  info "节点集: Reality x2 + xhttp-tls-UDP-cdn（上下行分离节点已关闭，FEATURE_SPLIT_NODES=true 可开启）"
 fi
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF

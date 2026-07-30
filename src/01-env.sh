@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="2.0.1"
+PROJECT_VERSION="2.0.2"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -50,14 +50,19 @@ FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
-# v2.0.1：节点集收敛为「Reality + Hysteria2」。
-# 三条涉及 CDN 的节点（xhttp-tls-UDP-cdn、split-cdnup-realitydown、
-# split-realityup-cdndown）默认不再输出——它们在 v2rayN TUN 模式下最不稳
-# （服务器是域名，需先解析；h3 那条还叠加 QUIC，见 tasks/lessons.md L15）。
+# v2.0.2：默认节点集 = 2 条 Reality 直连 + Vless-xhttp-tls-UDP-cdn，
+# 加上 add-quic.sh 扩展的 Hysteria2，共 4 条。
 #
-# 用开关而不是删代码（L7）：服务端 CDN 基础设施（证书、nginx 的 CDN server 块、
-# XHTTP location）全部保留，改回 true 即可恢复这三条节点，无需改代码。
-# 注意 extensions/dual-cdn 与 dual-ip 按名定位 CDN 节点派生自己的配置，
-# 关闭时它们会明确报错退出；要用那两个扩展就得设为 true。
-FEATURE_CDN_NODES=${FEATURE_CDN_NODES:-false}
+# Vless-xhttp-tls-UDP-cdn（经 CDN 的 alpn=h3）**保留为默认输出**：
+# 用户实测它在 iOS onexray 下速度最快、快于 Hysteria2（见 README 首行，
+# 测试机 Oracle 4 OCPU / 24 GB）。v2.0.1 曾把它和两条 split 节点一起关掉，
+# 那是错的——「TUN 下最脆弱」与「实测最快」可以同时成立，正确做法是保留节点、
+# 用客户端绕行规则解决 TUN 自环（安装时生成的 client-config-v2rayn-tun.txt
+# 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
+#
+# 本开关只管两条**上下行分离**节点（split-cdnup-realitydown /
+# split-realityup-cdndown）。它们配置最复杂、收益未经测量，默认关闭。
+# 用开关而不是删代码（L7）：服务端基础设施全部保留，改 true 即恢复。
+# 兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES：设过它的人不会静默失效。
+FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-false}}
 

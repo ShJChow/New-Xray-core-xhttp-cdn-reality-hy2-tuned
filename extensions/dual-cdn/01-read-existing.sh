@@ -14,8 +14,7 @@ find_client_files
 info "读取已有客户端配置: $USER_HOME"
 
 BASE_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_CDN_BOTH")
-[[ -n "$BASE_LINE" ]] || error "未找到 xhttp+TLS 双向 CDN 节点。v2.0.1 起 CDN 节点默认关闭，
-    请用 FEATURE_CDN_NODES=true 重跑主脚本后再运行本扩展"
+[[ -n "$BASE_LINE" ]] || error "未找到 xhttp+TLS 双向 CDN 节点，无法自动派生 CDN-A 参数"
 
 REALITY_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_REALITY_VISION")
 [[ -n "$REALITY_LINE" ]] || error "未找到 reality+vision 节点，无法读取 Reality 域名"

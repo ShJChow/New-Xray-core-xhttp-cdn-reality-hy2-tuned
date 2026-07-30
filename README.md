@@ -17,7 +17,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v2.0.1） | 默认 2 条 Reality 直连 + Hysteria2 扩展；3 条 CDN 节点可用 `FEATURE_CDN_NODES=true` 恢复，见下方节点表 |
+| 节点集（v2.0.2） | 默认 2 条 Reality 直连 + `xhttp-tls-UDP-cdn`（实测最快）+ Hysteria2 扩展；2 条上下行分离节点可用 `FEATURE_SPLIT_NODES=true` 恢复 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -34,12 +34,15 @@
 
 ## 节点列表
 
-v2.0.1 起默认只输出 **2 条 Reality 节点**，加上 Hysteria2 扩展共 3 条。
-三条涉及 CDN 的节点（下表 3/4/5）默认关闭——它们的 server 是域名，在 v2rayN
-TUN 模式下需先解析、最容易自环，节点 4 还叠加 QUIC（见 `tasks/lessons.md` L15）。
+v2.0.2 起默认输出 **3 条**（下表 1/2/4），加上 Hysteria2 扩展共 4 条。
+节点 4 `Vless-xhttp-tls-UDP-cdn` 是**实测最快**的一条（见本文首行），保留为默认。
 
-服务端的 CDN 基础设施（证书、nginx 的 CDN server 块、XHTTP location）全部保留，
-`FEATURE_CDN_NODES=true` 即恢复这三条，无需改代码。
+两条上下行分离节点（下表 3/5）默认关闭——配置最复杂、收益未经测量。
+服务端基础设施全部保留，`FEATURE_SPLIT_NODES=true` 即恢复，无需改代码。
+
+节点 4 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
+否则会自环（见 `tasks/lessons.md` L15）。安装时生成的
+`~/client-config-v2rayn-tun.txt` 已按本机实际值给出该清单。
 
 名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
 
@@ -47,9 +50,9 @@ TUN 模式下需先解析、最容易自环，节点 4 还叠加 QUIC（见 `tas
 |---|---|---|---|
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
-| 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，alpn h2，**默认关闭** |
-| 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**默认关闭** |
-| 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS / 下行经 CDN | 上下行分离，alpn h2，**默认关闭** |
+| 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，alpn h2，默认关闭 |
+| 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
+| 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS / 下行经 CDN | 上下行分离，alpn h2，默认关闭 |
 
 ## 前置条件
 
@@ -132,7 +135,7 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_CDN_NODES` | `true` 恢复 3 条 CDN 节点（`dual-cdn` 扩展需要它） | `false` |
+| `FEATURE_SPLIT_NODES` | `true` 恢复 2 条上下行分离节点 | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |
