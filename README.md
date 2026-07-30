@@ -56,18 +56,6 @@ v2.0.3 起另外两条**上下行分离**节点（`Vless-xhttp-split-cdnup-reali
 `Vless-xhttp-split-realityup-cdndown`）也**默认输出**，共 5 条 + Hysteria2。
 设 `FEATURE_SPLIT_NODES=false` 可关掉它们。
 
-### 扩展：XHTTP over HTTP/3（3 条 h3 节点）
-
-```bash
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
-```
-
-移植自上游 `add-quic.sh`，追加 `Vless-xhttp-tls-h3` /
-`Vless-xhttp-split-h2up-h3down` / `Vless-xhttp-split-h3up-h2down` 三条。
-三条的 `sni`/`host` 都用 CDN 域名，nginx 的 `listen ... quic` 插进 **CDN 域名的
-server 块**并复用该块已有的 `location`——与 `add-quic.sh`（Hysteria2）插进
-Reality 块的做法不同，两者用不同的配置标记，可同时安装。
-
 
 ## 前置条件
 
@@ -108,6 +96,18 @@ bash ~/install.sh
 ```
 
 脚本可重复执行，用于更新域名、回落网站等参数。
+
+### 扩展：XHTTP over HTTP/3（3 条 h3 节点）
+
+```bash
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+```
+
+移植自上游 `add-quic.sh`，追加 `Vless-xhttp-tls-h3` /
+`Vless-xhttp-split-h2up-h3down` / `Vless-xhttp-split-h3up-h2down` 三条。
+三条的 `sni`/`host` 都用 CDN 域名，nginx 的 `listen ... quic` 插进 **CDN 域名的
+server 块**并复用该块已有的 `location`——与 `add-quic.sh`（Hysteria2）插进
+Reality 块的做法不同，两者用不同的配置标记，可同时安装。
 
 ## 扩展脚本
 
