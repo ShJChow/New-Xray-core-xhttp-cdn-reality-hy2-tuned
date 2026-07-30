@@ -68,6 +68,19 @@ fi
 
 SAVED_QUIC_MODE="${QUIC_MODE:-separate}"
 
+# h3 节点关闭时，「共用端口」失去意义——它的全部作用就是让 hysteria2 给
+# XHTTP H3 做 QUIC/TLS 前置。此时只问 hysteria2 自己的端口，不再让用户在
+# 一个无效选项上做选择。
+if [[ "$FEATURE_XHTTP_H3_NODE" != true ]]; then
+  QUIC_MODE="separate"
+  DEFAULT_HY2_PORT="${HY2_PORT:-8443}"
+  read -rp "请输入 hysteria2 UDP 端口 [默认 ${DEFAULT_HY2_PORT}]: " HY2_PORT
+  HY2_PORT=${HY2_PORT:-$DEFAULT_HY2_PORT}
+  # XHTTP_H3_PORT 后续仍被 state 文件与提示语引用，给一个不参与监听的占位值
+  XHTTP_H3_PORT="$HY2_PORT"
+  info "本扩展只添加 Hysteria2 节点（FEATURE_XHTTP_H3_NODE=false）"
+else
+
 echo -e "${YELLOW}[+] QUIC 端口模式${NC}"
 echo "  1) 分开端口（默认，Nginx 处理 XHTTP H3）"
 echo "  2) 共用端口（hysteria2 处理 XHTTP H3）"
@@ -103,6 +116,7 @@ case "$QUIC_CHOICE" in
     error "端口模式只能选择 1 或 2"
     ;;
 esac
+fi   # FEATURE_XHTTP_H3_NODE
 
 [[ "$XHTTP_H3_PORT" =~ ^[0-9]+$ ]] || error "XHTTP H3 端口必须是数字"
 ((XHTTP_H3_PORT >= 1 && XHTTP_H3_PORT <= 65535)) || error "XHTTP H3 端口必须在 1-65535 之间"

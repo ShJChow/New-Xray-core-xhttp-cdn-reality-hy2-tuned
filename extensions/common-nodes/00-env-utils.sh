@@ -156,3 +156,15 @@ find_client_files() {
   [[ -f "$MIHOMO_FULL_FILE" ]] || error "未找到 $MIHOMO_FULL_FILE，请先运行主脚本"
   [[ -f "$MIHOMO_NODES_FILE" ]] || error "未找到 $MIHOMO_NODES_FILE，请先运行主脚本"
 }
+
+# ==================================================
+# v2.0.1：本扩展默认只产出 Hysteria2 节点
+# ==================================================
+# Vless-xhttp-tls-h3-direct 默认不再输出。它是「域名/裸 IP + QUIC」的组合，
+# 在 v2rayN TUN 模式下最不稳（tasks/lessons.md L15：TUN 自环对 UDP 兜不住），
+# 且本项目从未在真机上确认它可用。
+#
+# 用开关而不是删代码（L7）：改成 true 即恢复该节点与配套的 nginx quic 监听。
+# 关闭时同时跳过 nginx 的 location/listen 插入——节点 2（xhttp-reality）直连
+# xray 的 TCP 443、不经 nginx，所以那段配置只服务这条 h3 节点，留着就是死配置。
+FEATURE_XHTTP_H3_NODE=${FEATURE_XHTTP_H3_NODE:-false}

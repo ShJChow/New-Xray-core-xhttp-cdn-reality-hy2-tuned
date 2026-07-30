@@ -26,6 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
+PROJECT_VERSION="2.0.1"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -48,4 +49,15 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
+
+# v2.0.1：节点集收敛为「Reality + Hysteria2」。
+# 三条涉及 CDN 的节点（xhttp-tls-UDP-cdn、split-cdnup-realitydown、
+# split-realityup-cdndown）默认不再输出——它们在 v2rayN TUN 模式下最不稳
+# （服务器是域名，需先解析；h3 那条还叠加 QUIC，见 tasks/lessons.md L15）。
+#
+# 用开关而不是删代码（L7）：服务端 CDN 基础设施（证书、nginx 的 CDN server 块、
+# XHTTP location）全部保留，改回 true 即可恢复这三条节点，无需改代码。
+# 注意 extensions/dual-cdn 与 dual-ip 按名定位 CDN 节点派生自己的配置，
+# 关闭时它们会明确报错退出；要用那两个扩展就得设为 true。
+FEATURE_CDN_NODES=${FEATURE_CDN_NODES:-false}
 

@@ -28,6 +28,13 @@ info "已移除主脚本的 UDP 443 quic 监听（由本扩展接管，避免 re
 grep -Eq "^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:space:]]*$" "$NGINX_CONF" ||
   error "未找到 Reality 域名 Nginx 配置"
 
+# 上面的清理 sed 无条件执行（幂等地清掉旧版本残留的块）；下面的**插入**才受开关控制。
+# 关闭 h3 节点时不插入 location/listen：节点 2 直连 xray 的 TCP 443、不经 nginx，
+# 这段配置只服务 h3 节点，插了就是一个没有客户端的 QUIC 监听。
+if [[ "$FEATURE_XHTTP_H3_NODE" != true ]]; then
+  info "跳过 Nginx XHTTP H3 配置（FEATURE_XHTTP_H3_NODE=false，仅安装 hysteria2）"
+else
+
 sed -i "/^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:space:]]*$/a\\
         # BEGIN quic xhttp\\
         location ${XHTTP_PATH} {\\
@@ -53,6 +60,8 @@ if [[ "$QUIC_MODE" == "separate" ]]; then
 else
   info "已配置 hysteria2 到 Nginx 的 XHTTP 转发"
 fi
+
+fi   # FEATURE_XHTTP_H3_NODE
 
 HYSTERIA_BIN="/usr/local/bin/hysteria"
 HYSTERIA_CONF_DIR="/etc/hysteria"

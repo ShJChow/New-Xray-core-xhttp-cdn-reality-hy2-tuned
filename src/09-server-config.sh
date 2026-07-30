@@ -79,6 +79,8 @@ XRAYEOF
 info "写入 ${NODE_ENV_FILE} ..."
 {
   printf 'PROJECT_NAME=%q\n'      "$PROJECT_NAME"
+  printf 'PROJECT_VERSION=%q\n'   "$PROJECT_VERSION"
+  printf 'FEATURE_CDN_NODES=%q\n' "$FEATURE_CDN_NODES"
   printf 'PROJECT_REPO=%q\n'      "$PROJECT_REPO"
   printf 'INSTALL_TIME=%q\n'      "$(date '+%Y-%m-%d %H:%M:%S %Z')"
   printf 'OS_ID=%q\n'             "$OS_ID"

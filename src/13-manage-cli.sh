@@ -651,7 +651,7 @@ case "${1:-menu}" in
   autoupdate) shift; cmd_autoupdate "$@" ;;
   guard)      cmd_guard ;;
   uninstall)  cmd_uninstall ;;
-  version)    [[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version | head -1; echo "xray-xhttp manage cli" ;;
+  version)    [[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version | head -1; echo "xray-xhttp ${PROJECT_VERSION:-unknown} (manage cli)" ;;
   -h|--help|help) usage ;;
   *)          usage; exit 1 ;;
 esac

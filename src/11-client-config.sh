@@ -94,9 +94,31 @@ EOF
 )
 fi
 
+# 三条涉及 CDN 的节点按 FEATURE_CDN_NODES 决定是否输出（v2.0.1，见 01-env.sh）。
+# 用 heredoc 先渲染成一个变量，再插进 client-config.txt——关闭时变量为空，
+# 随后的 sed 会把留下的空行删掉。空行会被 base64 进订阅，v2rayN 解析时多一条空节点。
+# L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理，
+# 否则会出现「订阅里没有、mihomo 配置里还有」的不一致。
+if [[ "$FEATURE_CDN_NODES" == true ]]; then
+  CDN_NODE_LINES=$(cat << CDNNODEEOF
+@@include templates/cdn-node-lines.txt.tmpl
+CDNNODEEOF
+)
+  MIHOMO_CDN_PROXIES=$(cat << MIHOMOCDNEOF
+@@include templates/mihomo-cdn-proxies.yaml.tmpl
+MIHOMOCDNEOF
+)
+else
+  CDN_NODE_LINES=""
+  MIHOMO_CDN_PROXIES=""
+  info "节点集: Reality x2（CDN 节点已按 FEATURE_CDN_NODES=false 关闭）"
+fi
+
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
 CLIENTEOF
+# 删掉 CDN 节点关闭后留下的空行，保证 client-config.txt 每行都是一条可用节点
+sed -i '/^[[:space:]]*$/d' "$USER_HOME/client-config.txt"
 
 # v2rayN TUN 绕行清单。**不能并进 client-config.txt**——那份文件会被整体
 # base64 成 v2rayN 订阅（12-subscription.sh:18），混入非节点行会污染订阅。

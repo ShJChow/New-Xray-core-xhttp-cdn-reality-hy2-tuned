@@ -21,14 +21,23 @@ BASE_SERVER_URI=$(format_uri_host "$BASE_SERVER")
 LINE_XHTTP_H3="vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${REALITY_DOMAIN}&path=$(rawurlencode "$XHTTP_PATH")&mode=auto${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_XHTTP_H3_TAG}"
 LINE_HY2="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${BASE_SERVER_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0#${NODE_HY2_TAG}"
 
+# 四条删除**无条件执行**：重复运行时先清掉自己上次写的节点，
+# 且关闭 h3 后要能把上一次装的那条 h3 节点从订阅里清掉（幂等 + 降级路径）。
 sed -i "/#${NODE_XHTTP_H3_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${NODE_HY2_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${LEGACY_XHTTP_H3_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${LEGACY_HY2_TAG}\$/d" "$V2RAYN_FILE"
-printf '%s\n%s\n' "$LINE_XHTTP_H3" "$LINE_HY2" >> "$V2RAYN_FILE"
+if [[ "$FEATURE_XHTTP_H3_NODE" == true ]]; then
+  printf '%s\n%s\n' "$LINE_XHTTP_H3" "$LINE_HY2" >> "$V2RAYN_FILE"
+else
+  printf '%s\n' "$LINE_HY2" >> "$V2RAYN_FILE"
+fi
 chown "$(stat -c '%u:%g' "$USER_HOME")" "$V2RAYN_FILE"
 
 build_common_nodes_block() {
+  # h3 节点关闭时只产出 Hysteria2 块。update_mihomo_file 里的 awk 仍会按
+  # h3_name 删除旧块，所以从开启降级到关闭不会留下孤立节点。
+  [[ "$FEATURE_XHTTP_H3_NODE" == true ]] || { build_hy2_node_block; return; }
   cat <<EOF
   - name: ${NODE_XHTTP_H3_NAME}
     type: vless
@@ -65,6 +74,10 @@ EOF
 EOF
   fi
 
+  build_hy2_node_block
+}
+
+build_hy2_node_block() {
   cat <<EOF
   - name: ${NODE_HY2_NAME}
     type: hysteria2
