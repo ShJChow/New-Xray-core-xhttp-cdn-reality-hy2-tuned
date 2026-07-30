@@ -50,9 +50,8 @@ v2.0.2 起默认输出 **3 条**（下表 1/2/4），加上 Hysteria2 扩展共 
 |---|---|---|---|
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
-| 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | 上行经 CDN / 下行直连 VPS | 上下行分离，alpn h2，默认关闭 |
-| 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
-| 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS / 下行经 CDN | 上下行分离，alpn h2，默认关闭 |
+| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
+
 
 ## 前置条件
 
