@@ -20,7 +20,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v2.0.2） | 默认 2 条 Reality 直连 + `xhttp-tls-UDP-cdn`（实测最快）+ Hysteria2 扩展；2 条上下行分离节点可用 `FEATURE_SPLIT_NODES=true` 恢复 |
+| 节点集（v2.0.3） | 默认 5 条：2 条 Reality 直连 + `xhttp-tls-UDP-cdn`（实测最快）+ 2 条上下行分离；另有 Hysteria2 与 3 条 h3 两个扩展 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -31,13 +31,13 @@
 | **非交互一键** | 环境变量驱动，`AUTO=1` 零交互重装 |
 | **保活自愈** | cron 每 5 分钟健康检查 + 开机自启 |
 | **内核自动更新** | 每周更新 Xray-core，配置自检失败自动回滚 |
-| 扩展 | 上下行不同 CDN / 上行 IPv4 下行 IPv6 / Hysteria2（同扩展的 XHTTP-H3 节点已知不通，见 docs/8 勘误） |
+| 扩展 | `add-quic-h3`（3 条 XHTTP over h3）/ `add-quic`（Hysteria2）/ 上下行不同 CDN / 上行 IPv4 下行 IPv6 |
 
 ---
 
 ## 节点列表
 
-v2.0.2 起默认输出**下表 3 条**，加上 Hysteria2 扩展共 4 条。
+v2.0.3 起默认输出**下表 3 条 + 2 条上下行分离**，共 5 条。
 节点 3 `Vless-xhttp-tls-UDP-cdn` 是**实测最快**的一条（见本文首行）。
 
 节点 3 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
@@ -52,9 +52,21 @@ v2.0.2 起默认输出**下表 3 条**，加上 Hysteria2 扩展共 4 条。
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
 
-另有两条**上下行分离**节点（`Vless-xhttp-split-cdnup-realitydown` /
-`Vless-xhttp-split-realityup-cdndown`）默认关闭——配置最复杂、收益未经测量。
-服务端基础设施全部保留，`FEATURE_SPLIT_NODES=true` 即恢复，无需改代码。
+v2.0.3 起另外两条**上下行分离**节点（`Vless-xhttp-split-cdnup-realitydown` /
+`Vless-xhttp-split-realityup-cdndown`）也**默认输出**，共 5 条 + Hysteria2。
+设 `FEATURE_SPLIT_NODES=false` 可关掉它们。
+
+### 扩展：XHTTP over HTTP/3（3 条 h3 节点）
+
+```bash
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+```
+
+移植自上游 `add-quic.sh`，追加 `Vless-xhttp-tls-h3` /
+`Vless-xhttp-split-h2up-h3down` / `Vless-xhttp-split-h3up-h2down` 三条。
+三条的 `sni`/`host` 都用 CDN 域名，nginx 的 `listen ... quic` 插进 **CDN 域名的
+server 块**并复用该块已有的 `location`——与 `add-quic.sh`（Hysteria2）插进
+Reality 块的做法不同，两者用不同的配置标记，可同时安装。
 
 
 ## 前置条件
@@ -138,7 +150,7 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_SPLIT_NODES` | `true` 恢复 2 条上下行分离节点 | `false` |
+| `FEATURE_SPLIT_NODES` | `false` 关闭 2 条上下行分离节点 | `true` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |

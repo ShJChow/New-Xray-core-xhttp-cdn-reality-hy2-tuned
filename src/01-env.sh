@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="2.0.2"
+PROJECT_VERSION="2.0.3"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -60,9 +60,10 @@ AUTO=${AUTO:-0}
 # 用客户端绕行规则解决 TUN 自环（安装时生成的 client-config-v2rayn-tun.txt
 # 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
 #
-# 本开关只管两条**上下行分离**节点（split-cdnup-realitydown /
-# split-realityup-cdndown）。它们配置最复杂、收益未经测量，默认关闭。
-# 用开关而不是删代码（L7）：服务端基础设施全部保留，改 true 即恢复。
-# 兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES：设过它的人不会静默失效。
-FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-false}}
+# 本开关管两条**上下行分离**节点（split-cdnup-realitydown /
+# split-realityup-cdndown）。v2.0.3 起**默认开启**：v2.0.1 关掉它们的理由是
+# 「收益未经测量」，但既然默认输出就没有测量的机会，等于用一个自我实现的理由
+# 永久隐藏功能。改为默认给出，由用户实测决定去留。
+# 设 false 可关闭。兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES 旧名。
+FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-true}}
 
