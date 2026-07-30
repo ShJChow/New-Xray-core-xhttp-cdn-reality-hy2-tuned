@@ -37,13 +37,10 @@
 
 ## 节点列表
 
-v2.0.2 起默认输出 **3 条**（下表 1/2/4），加上 Hysteria2 扩展共 4 条。
-节点 4 `Vless-xhttp-tls-UDP-cdn` 是**实测最快**的一条（见本文首行），保留为默认。
+v2.0.2 起默认输出**下表 3 条**，加上 Hysteria2 扩展共 4 条。
+节点 3 `Vless-xhttp-tls-UDP-cdn` 是**实测最快**的一条（见本文首行）。
 
-两条上下行分离节点（下表 3/5）默认关闭——配置最复杂、收益未经测量。
-服务端基础设施全部保留，`FEATURE_SPLIT_NODES=true` 即恢复，无需改代码。
-
-节点 4 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
+节点 3 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
 否则会自环（见 `tasks/lessons.md` L15）。安装时生成的
 `~/client-config-v2rayn-tun.txt` 已按本机实际值给出该清单。
 
@@ -54,6 +51,10 @@ v2.0.2 起默认输出 **3 条**（下表 1/2/4），加上 Hysteria2 扩展共 
 | 1 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，；UDP 被封时的兜底 |
 | 2 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
+
+另有两条**上下行分离**节点（`Vless-xhttp-split-cdnup-realitydown` /
+`Vless-xhttp-split-realityup-cdndown`）默认关闭——配置最复杂、收益未经测量。
+服务端基础设施全部保留，`FEATURE_SPLIT_NODES=true` 即恢复，无需改代码。
 
 
 ## 前置条件

@@ -39,13 +39,11 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 ## Node list
 
-Since v2.0.2 the installer emits **3 nodes** by default (1, 2 and 4 below) — 4 in total once the Hysteria2 extension is added.
+Since v2.0.2 the installer emits **the 3 nodes below** by default — 4 in total once the Hysteria2 extension is added.
 
-Node 4, `Vless-xhttp-tls-UDP-cdn`, is **the fastest of them in testing** (see the note at the top), so it ships enabled.
+Node 3, `Vless-xhttp-tls-UDP-cdn`, is **the fastest of them in testing** (see the note at the top).
 
-The two split upload/download nodes (3 and 5) are off by default: they are the most complex to configure and their benefit has never been measured. All server-side infrastructure stays in place, so `FEATURE_SPLIT_NODES=true` restores them with no code changes.
-
-Node 4 goes through the CDN and its server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. The installer writes `~/client-config-v2rayn-tun.txt` with that list already filled in for your machine.
+Node 3 goes through the CDN and its server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. The installer writes `~/client-config-v2rayn-tun.txt` with that list already filled in for your machine.
 
 Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 
@@ -53,9 +51,9 @@ Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 |---|---|---|---|
 | 1 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
 | 2 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
-| 3 | `Vless-xhttp-split-cdnup-realitydown-<host>` | Up via CDN / down direct to VPS | Split, alpn h2 — off by default |
-| 4 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
-| 5 | `Vless-xhttp-split-realityup-cdndown-<host>` | Up direct to VPS / down via CDN | Split, alpn h2 — off by default |
+| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
+
+Two further **split upload/download** nodes (`Vless-xhttp-split-cdnup-realitydown` and `Vless-xhttp-split-realityup-cdndown`) are off by default: they are the most complex to configure and their benefit has never been measured. All server-side infrastructure stays in place, so `FEATURE_SPLIT_NODES=true` restores them with no code changes.
 
 ---
 
