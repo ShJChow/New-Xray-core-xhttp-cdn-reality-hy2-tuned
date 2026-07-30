@@ -272,6 +272,50 @@ cmd_diag() {
     chk "nginx location 缺少 grpc_read_timeout" 1 "XHTTP 长连接会每 60 秒断一次；重跑安装脚本"
   fi
 
+  # ---------- 直连 UDP / QUIC（add-quic-h3 与 Hysteria2 扩展）----------
+  # 走 CDN 的节点不碰这些；只有**直连 VPS 裸 IP 的 UDP** 节点依赖它们。
+  # 三条 h3 节点同时不通、而经 CDN 的 h3 节点正常时，唯一共同点就是这一层。
+  QUIC_PORTS=""
+  if grep -q '# BEGIN quic-h3' /etc/nginx/nginx.conf 2>/dev/null; then
+    QUIC_PORTS=$(grep -A2 '# BEGIN quic-h3' /etc/nginx/nginx.conf | grep -oE 'listen [0-9]+ quic' | grep -oE '[0-9]+')
+    chk "nginx 已配置 quic-h3 段（UDP ${QUIC_PORTS:-?}）" 0
+  fi
+  if grep -q '# BEGIN quic xhttp' /etc/nginx/nginx.conf 2>/dev/null; then
+    QUIC_PORTS="${QUIC_PORTS} $(grep -A2 '# BEGIN quic xhttp' /etc/nginx/nginx.conf | grep -oE 'listen [0-9]+ quic' | grep -oE '[0-9]+')"
+    chk "nginx 已配置 quic xhttp 段" 0
+  fi
+
+  if [[ -n "${QUIC_PORTS// /}" ]] && command -v ss >/dev/null 2>&1; then
+    for p in $QUIC_PORTS; do
+      # 配置里写了 listen quic，但进程没真的 bind UDP —— nginx -t 查不出这种情况（L14）
+      if ss -lnup 2>/dev/null | grep -qE ":${p}\b"; then
+        chk "已监听 UDP ${p}" 0
+      else
+        chk "未监听 UDP ${p}" 1 "配置里有 listen ${p} quic 但进程未 bind；查 ${MANAGE_CMD} log nginx"
+      fi
+    done
+  fi
+
+  if [[ -f /etc/hysteria/config.yaml ]]; then
+    HY2_P=$(grep -oE '^[[:space:]]*listen:[[:space:]]*:[0-9]+' /etc/hysteria/config.yaml | grep -oE '[0-9]+$')
+    if [[ -n "$HY2_P" ]] && command -v ss >/dev/null 2>&1; then
+      ss -lnup 2>/dev/null | grep -qE ":${HY2_P}\b" \
+        && chk "Hysteria2 已监听 UDP ${HY2_P}" 0 \
+        || chk "Hysteria2 未监听 UDP ${HY2_P}" 1 "systemctl status hysteria-server"
+    fi
+  fi
+
+  # 本机防火墙：只报告，不改动（规则可能是用户或云厂商 agent 写的）
+  if command -v nft >/dev/null 2>&1 && nft list ruleset 2>/dev/null | grep -q .; then
+    nft list ruleset 2>/dev/null | grep -qiE 'udp.*(accept|dport)' \
+      && chk "nftables 有 UDP 相关规则" 0 \
+      || chk "nftables 未见放行 UDP 的规则" 1 "直连 UDP 节点可能被本机防火墙挡下"
+  elif command -v iptables >/dev/null 2>&1 && [[ $(iptables -S 2>/dev/null | wc -l) -gt 3 ]]; then
+    iptables -S 2>/dev/null | grep -qi 'udp' \
+      && chk "iptables 有 UDP 相关规则" 0 \
+      || chk "iptables 未见放行 UDP 的规则" 1 "直连 UDP 节点可能被本机防火墙挡下"
+  fi
+
   echo ""
   echo -e "${CYAN}[+] 结论与下一步${NC}"
   if [[ $bad -eq 0 ]]; then
@@ -279,6 +323,20 @@ cmd_diag() {
   else
     echo "  发现 $bad 项异常，先按上面的提示处理。"
   fi
+  echo ""
+  echo -e "${YELLOW}  ⚠ 直连 UDP 节点全不通、而经 CDN 的节点正常时，先查云厂商安全组${NC}"
+  echo "  这一项**在机器里查不出来**——安全组在虚拟机外面，本机 ss 显示监听正常、"
+  echo "  防火墙也放行，包仍可能在到达网卡之前就被云平台丢掉。"
+  echo ""
+  echo "    Oracle Cloud : 网络 → VCN → 安全列表 → 入站规则"
+  echo "    AWS          : EC2 → 安全组 → 入站规则"
+  echo "    GCP          : VPC 网络 → 防火墙"
+  echo "  需要一条：协议 UDP / 源 0.0.0.0/0 / 目标端口 = 上面列出的 UDP 端口。"
+  echo "  默认规则通常只开 TCP 22 与 TCP 443，加 TCP 时**不会自动带上 UDP**。"
+  echo ""
+  echo "  判据（Hysteria2 也是直连 VPS 裸 IP 的 UDP）："
+  echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
+  echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
   echo -e "${YELLOW}  节点 Vless-xhttp-tls-UDP-cdn 不依赖本机任何 QUIC 配置${NC}"
   echo "  它只依赖：① Cloudflare 区域已开启 HTTP/3  ② 你的客户端网络允许 UDP 443 出站。"
