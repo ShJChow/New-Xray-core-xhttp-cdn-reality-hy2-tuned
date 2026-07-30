@@ -210,13 +210,18 @@ BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tc
 
 ---
 
-## 本地构建
+## 如有问题，清理后重跑
 
 ```bash
-bash .github/scripts/build-install.sh    # dist/install.sh, dist/install-xpadding.sh
-bash .github/scripts/build-dual-cdn.sh   # dist/add-dual-cdn.sh
-bash .github/scripts/build-dual-ip.sh    # dist/add-dual-ip.sh
-bash .github/scripts/build-quic.sh       # dist/add-quic.sh
+  pkill -9 -x xray; pkill -9 -f 'xray run'
+  rm -f  /etc/systemd/system/xray.service /etc/systemd/system/xray@.service
+  rm -rf /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d
+  rm -f  /usr/local/bin/xray
+  rm -rf /usr/local/etc/xray /usr/local/share/xray /var/log/xray
+  systemctl daemon-reload && systemctl reset-failed
+
+  pgrep -a xray || echo "✅ 干净"
+  bash ~/install.sh
 ```
 
 推送 `v*` tag 时 GitHub Actions 会自动构建并发布 Release。
