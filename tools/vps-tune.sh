@@ -156,9 +156,11 @@ elif have iptables && [[ $(iptables -S 2>/dev/null | wc -l) -gt 3 ]]; then log "
 else log "    未检测到活动规则（云厂商安全组可能在机器外层）"; fi
 
 # ---- 内存分档：所有派生值都从这里出 ----
-if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=65536; CONNTRACK=1048576
-elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=33554432; TCP_MAX=16777216; BACKLOG=32768; CONNTRACK=262144
-else                                 TIER=small;  SOCK_MAX=16777216; TCP_MAX=8388608;  BACKLOG=16384; CONNTRACK=0
+# NETDEV_BUDGET：NAPI 每轮 poll 的包数上限，默认 300 在高并发小包下 softirq 收不完
+# （/proc/net/softnet_stat 的 time_squeeze 非零）。小内存档不写，保持默认。
+if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000
+elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=33554432; TCP_MAX=16777216; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000
+else                                 TIER=small;  SOCK_MAX=16777216; TCP_MAX=8388608;  BACKLOG=16384; CONNTRACK=0; NETDEV_BUDGET=""
 fi
 kv "调优档位" "$TIER（socket 上限 $((SOCK_MAX/1024/1024)) MB / backlog ${BACKLOG}）"
 
@@ -273,6 +275,12 @@ try net.ipv4.udp_wmem_min 8192
 
 # ---- 队列与并发 ----
 try net.core.netdev_max_backlog "$BACKLOG"      # 网卡收包队列，高 PPS 下防丢包
+# NAPI 每轮 poll 的包数上限。默认 300 在高并发（CDN 回源 + XHTTP 长连接，大量小包）
+# 下 softirq 收不完，softnet_stat 的 time_squeeze 非零即此信号。放大到 6000 是
+# "在 2000μs 窗口内多收包"，不延长窗口、不增加软中断时长（netdev_budget_usecs 已限时）。
+if [[ -n "$NETDEV_BUDGET" ]]; then
+  try net.core.netdev_budget "$NETDEV_BUDGET"
+fi
 try net.core.somaxconn 65535                    # accept 队列上限，nginx listen backlog 受它压制
 try net.ipv4.tcp_max_syn_backlog "$BACKLOG"     # 半连接队列
 try net.ipv4.tcp_max_tw_buckets 65536
@@ -290,6 +298,9 @@ try net.ipv4.tcp_slow_start_after_idle 0        # 空闲后不回慢启动 —�
 try net.ipv4.tcp_notsent_lowat 16384
 try net.ipv4.tcp_syncookies 1                   # SYN 洪泛保护，不影响正常连接
 try net.ipv4.tcp_tw_reuse 1                     # 仅出站方向复用 TIME_WAIT，安全
+try net.ipv4.tcp_retries2 8                     # 死连接内核层约 1 分钟内关闭（默认 15 ≈ 15 分钟），连接表/fd 早腾出
+try net.ipv4.tcp_syn_retries 4                  # 出站 SYN 约 30s 放弃（默认 6 ≈ 3 分钟），不为死对端白等
+try net.ipv4.tcp_rfc1337 1                      # TIME_WAIT 暗杀保护，忽略该期对端发来的 RST（RFC 1337）
 try net.ipv4.tcp_fin_timeout 15
 try net.ipv4.tcp_keepalive_time 600             # 比 CDN/NAT 常见的 900s 空闲回收更早探活
 try net.ipv4.tcp_keepalive_intvl 30

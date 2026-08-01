@@ -44,11 +44,11 @@ apply_system_tuning() {
   MEM_PAGES=$(awk -v ps="$PAGE_SIZE" '/^MemTotal:/{printf "%d", $2*1024/ps}' /proc/meminfo 2>/dev/null || echo 262144)
 
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576
+    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000
   elif [[ "$MEM_MB" -ge 4096 ]]; then
-    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144
+    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000
   else
-    TUNE_TIER="small";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=8388608;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=0
+    TUNE_TIER="small";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=8388608;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=0; NETDEV_BUDGET=""
   fi
 
   info "机型: ${CPU_CORES} 核 / ${MEM_MB} MB / ${ARCH} → 调优档位 ${TUNE_TIER}"
@@ -97,6 +97,13 @@ apply_system_tuning() {
 
   # ---------- 队列与并发 ----------
   try_sysctl net.core.netdev_max_backlog "$NETDEV_BACKLOG"
+  # NAPI 每轮 poll 可处理的包数上限。默认 300 在高并发（CDN 回源 + XHTTP 长连接，
+  # 大量小包）下 softirq 来不及收完，/proc/net/softnet_stat 的 time_squeeze 非零即此
+  # 信号。放大到 6000 是"在 2000μs 窗口内多收包"，不延长窗口、不增加软中断时长，
+  # 因而不引入 CPU 占用。小内存档（<4G）不写，保持默认（netdev_budget_usecs 已限时）。
+  if [[ -n "$NETDEV_BUDGET" ]]; then
+    try_sysctl net.core.netdev_budget "$NETDEV_BUDGET"
+  fi
   try_sysctl net.core.somaxconn 65535
   try_sysctl net.ipv4.tcp_max_syn_backlog "$NETDEV_BACKLOG"
   try_sysctl net.ipv4.tcp_max_tw_buckets 65536
@@ -118,6 +125,18 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_notsent_lowat 16384
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
+  # tcp_retries2 = 8：死连接在内核层约 1 分钟内被关闭（默认 15 约 15 分钟）。
+  # 代理机器上对端死亡（掉线/关机/被墙）后，连接表槽位与 fd 被僵尸连接占住，
+  # 收得越快、给正常连接腾的资源越多。代价是瞬时网络抖动可能更早报错——
+  # 对代理是收益：应用层（Xray 自动重连）能更快接管。
+  try_sysctl net.ipv4.tcp_retries2 8
+  # 出站 SYN 最多重试 4 次（约 30s），默认 6 次（约 3 分钟）。连接发给回落站/上游
+  # 时对端若不可达，不必为已死的对端浪费 3 分钟。
+  try_sysctl net.ipv4.tcp_syn_retries 4
+  # TIME_WAIT 暗杀保护（RFC 1337）：默认 0 时，对端在连接 TIME_WAIT 期发来的 RST
+  # 会提前终结连接，破坏 TIME_WAIT 的 2MSL 语义，低概率但会诱发资源错乱；1 为忽略
+  # 该 RST。零成本，语义上是防御性的。
+  try_sysctl net.ipv4.tcp_rfc1337 1
   try_sysctl net.ipv4.tcp_fin_timeout 15
   try_sysctl net.ipv4.tcp_keepalive_time 600
   try_sysctl net.ipv4.tcp_keepalive_intvl 30
