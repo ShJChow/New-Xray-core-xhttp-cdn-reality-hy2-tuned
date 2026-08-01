@@ -142,6 +142,12 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_keepalive_intvl 30
   try_sysctl net.ipv4.tcp_keepalive_probes 5
 
+  # ---------- 内存行为（v3.0.2 从 ubuntu_vps_optimize.sh 同步）----------
+  # 转发型服务器没有写负载，降低 swap 倾向但不关——OOM 时 swap 比杀进程安全。
+  # dirty_ratio / dirty_background_ratio 作用在脏页回写，转发机器不落盘，故意不调。
+  if [[ "$MEM_MB" -ge 4096 ]]; then try_sysctl vm.swappiness 10; else try_sysctl vm.swappiness 30; fi
+  try_sysctl vm.vfs_cache_pressure 50
+
   # ---------- 文件句柄 ----------
   try_sysctl fs.file-max 1048576
   try_sysctl fs.nr_open 1048576
