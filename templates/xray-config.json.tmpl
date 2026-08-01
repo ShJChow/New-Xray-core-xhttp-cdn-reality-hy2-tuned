@@ -2,6 +2,7 @@
     "log": {
         "loglevel": "info"
     },
+    ${XRAY_POLICY_JSON}
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
@@ -50,7 +51,7 @@
                     "shortIds": [
                         "${SHORT_ID}"
                     ]
-                }
+                }${XRAY_SOCKOPT_JSON}
             },
             "sniffing": {
                 "enabled": true,

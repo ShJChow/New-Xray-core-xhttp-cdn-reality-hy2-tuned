@@ -51,6 +51,35 @@ EOF
   fi
 }
 
+# ==================================================
+# Xray 应用层优化注入（v3.0.0）
+# 与 `xh tuning on` 的 sysctl 层互不冲突：bufferSize 是 Xray 进程内的 Go 分配、
+# sockopt 是 Xray 建的 socket 选项，sysctl 都调不到，只能在 config.json 里写。
+# --------------------------------------------------
+# policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），同样配置
+# ARM 机器吞吐被压死。按内存分档显式写入，三档 512 / 256 / 64 KB。
+MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=512
+elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=256
+else XRAY_BUFFER_KB=64
+fi
+XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+
+# Reality 入站 sockopt：tcpcongestion 只在 BBR 可用时写，否则 xray -test 直接
+# 失败（L3：字段名 tcpcongestion 全小写，见官方 sockopt 文档）。TFO/keepalive/
+# tcpUserTimeout 与拥塞算法无关，总是写。
+AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+if [[ "$AVAIL" != *bbr* ]]; then
+  modprobe tcp_bbr >/dev/null 2>&1 || true
+  AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+fi
+if [[ "$AVAIL" == *bbr* ]]; then
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":100,"tcpKeepAliveInterval":30,"tcpUserTimeout":10000}'
+else
+  warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":100,"tcpKeepAliveInterval":30,"tcpUserTimeout":10000}'
+fi
+
 info "写入 /etc/nginx/nginx.conf ..."
 cat > /etc/nginx/nginx.conf << NGINXEOF
 @@include templates/nginx.conf.tmpl
