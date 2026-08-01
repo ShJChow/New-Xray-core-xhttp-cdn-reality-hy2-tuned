@@ -64,4 +64,29 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # H2-cdn：CDN + XHTTP over HTTP/2（alpn=h2，TCP）。UDP-cdn 的 TCP 降级备用
+  #（UDP/QUIC 被封时兜底）。同一服务端路径，仅 alpn 差异，无 scMinPosts（仅 h3 需要）。
+  - name: Vless-xhttp-tls-H2-cdn-${HOSTNAME_TAG}
+    type: vless
+    server: ${CDN_DOMAIN}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h2
+    servername: ${CDN_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 ${MIHOMO_SPLIT_PROXIES}

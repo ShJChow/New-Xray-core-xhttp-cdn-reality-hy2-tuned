@@ -22,7 +22,7 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 | Capability | Details |
 |---|---|
-| Node set (v3.0.2) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest in testing); split upload/download nodes off by default (`FEATURE_SPLIT_NODES=true` restores). UDP nodes (Hysteria2 / h3) fully kept |
+| Node set (v3.1.0) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest) + `xhttp-tls-H2-cdn` + 2 split upload/download nodes (full upstream set, English names). UDP nodes (Hysteria2 / h3) fully kept |
 | xpadding | On by default — `xPaddingObfsMode` plus a custom header and parameter name, to defeat XHTTP fingerprinting on the CDN side |
 | ECH | Optional; encrypts the SNI inside the TLS handshake |
 | VLESS Encryption | On by default (ML-KEM-768), so the CDN cannot decrypt traffic as a man in the middle |
@@ -39,11 +39,11 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 ## Node list
 
-Since v2.0.2 the installer emits **the 3 nodes below** by default — 4 in total once the Hysteria2 extension is added.
+Since v3.1.0 the installer emits **the 6 nodes below** by default — integrating the full upstream Yulinanami/my-xhttp-cdn-config node set, all with English names.
 
 Node 3, `Vless-xhttp-tls-UDP-cdn`, is **the fastest of them in testing** (see the note at the top).
 
-Node 3 goes through the CDN and its server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. The installer writes `~/client-config-v2rayn-tun.txt` with that list already filled in for your machine.
+Nodes 3/4/5 go through the CDN and their server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. The installer writes `~/client-config-v2rayn-tun.txt` with that list already filled in for your machine.
 
 Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 
@@ -52,8 +52,11 @@ Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 | 1 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
 | 2 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
+| 4 | `Vless-xhttp-tls-H2-cdn-<host>` | Via CDN, TCP 443 | XHTTP + TLS, alpn h2 — TCP fallback |
+| 5 | `Vless-xhttp-split-cdnup-realitydown-<host>` | Via CDN, split up/down | Upload CDN+TLS / download Reality |
+| 6 | `Vless-xhttp-split-realityup-cdndown-<host>` | Via CDN, split up/down | Upload Reality / download CDN+TLS |
 
-Two further **split upload/download** nodes (`Vless-xhttp-split-cdnup-realitydown` and `Vless-xhttp-split-realityup-cdndown`) are off by default: they mix a CDN domain with Reality and behave inconsistently between TUN and normal mode (requiring a manual direct-route entry under TUN), unlike the two bare-IP+TCP Reality nodes above. All server-side infrastructure stays in place, so `FEATURE_SPLIT_NODES=true` restores them with no code changes. UDP nodes (Hysteria2 / h3 extensions) are fully kept.
+The two **split upload/download** nodes (#5/#6) mix a CDN domain with Reality and need a manual direct-route entry under TUN (no issue in normal mode). Set `FEATURE_SPLIT_NODES=false` to disable them; no server-side change is needed. UDP nodes (Hysteria2 / h3 extensions) are fully kept.
 
 ---
 
@@ -145,7 +148,7 @@ Available environment variables:
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding fields | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` enables ECH | `n` |
 | `VISION_UDP443` | `1` makes node 1 use `xtls-rprx-vision-udp443` (needs client support) | `0` |
-| `FEATURE_SPLIT_NODES` | `true` restores the 2 split upload/download nodes | `false` |
+| `FEATURE_SPLIT_NODES` | `false` disables the 2 split upload/download nodes | `true` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2-extension switch: `true` restores `Vless-xhttp-tls-h3-direct` and its nginx quic listener | `false` |
 | `FEATURE_KEEPALIVE` | `false` skips the keepalive cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` skips the auto-update cron | `true` |

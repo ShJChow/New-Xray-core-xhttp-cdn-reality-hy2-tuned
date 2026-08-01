@@ -81,17 +81,19 @@ v2rayN 里的设置位置
   最稳  1. Vless-reality-vision              裸 IP + TCP
         2. Vless-xhttp-reality               裸 IP + TCP
         3. Hysteria2-direct                  裸 IP + UDP
-  最弱  4. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
+        4. Vless-xhttp-tls-H2-cdn            域名 + TCP/h2
+  最弱  5. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
 
-注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 3 实测是最快的一条
+注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 5 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的
 CDN 域名加进直连列表才能在 TUN 下正常工作。配好了它就是首选。
+节点 4 是同链路的 TCP 版本（alpn=h2），UDP/QUIC 被封时作为兜底。
 
 TCP 之所以更稳，是因为 dialer 绑定物理接口的保护在 TCP 路径上更完整；
 QUIC 是无连接 UDP，同样的保护在多数平台上兜不住。
 
-若照上面配好直连规则后节点 3 仍不通，**先换节点 1 或 2 验证**：
-1/2 能通而 3 不通 = 客户端 UDP 侧的问题，与服务端无关。
+若照上面配好直连规则后节点 5 仍不通，**先换节点 1、2 或 4 验证**：
+1/2/4 能通而 5 不通 = 客户端 UDP 侧的问题，与服务端无关。
 
 
 mihomo / Clash 用户不需要这份清单

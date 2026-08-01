@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="3.0.2"
+PROJECT_VERSION="3.1.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -61,11 +61,10 @@ AUTO=${AUTO:-0}
 # 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
 #
 # 本开关管两条**上下行分离**节点（split-cdnup-realitydown /
-# split-realityup-cdndown）。v3.0.2 起**默认关闭**：用户实测发现它们在 TUN 模式
-# 与普通模式下表现不一致（经 CDN 域名 + Reality 混用，TUN 下需手工加直连规则），
-# 而裸 IP+TCP 的 2 条 Reality 直连节点（reality-vision / reality-xhttp）开箱即用。
-# 默认收敛为「最佳 2 条 Reality + UDP-cdn」，UDP 类节点（Hysteria2 / h3 扩展）全部保留。
-# 服务端基础设施不受影响，设 FEATURE_SPLIT_NODES=true 可一键恢复。
+# split-realityup-cdndown）。v3.1.0 起**默认开启**：用户选择整合上游
+# Yulinanami/my-xhttp-cdn-config 的全节点集（上游默认含这两条）。它们混用
+# CDN 域名 + Reality，在 TUN 模式下需手工加直连规则（见 client-config-v2rayn-tun.txt），
+# 普通模式下无此问题。设 FEATURE_SPLIT_NODES=false 可关闭。
 # 兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES 旧名。
-FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-false}}
+FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-true}}
 
