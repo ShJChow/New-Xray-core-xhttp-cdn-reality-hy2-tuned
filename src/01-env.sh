@@ -61,7 +61,7 @@ AUTO=${AUTO:-0}
 # 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
 #
 # 本开关管两条**上下行分离**节点（split-cdnup-realitydown /
-# split-realityup-cdndown）。v3.0.1 起**默认关闭**：用户实测发现它们在 TUN 模式
+# split-realityup-cdndown）。v3.0.2 起**默认关闭**：用户实测发现它们在 TUN 模式
 # 与普通模式下表现不一致（经 CDN 域名 + Reality 混用，TUN 下需手工加直连规则），
 # 而裸 IP+TCP 的 2 条 Reality 直连节点（reality-vision / reality-xhttp）开箱即用。
 # 默认收敛为「最佳 2 条 Reality + UDP-cdn」，UDP 类节点（Hysteria2 / h3 扩展）全部保留。

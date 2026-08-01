@@ -20,7 +20,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v3.0.1） | 默认 3 条：2 条 Reality 直连 + `xhttp-tls-UDP-cdn`（实测最快）；上下行分离默认关（`FEATURE_SPLIT_NODES=true` 恢复）；另有 Hysteria2 与 3 条 h3 两个 UDP 扩展 |
+| 节点集（v3.0.2） | 默认 3 条：2 条 Reality 直连 + `xhttp-tls-UDP-cdn`（实测最快）；上下行分离默认关（`FEATURE_SPLIT_NODES=true` 恢复）；另有 Hysteria2 与 3 条 h3 两个 UDP 扩展 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -37,7 +37,7 @@
 
 ## 节点列表
 
-v3.0.1 起默认输出**下表 3 条**（2 条 Reality 直连 + 1 条 UDP-cdn）。
+v3.0.2 起默认输出**下表 3 条**（2 条 Reality 直连 + 1 条 UDP-cdn）。
 节点 3 `Vless-xhttp-tls-UDP-cdn` 是**实测最快**的一条（见本文首行）。
 
 节点 3 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，

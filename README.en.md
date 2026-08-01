@@ -22,7 +22,7 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 | Capability | Details |
 |---|---|
-| Node set (v3.0.1) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest in testing); split upload/download nodes off by default (`FEATURE_SPLIT_NODES=true` restores). UDP nodes (Hysteria2 / h3) fully kept |
+| Node set (v3.0.2) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest in testing); split upload/download nodes off by default (`FEATURE_SPLIT_NODES=true` restores). UDP nodes (Hysteria2 / h3) fully kept |
 | xpadding | On by default — `xPaddingObfsMode` plus a custom header and parameter name, to defeat XHTTP fingerprinting on the CDN side |
 | ECH | Optional; encrypts the SNI inside the TLS handshake |
 | VLESS Encryption | On by default (ML-KEM-768), so the CDN cannot decrypt traffic as a man in the middle |
