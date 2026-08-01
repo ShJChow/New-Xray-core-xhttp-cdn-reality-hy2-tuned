@@ -237,6 +237,35 @@ BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tc
 
 已有 Mihomo 配置的用户建议使用 `mihomo-nodes.yaml`。
 
+ ## 在你 VPS 上依次执行就行：
+
+  # 1. 下载脚本
+  curl -O https://raw.githubusercontent.com/ShJChow/Xray-core-xhttp-cdn-tuned/main/tools/ubuntu_vps_optimize.sh
+
+  # 2. 加执行权限
+  chmod +x ubuntu_vps_optimize.sh
+
+  # 3. 先「只看不碰」——检测 + 打印计划，零修改
+  sudo bash ubuntu_vps_optimize.sh --dry-run
+
+  # 4. 确认无误后正式跑
+  sudo bash ubuntu_vps_optimize.sh
+
+  三种模式：
+
+  ┌────────────┬───────────────────────────────────────┐
+  │    命令    │                 作用                  │
+  ├────────────┼───────────────────────────────────────┤
+  │ --dry-run  │ 只检测 + 打印将要改什么，不写任何文件 │
+  ├────────────┼───────────────────────────────────────┤
+  │ （无参数） │ 检测 → 备份 → 优化 → 验证             │
+  ├────────────┼───────────────────────────────────────┤
+  │ --rollback │ 完整回滚到运行前状态                  │
+  └────────────┴───────────────────────────────────────┘
+
+  跑完后重启服务生效：
+
+  systemctl restart xray nginx docker
 ---
 
 ## 如有问题，清理后重跑
