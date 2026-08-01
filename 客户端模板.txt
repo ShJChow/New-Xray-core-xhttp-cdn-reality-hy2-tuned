@@ -16,6 +16,8 @@ vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&secu
 # nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库）。手工配置前请先用一键脚本验证过。
 
 上下行分离（依赖 Xray 的 downloadSettings 字段）
+# v3.0.1 起一键脚本默认**关闭**这两条（实测在 TUN 与普通模式下表现不一致），
+# 需要时设 FEATURE_SPLIT_NODES=true 重跑，或手动按下面结构配置。
 # 【客户端支持性未验证】downloadSettings 是 Xray-core 特有字段，Shadowrocket 能否解析
 # 未经实测。推荐用 mihomo / onexray 使用这两条；SR 中若显示异常，改用上面的节点。
 # 下面两行是结构示意，YOUR_* 需替换；完整可用的版本请直接从一键脚本生成的

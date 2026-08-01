@@ -22,7 +22,7 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 | Capability | Details |
 |---|---|
-| Node set (v2.0.2) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest in testing) + the Hysteria2 extension. The 2 split upload/download nodes can be restored with `FEATURE_SPLIT_NODES=true` |
+| Node set (v3.0.1) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest in testing); split upload/download nodes off by default (`FEATURE_SPLIT_NODES=true` restores). UDP nodes (Hysteria2 / h3) fully kept |
 | xpadding | On by default — `xPaddingObfsMode` plus a custom header and parameter name, to defeat XHTTP fingerprinting on the CDN side |
 | ECH | Optional; encrypts the SNI inside the TLS handshake |
 | VLESS Encryption | On by default (ML-KEM-768), so the CDN cannot decrypt traffic as a man in the middle |
@@ -53,7 +53,7 @@ Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 | 2 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
 | 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
 
-Two further **split upload/download** nodes (`Vless-xhttp-split-cdnup-realitydown` and `Vless-xhttp-split-realityup-cdndown`) are off by default: they are the most complex to configure and their benefit has never been measured. All server-side infrastructure stays in place, so `FEATURE_SPLIT_NODES=true` restores them with no code changes.
+Two further **split upload/download** nodes (`Vless-xhttp-split-cdnup-realitydown` and `Vless-xhttp-split-realityup-cdndown`) are off by default: they mix a CDN domain with Reality and behave inconsistently between TUN and normal mode (requiring a manual direct-route entry under TUN), unlike the two bare-IP+TCP Reality nodes above. All server-side infrastructure stays in place, so `FEATURE_SPLIT_NODES=true` restores them with no code changes. UDP nodes (Hysteria2 / h3 extensions) are fully kept.
 
 ---
 

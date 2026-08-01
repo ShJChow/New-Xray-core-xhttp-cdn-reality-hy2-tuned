@@ -109,11 +109,11 @@ SPLITNODEEOF
 @@include templates/mihomo-cdn-proxies.yaml.tmpl
 MIHOMOSPLITEOF
 )
-  info "节点集: Reality x2 + xhttp-tls-UDP-cdn + 上下行分离 x2"
+  info "节点集: Reality x2 + xhttp-tls-UDP-cdn + 上下行分离 x2（FEATURE_SPLIT_NODES=true）"
 else
   SPLIT_NODE_LINES=""
   MIHOMO_SPLIT_PROXIES=""
-  info "节点集: Reality x2 + xhttp-tls-UDP-cdn（上下行分离节点已关闭，FEATURE_SPLIT_NODES=true 可开启）"
+  info "节点集: Reality x2 + xhttp-tls-UDP-cdn（默认，实测最快；FEATURE_SPLIT_NODES=true 可加两条上下行分离）"
 fi
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF

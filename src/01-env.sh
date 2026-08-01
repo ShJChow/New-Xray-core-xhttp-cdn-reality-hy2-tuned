@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="3.0.0"
+PROJECT_VERSION="3.0.1"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -61,9 +61,11 @@ AUTO=${AUTO:-0}
 # 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
 #
 # 本开关管两条**上下行分离**节点（split-cdnup-realitydown /
-# split-realityup-cdndown）。v2.0.3 起**默认开启**：v2.0.1 关掉它们的理由是
-# 「收益未经测量」，但既然默认输出就没有测量的机会，等于用一个自我实现的理由
-# 永久隐藏功能。改为默认给出，由用户实测决定去留。
-# 设 false 可关闭。兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES 旧名。
-FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-true}}
+# split-realityup-cdndown）。v3.0.1 起**默认关闭**：用户实测发现它们在 TUN 模式
+# 与普通模式下表现不一致（经 CDN 域名 + Reality 混用，TUN 下需手工加直连规则），
+# 而裸 IP+TCP 的 2 条 Reality 直连节点（reality-vision / reality-xhttp）开箱即用。
+# 默认收敛为「最佳 2 条 Reality + UDP-cdn」，UDP 类节点（Hysteria2 / h3 扩展）全部保留。
+# 服务端基础设施不受影响，设 FEATURE_SPLIT_NODES=true 可一键恢复。
+# 兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES 旧名。
+FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-false}}
 
