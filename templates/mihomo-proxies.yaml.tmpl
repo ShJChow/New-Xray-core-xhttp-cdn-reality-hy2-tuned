@@ -66,7 +66,9 @@ proxies:
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
   # H2-cdn：CDN + XHTTP over HTTP/2（alpn=h2，TCP）。UDP-cdn 的 TCP 降级备用
-  #（UDP/QUIC 被封时兜底）。同一服务端路径，仅 alpn 差异，无 scMinPosts（仅 h3 需要）。
+  #（UDP/QUIC 被封时兜底）。与 UDP-cdn 同一服务端路径，仅 alpn 不同。
+  # scMinPosts 与 alpn 无关（它约束 packet-up 的 POST 间隔），h2/h3 都要写——
+  # 上游的 xhttp+TLS+H2 节点带它，本仓库同为 h2 的 split-cdnup 节点也带它。
   - name: Vless-xhttp-tls-H2-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -84,7 +86,7 @@ proxies:
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"

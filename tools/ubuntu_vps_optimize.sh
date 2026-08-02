@@ -73,7 +73,16 @@ if $ROLLBACK; then
   # 恢复 nginx（优先用 .orig 原始副本）
   [ -f "${BACKUP_DIR}/nginx.conf.orig" ] && cp -a "${BACKUP_DIR}/nginx.conf.orig" /etc/nginx/nginx.conf
   # 恢复 CPU governor
-  [ -f "${BACKUP_DIR}/cpu-governor.orig" ] && cp -a "${BACKUP_DIR}/cpu-governor.orig" /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true
+  # governor 应用时写了所有 cpu*，回滚也必须逐核心还原（只还原 cpu0 会留下不一致状态）
+  if [ -f "${BACKUP_DIR}/cpu-governor.orig" ]; then
+    GOV_ORIG=$(cat "${BACKUP_DIR}/cpu-governor.orig" 2>/dev/null)
+    if [ -n "${GOV_ORIG:-}" ]; then
+      for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        [ -w "$cpu" ] && echo "$GOV_ORIG" > "$cpu" 2>/dev/null
+      done
+      ok "CPU governor 已还原为 ${GOV_ORIG}"
+    fi
+  fi
   have systemctl && systemctl daemon-reload 2>/dev/null
   sysctl --system >/dev/null 2>&1
   ok "回滚完成。运行时参数需重启或 sysctl --system 重新加载发行版默认值"
@@ -141,7 +150,7 @@ kv "OS"               "$OS_NAME"
 kv "Kernel"           "$KERNEL (major=${KMAJ})"
 kv "架构"             "$ARCH"
 kv "CPU"              "${CPU_MODEL:-unknown} × ${CPU_CORES} 核"
-kv "PAGESIZE"         "$PAGE_SIZE B ($([ "$PAGE_SIZE" -eq 4096 ] && echo '4 KB 标准' || echo '非标准，注意量纲')"
+kv "PAGESIZE"         "$PAGE_SIZE B ($([ "$PAGE_SIZE" -eq 4096 ] && echo '4 KB 标准' || echo '非标准，注意量纲'))"
 kv "内存"             "${MEM_MB} MB ≈ ${MEM_GB} GB"
 kv "Swap"             "${SWAP_MB} MB"
 kv "磁盘可用"         "${DISK_AVAIL} MB"
@@ -400,23 +409,7 @@ try net.ipv4.tcp_keepalive_probes 5
 try fs.file-max 1048576
 try fs.nr_open 1048576
 
-# ---- 落盘 ----
-if $DRY_RUN; then
-  info "计划写入 ${#APPLIED[@]} 项 → ${SYSCTL_CONF}"
-  printf '    %s\n' "${APPLIED[@]}"
-elif [[ ${#APPLIED[@]} -gt 0 ]]; then
-  {
-    echo "# ${TAG} 生成于 ${STAMP}"
-    echo "# 回滚: bash $0 --rollback"
-    printf '%s\n' "${APPLIED[@]}"
-  } > "$SYSCTL_CONF"
-  sysctl --system >/dev/null 2>&1 || sysctl -p "$SYSCTL_CONF" >/dev/null 2>&1 || \
-    warn "sysctl 重载失败，参数已在运行时生效"
-  ok "已应用 ${#APPLIED[@]} 项内核参数 → ${SYSCTL_CONF}"
-else
-  warn "当前环境不允许修改任何 sysctl 参数，已跳过内核调优"
-fi
-[[ ${#SKIPPED[@]} -gt 0 ]] && warn "内核不支持或只读，已跳过: ${SKIPPED[*]}"
+info "本阶段运行时已应用 ${#APPLIED[@]} 项；落盘统一推迟到第七阶段之后（见 flush_sysctl）"
 
 # ==================================================
 # ==== 第三阶段：TCP Fast Open =======================
@@ -482,7 +475,7 @@ if have ethtool && [[ -n "${NIC:-}" ]]; then
     info "virtio 驱动：GRO/GSO/TSO 由宿主机卸载管理，不修改"
   else
     for feat in rx-checksumming tx-checksumming scatter-gather tcp-segmentation-offload generic-segmentation-offload generic-receive-offload; do
-      CUR=$(ethtool -k "$NIC" 2>/dev/null | awk -v f="$feat" '$1==f":/{print $2}')
+      CUR=$(ethtool -k "$NIC" 2>/dev/null | awk -v f="$feat:" '$1==f{print $2}')
       if [[ "$CUR" == off ]] && ! $DRY_RUN; then
         ethtool -K "$NIC" "$feat" on >/dev/null 2>&1 && info "  已启用 ${feat}" || true
       fi
@@ -574,6 +567,36 @@ _log "  dirty_ratio / dirty_background_ratio：不调（转发型机器无落盘
 
 # overcommit_memory：Linux 默认 0（启发式）对转发负载足够。1（总是允许）是 Redis fork 快照场景的建议。
 _log "  vm.overcommit_memory：保持默认 0（启发式），不改 1"
+
+# ==================================================
+# sysctl 统一落盘
+#
+# **必须放在所有 try() 调用之后**。落盘写的是 APPLIED 数组的快照，
+# 若在第二阶段末尾就落盘，第三阶段的 tcp_fastopen 与第七阶段的 vm.* 会
+# 只在运行时生效、不写进 sysctl.d —— 重启后静默丢失，而验证表读的是运行时值，
+# 会显示"已生效"的假阳性。这是最坏的失败模式：报告成功，重启回退。
+# ==================================================
+sec "sysctl 落盘（持久化）"
+if $DRY_RUN; then
+  info "计划写入 ${#APPLIED[@]} 项 → ${SYSCTL_CONF}"
+  printf '    %s\n' "${APPLIED[@]}"
+elif [[ ${#APPLIED[@]} -gt 0 ]]; then
+  {
+    echo "# ${TAG} 生成于 ${STAMP}"
+    echo "# 回滚: bash $0 --rollback"
+    printf '%s\n' "${APPLIED[@]}"
+  } > "$SYSCTL_CONF"
+  sysctl --system >/dev/null 2>&1 || sysctl -p "$SYSCTL_CONF" >/dev/null 2>&1 || \
+    warn "sysctl 重载失败，参数已在运行时生效但可能不持久"
+  ok "已持久化 ${#APPLIED[@]} 项内核参数 → ${SYSCTL_CONF}"
+  # 持久化自检：确认关键项确实落到文件里（防止本 bug 复发）
+  for k in net.ipv4.tcp_fastopen vm.swappiness net.ipv4.tcp_congestion_control; do
+    grep -q "^${k} " "$SYSCTL_CONF" 2>/dev/null || warn "持久化自检: ${k} 未出现在 ${SYSCTL_CONF}（该项可能被内核拒绝）"
+  done
+else
+  warn "当前环境不允许修改任何 sysctl 参数，已跳过内核调优"
+fi
+[[ ${#SKIPPED[@]} -gt 0 ]] && warn "内核不支持或只读，已跳过: ${SKIPPED[*]}"
 
 # ==================================================
 # ==== 第八阶段：Xray 优化 ===========================
