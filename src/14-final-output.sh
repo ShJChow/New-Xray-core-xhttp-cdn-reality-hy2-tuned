@@ -24,6 +24,26 @@ echo "Short ID:       $SHORT_ID"
 echo "Path:           $XHTTP_PATH"
 echo "VLESS Enc(客户端): $VLESSENC_ENCRYPTION"
 echo "VLESS Dec(服务端): $VLESSENC_DECRYPTION"
+echo ""
+echo -e "${YELLOW}[+] 直连 UDP 节点${NC}"
+if [[ "$FEATURE_H3_DIRECT" == true ]]; then
+  echo "h3-direct:      UDP ${H3_PORT}（Xray 自己监听，不经 nginx）"
+else
+  echo "h3-direct:      未启用"
+fi
+if [[ "$FEATURE_HY2" == true ]]; then
+  echo "Hysteria2:      UDP ${HY2_PORT}"
+  echo "  认证密码:     ${HY2_PASSWORD}"
+  echo "  混淆:         salamander（Xray finalmask）"
+  echo "  混淆密码:     ${OBFS_PASSWORD}"
+  echo "  ※ 两个密码是独立的值，客户端 password 与 obfs-password 都要填对"
+else
+  echo "Hysteria2:      未启用"
+fi
+if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true ]]; then
+  echo -e "${RED}※ 这两条节点需要在云厂商安全组放行 UDP ${H3_PORT} 与 UDP ${HY2_PORT}${NC}"
+  echo "  安全组在虚拟机外面，本机 ss 显示监听正常也可能被云平台丢包。"
+fi
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
   if [[ "$CDN_ECH_ENABLED" == true ]]; then
     echo "CDN ECH:        已开启 (${CDN_ECH_QUERY})"

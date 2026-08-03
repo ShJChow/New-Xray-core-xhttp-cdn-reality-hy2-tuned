@@ -132,6 +132,22 @@ cmd_info() {
   [[ "${FEATURE_XPADDING:-false}" == true ]] && \
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
+  echo ""
+  echo -e "${CYAN}[+] 直连 UDP 节点${NC}"
+  if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
+    echo "  h3-direct:       UDP ${H3_PORT:-443}（Xray 自己监听，不经 nginx）"
+  else
+    echo "  h3-direct:       未启用"
+  fi
+  if [[ "${FEATURE_HY2:-false}" == true ]]; then
+    echo "  Hysteria2:       UDP ${HY2_PORT:-8443}"
+    echo "    认证密码:      ${HY2_PASSWORD}"
+    echo "    混淆:          salamander（Xray finalmask）"
+    echo "    混淆密码:      ${OBFS_PASSWORD}"
+    echo "    ↑ 两个密码是独立的值，客户端两处都要填对才能握手"
+  else
+    echo "  Hysteria2:       未启用"
+  fi
   if [[ -f "$SYSCTL_CONF" ]]; then
     echo "  系统层调优:      已开启（${MANAGE_CMD} tuning off 可回滚）"
   else
@@ -234,10 +250,14 @@ cmd_conflict() {
 
 # UDP / HTTP3 节点连不上时的自检。
 #
-# v2.0.0：直连 h3 节点已删除，本项目唯一的 UDP 节点是经 CDN 的
-# Vless-xhttp-tls-UDP-cdn。它**不经过本机任何 QUIC 配置**——Cloudflare 边缘
-# 用 HTTP/3 面对客户端，回源到本机仍是 TCP。因此服务端侧只需确认常规 XHTTP
-# 链路健康，UDP 相关的排查全部在客户端网络一侧。
+# v4.0.0 起本项目有三类 UDP 节点，排查路径互不相同：
+#   1. Vless-xhttp-tls-UDP-cdn —— 经 CDN。**不经过本机任何 QUIC 配置**：
+#      Cloudflare 边缘用 HTTP/3 面对客户端，回源到本机仍是 TCP。
+#      它不通 = 常规 XHTTP 链路的问题，与本机 UDP 无关。
+#   2. Vless-xhttp-h3-direct / Hysteria2-obfs —— 由 **Xray 自己 bind UDP**，
+#      既不经 nginx 也没有独立 hysteria 二进制。查的是 xray 进程的监听。
+#   3. add-quic-h3 扩展的节点 —— 由 nginx listen quic 提供（下方单独检查）。
+# 判据：1 通而 2 全不通 → 云厂商安全组没放行 UDP，或内核 <26.6.1。
 cmd_diag() {
   cmd_conflict
   local ok=0 bad=0
@@ -296,13 +316,45 @@ cmd_diag() {
     done
   fi
 
-  if [[ -f /etc/hysteria/config.yaml ]]; then
-    HY2_P=$(grep -oE '^[[:space:]]*listen:[[:space:]]*:[0-9]+' /etc/hysteria/config.yaml | grep -oE '[0-9]+$')
-    if [[ -n "$HY2_P" ]] && command -v ss >/dev/null 2>&1; then
-      ss -lnup 2>/dev/null | grep -qE ":${HY2_P}\b" \
-        && chk "Hysteria2 已监听 UDP ${HY2_P}" 0 \
-        || chk "Hysteria2 未监听 UDP ${HY2_P}" 1 "systemctl status hysteria-server"
+  # ---------- v4.0.0 的两条直连 UDP 节点（由 Xray 自己监听）----------
+  # 与上面 nginx quic 段的区别：h3-direct 与 Hysteria2 都是 Xray 直接 bind UDP，
+  # 既不经 nginx 也没有独立的 hysteria 二进制，所以要查的是 xray 进程的监听。
+  if command -v ss >/dev/null 2>&1; then
+    if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
+      if ss -lnup 2>/dev/null | grep -qE ":${H3_PORT:-443}\b"; then
+        chk "h3-direct 已监听 UDP ${H3_PORT:-443}" 0
+      else
+        chk "h3-direct 未监听 UDP ${H3_PORT:-443}" 1 "config.json 里有该 inbound 但未 bind；查 ${MANAGE_CMD} log xray"
+      fi
     fi
+    if [[ "${FEATURE_HY2:-false}" == true ]]; then
+      if ss -lnup 2>/dev/null | grep -qE ":${HY2_PORT:-8443}\b"; then
+        chk "Hysteria2 已监听 UDP ${HY2_PORT:-8443}" 0
+      else
+        chk "Hysteria2 未监听 UDP ${HY2_PORT:-8443}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.6.1"
+      fi
+    fi
+  fi
+
+  # 内核版本闸门：低于 26.6.1 时 finalmask 的 UDP listener 会在收到第一个无效包后
+  # 死亡（issue #6184），表现是「节点先能用、跑一阵后静默全挂、重启又好」。
+  # 这类故障靠看配置查不出来，只能靠版本号提前拦截。
+  if [[ "${FEATURE_HY2:-false}" == true || "${FEATURE_H3_DIRECT:-false}" == true ]]; then
+    XV=$([[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    if [[ -n "$XV" ]]; then
+      if [[ "$(printf '%s\n26.6.1\n' "$XV" | sort -V | head -n1)" == "26.6.1" ]]; then
+        chk "Xray ${XV} ≥ 26.6.1（finalmask UDP listener 已修复）" 0
+      else
+        chk "Xray ${XV} < 26.6.1" 1 "finalmask UDP listener 会在收到无效包后静默死亡（#6184），执行 ${MANAGE_CMD} update"
+      fi
+    fi
+  fi
+
+  # 旧版遗留：独立 hysteria 二进制。v4.0.0 起 Hysteria2 由 Xray 原生提供，
+  # 两者同时在会抢同一个 UDP 端口。
+  if [[ -f /etc/hysteria/config.yaml ]]; then
+    chk "检测到独立 hysteria 二进制的配置" 1 \
+      "v4.0.0 起 Hysteria2 由 Xray 原生提供，两者会抢端口；停用: systemctl disable --now hysteria-server"
   fi
 
   # 本机防火墙：只报告，不改动（规则可能是用户或云厂商 agent 写的）
