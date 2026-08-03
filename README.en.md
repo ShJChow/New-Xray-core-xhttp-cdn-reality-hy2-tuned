@@ -22,7 +22,7 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 | Capability | Details |
 |---|---|
-| Node set (v3.1.0) | 2 direct Reality nodes + `xhttp-tls-UDP-cdn` (fastest) + `xhttp-tls-H2-cdn` + 2 split upload/download nodes (full upstream set, English names). UDP nodes (Hysteria2 / h3) fully kept |
+| Node set (v4.0.0) | 5 nodes, all served by a single Xray core: 3 over QUIC/h3 (including Hysteria2 with obfs) + 2 TCP fallbacks. No separate hysteria binary needed |
 | xpadding | On by default — `xPaddingObfsMode` plus a custom header and parameter name, to defeat XHTTP fingerprinting on the CDN side |
 | ECH | Optional; encrypts the SNI inside the TLS handshake |
 | VLESS Encryption | On by default (ML-KEM-768), so the CDN cannot decrypt traffic as a man in the middle |
@@ -39,26 +39,25 @@ After installing the nodes and the Hysteria2 extension, run **`xh tuning on`**.
 
 ## Node list
 
-Since v3.1.0 the installer emits **the 6 nodes below** by default — integrating the full upstream Yulinanami/my-xhttp-cdn-config node set, all with English names.
+Since v4.0.0 the installer emits **the 5 nodes below**, all served by a single Xray core — Hysteria2 now uses Xray's native inbound (v26.3.27+), so no separate hysteria binary is required.
 
-Node 3, `Vless-xhttp-tls-UDP-cdn`, is **the fastest of them in testing** (see the note at the top).
+**The node order is the HTTP/3-first order**: the first three run over QUIC, the last two are TCP fallbacks for when UDP is blocked. Mihomo's proxy groups use `include-all: true`, so this ordering carries straight through.
 
-Nodes 3/4/5 go through the CDN and their server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. The installer writes `~/client-config-v2rayn-tun.txt` with that list already filled in for your machine.
+Node 1 goes through the CDN and its server is a domain name, so **in V2rayN TUN mode you must add the CDN domain to the direct/bypass list** or the connection loops back on itself. Nodes 2/3 connect to the bare IP and only need a direct route for the VPS IP. The installer writes `~/client-config-v2rayn-tun.txt` with that list filled in for your machine.
 
 Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 
 | # | Node name | Path | Transport |
 |---|---|---|---|
-| 1 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
-| 2 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
-| 3 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
-| 4 | `Vless-xhttp-tls-H2-cdn-<host>` | Via CDN, TCP 443 | XHTTP + TLS, alpn h2 — TCP fallback |
-| 5 | `Vless-xhttp-split-cdnup-realitydown-<host>` | Via CDN, split up/down | Upload CDN+TLS / download Reality |
-| 6 | `Vless-xhttp-split-realityup-cdndown-<host>` | Via CDN, split up/down | Upload Reality / download CDN+TLS |
+| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 — **fastest in testing** |
+| 2 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 443** | XHTTP + TLS, alpn h3, no CDN |
+| 3 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
+| 4 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; fallback when UDP is blocked |
+| 5 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
 
-The two **split upload/download** nodes (#5/#6) mix a CDN domain with Reality and need a manual direct-route entry under TUN (no issue in normal mode). Set `FEATURE_SPLIT_NODES=false` to disable them; no server-side change is needed. UDP nodes (Hysteria2 / h3 extensions) are fully kept.
+Nodes 2/3 are bare UDP to the VPS, so you must open **UDP 443 and UDP 8443 in your cloud provider's security group** — that layer sits outside the machine and the script can neither see nor change it. If the Xray core is older than 26.6.1 these two nodes are disabled automatically and only the other three are emitted.
 
----
+> **No TUIC v5**: Xray-core has no TUIC inbound, so it cannot be provided under an Xray-only constraint. Node 2 (XHTTP over h3, direct) uses QUIC as its transport and is the closest equivalent.
 
 ## Prerequisites
 
@@ -77,7 +76,8 @@ Each entry domain uses its own `dist/<domain>/index.html` as the fallback page. 
 
 ## One-command deployment (recommended: XHTTP with xpadding)
 
-> **Version requirements**: Xray core ≥ `26.2.6`, Mihomo core ≥ `1.19.24`.
+> **Version requirements**: Xray core ≥ `26.6.1`, Mihomo core ≥ `1.19.24`.
+> The Xray floor comes from the two direct UDP nodes: Hysteria2 inbound needs 26.3.27+, and the finalmask UDP listener crash (issue #6184) is only fixed in 26.6.1+. Below that the installer disables those two nodes automatically.
 > xpadding is on by default; ECH is optional and off by default.
 
 Debian / Ubuntu:
@@ -148,7 +148,9 @@ Available environment variables:
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding fields | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` enables ECH | `n` |
 | `VISION_UDP443` | `1` makes node 1 use `xtls-rprx-vision-udp443` (needs client support) | `0` |
-| `FEATURE_SPLIT_NODES` | `false` disables the 2 split upload/download nodes | `true` |
+| `FEATURE_H3_DIRECT` | `false` disables the direct h3 node (UDP 443) | `true` |
+| `FEATURE_HY2` | `false` disables the Hysteria2-obfs node (UDP 8443) | `true` |
+| `H3_PORT` / `HY2_PORT` | Ports for the two direct UDP nodes | `443` / `8443` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2-extension switch: `true` restores `Vless-xhttp-tls-h3-direct` and its nginx quic listener | `false` |
 | `FEATURE_KEEPALIVE` | `false` skips the keepalive cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` skips the auto-update cron | `true` |

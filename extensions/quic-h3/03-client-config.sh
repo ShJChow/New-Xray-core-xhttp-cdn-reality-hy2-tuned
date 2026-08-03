@@ -5,9 +5,10 @@
 # 节点名用本项目的纯 ASCII 约定（上游用中文名）。
 # 已核对不与任何 NODE_RE_* 冲突（L10）：
 #   NODE_RE_CDN_BOTH   匹配 Vless-xhttp-tls-cdn- / Vless-xhttp-tls-UDP-cdn-
-#   NODE_RE_SPLIT_*    匹配 Vless-xhttp-split-cdnup-realitydown- / -realityup-cdndown-
 # 下面三个都不落进这些前缀；与 common-nodes 的 Vless-xhttp-tls-h3-direct-
 # 也不同（删除 sed 按 `#名字$` 锚定行尾，两者可区分）。
+# v4.0.0：NODE_RE_SPLIT_* 已随两条上下行分离节点一并删除；主脚本新增的
+# Vless-xhttp-h3-direct- 不含 "tls"，与本文件的 Vless-xhttp-tls-h3- 前缀不重叠。
 NODE_H3_NAME="Vless-xhttp-tls-h3-${HOSTNAME_TAG}"
 NODE_H2UP_H3DOWN_NAME="Vless-xhttp-split-h2up-h3down-${HOSTNAME_TAG}"
 NODE_H3UP_H2DOWN_NAME="Vless-xhttp-split-h3up-h2down-${HOSTNAME_TAG}"

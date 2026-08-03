@@ -131,56 +131,9 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
-  # ------------------------------------------------------------------
-  # 上下行分离节点（依赖 download-settings）
-  # v3.1.0 起一键脚本**默认输出**这两条（整合上游全节点集）。
-  # 它们混用 CDN 域名 + Reality，TUN 模式下需手工加直连规则；
-  # 不需要时设 FEATURE_SPLIT_NODES=false 重跑即可关闭。
-  # ------------------------------------------------------------------
-
-  # 上行经 CDN（防封锁）/ 下行直连 VPS 走 Reality（拿速度）
-  - name: Vless-xhttp-split-cdnup-realitydown-YOUR_HOST
-    type: vless
-    server: YOUR_CDN_DOMAIN
-    port: 443
-    uuid: YOUR_UUID_2
-    udp: true
-    flow: ""
-    tls: true
-    encryption: YOUR_VLESSENC_ENCRYPTION
-    network: xhttp
-    alpn:
-      - h2
-    servername: YOUR_CDN_DOMAIN
-    client-fingerprint: chrome
-    xhttp-opts:
-      host: YOUR_CDN_DOMAIN
-      path: YOUR_PATH
-      mode: auto
-      sc-min-posts-interval-ms: 30
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
-      download-settings:
-        path: YOUR_PATH
-        server: YOUR_VPS_IP
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: YOUR_REALITY_DOMAIN
-        client-fingerprint: chrome
-        reality-opts:
-          public-key: YOUR_PUBILC_KEY
-          short-id: YOUR_SHORT_ID
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"
-
-  # 上行直连 VPS 走 Reality / 下行经 CDN。与上一条互为反向。
-  - name: Vless-xhttp-split-realityup-cdndown-YOUR_HOST
+  # 直连 VPS 的 h3 节点（v4.0.0 起默认生成）。Xray 自己监听 UDP 443，不经 nginx。
+  # sni 用 Reality 域名——证书是 Reality+CDN 双域名 SAN，直连侧取前者。
+  - name: Vless-xhttp-h3-direct-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
@@ -190,36 +143,32 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h2
+      - h3
     servername: YOUR_REALITY_DOMAIN
     client-fingerprint: chrome
-    reality-opts:
-      public-key: YOUR_PUBILC_KEY
-      short-id: YOUR_SHORT_ID
     encryption: YOUR_VLESSENC_ENCRYPTION
     xhttp-opts:
-      host: YOUR_CDN_DOMAIN
       path: YOUR_PATH
       mode: auto
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
-      download-settings:
-        host: YOUR_CDN_DOMAIN
-        path: YOUR_PATH
-        server: YOUR_CDN_DOMAIN
-        port: 443
-        tls: true
-        alpn:
-          - h2
-        servername: YOUR_CDN_DOMAIN
-        client-fingerprint: chrome
-        reality-opts: { public-key: "" }
-        reuse-settings:
-          max-concurrency: "16-32"
-          c-max-reuse-times: "0"
-          h-max-reusable-secs: "1800-3000"
+
+  # Hysteria2 + Salamander 混淆（UDP 8443），由 Xray 原生 hysteria inbound 提供。
+  # password 与 obfs-password 是两个独立的值，两端都必须一致。
+  # up/down 不写 = 客户端用 BBR；写具体速率则切到 Brutal 模式。
+  - name: Hysteria2-obfs-YOUR_HOST
+    type: hysteria2
+    server: YOUR_VPS_IP
+    port: 8443
+    password: YOUR_HY2_PASSWORD
+    obfs: salamander
+    obfs-password: YOUR_OBFS_PASSWORD
+    sni: YOUR_REALITY_DOMAIN
+    skip-cert-verify: false
+    alpn:
+      - h3
 
 proxy-groups:
   - name: 前置代理

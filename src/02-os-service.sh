@@ -54,12 +54,17 @@ if [[ "$OS_ID" == "alpine" ]]; then
   NGINX_STOP_CMD="rc-service nginx stop"
   NGINX_START_CMD="rc-service nginx start"
   NGINX_RESTART_CMD="rc-service nginx restart"
+  XRAY_RESTART_CMD="rc-service xray restart"
 else
   SERVICE_TYPE="systemd"
   NGINX_STOP_CMD="systemctl stop nginx"
   NGINX_START_CMD="systemctl start nginx"
   NGINX_RESTART_CMD="systemctl restart nginx"
+  XRAY_RESTART_CMD="systemctl restart xray"
 fi
+# XRAY_RESTART_CMD 用于 acme.sh 的 --reloadcmd（10-service-check.sh）。
+# 那条命令将来由 acme 的 cron 执行，届时本脚本的 shell 函数（service_restart）
+# 并不存在，所以必须是可独立运行的完整系统命令，不能复用函数。
 
 service_enable() {
   if [[ "$SERVICE_TYPE" == "openrc" ]]; then

@@ -10,10 +10,16 @@ mkdir -p /etc/ssl/private
 # 但它的 reloadcmd 会先于我们自己的 nginx -t 重启 nginx：配置有错时 acme 只会打印
 # "Reload error"，真正的 nginx 报错被吞掉。因此这里让 reloadcmd 自带 nginx -t，
 # 并容忍 acme 的非零返回，把判定权交给紧随其后的显式自检。
+#
+# v4.0.0：reloadcmd 必须同时重启 Xray。h3-direct 与 Hysteria2-obfs 两个 inbound
+# 直接读 /etc/ssl/private/fullchain.cer（不像 Reality 用自签密钥），证书 60 天
+# 续期一次后 Xray 若不重启，会继续用内存里的旧证书直到下次手工重启——
+# 表现是「网站证书正常，但这两个节点在续期后某天突然握手失败」。
+# Xray 重启放在 nginx 之后且失败不阻断：nginx 承载伪装站，优先级更高。
 acme.sh --install-cert -d "$REALITY_DOMAIN" --ecc \
   --key-file /etc/ssl/private/private.key \
   --fullchain-file /etc/ssl/private/fullchain.cer \
-  --reloadcmd "nginx -t && ${NGINX_RESTART_CMD}" || \
+  --reloadcmd "nginx -t && ${NGINX_RESTART_CMD} && { ${XRAY_RESTART_CMD} || true; }" || \
   warn "acme.sh reloadcmd 返回非零，下面的 Nginx 自检会给出具体原因"
 
 info "测试 Nginx 配置..."

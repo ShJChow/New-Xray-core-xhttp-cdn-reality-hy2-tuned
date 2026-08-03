@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="3.1.1"
+PROJECT_VERSION="4.0.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -50,21 +50,23 @@ FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
-# v2.0.2：默认节点集 = 2 条 Reality 直连 + Vless-xhttp-tls-UDP-cdn，
-# 加上 add-quic.sh 扩展的 Hysteria2，共 4 条。
+# ==================================================
+# v4.0.0 节点集：5 条，全部由 Xray 单核心提供
+# ==================================================
+#   1. Vless-xhttp-tls-UDP-cdn   经 CDN，h3/QUIC —— 实测最快
+#   2. Vless-xhttp-h3-direct     直连 UDP 443，h3/QUIC
+#   3. Hysteria2-obfs            直连 UDP 8443，Salamander 混淆
+#   4. Vless-reality-vision      直连 TCP 443，Vision
+#   5. Vless-xhttp-reality       直连 TCP 443，XHTTP 上下行不分离
 #
-# Vless-xhttp-tls-UDP-cdn（经 CDN 的 alpn=h3）**保留为默认输出**：
-# 用户实测它在 iOS onexray 下速度最快、快于 Hysteria2（见 README 首行，
-# 测试机 Oracle 4 OCPU / 24 GB）。v2.0.1 曾把它和两条 split 节点一起关掉，
-# 那是错的——「TUN 下最脆弱」与「实测最快」可以同时成立，正确做法是保留节点、
-# 用客户端绕行规则解决 TUN 自环（安装时生成的 client-config-v2rayn-tun.txt
-# 已给出本机要加直连的 CDN 域名），而不是删掉一条实测最快的节点。
+# 不再引入 sing-box 或独立 hysteria 二进制：Hysteria2 由 Xray 原生 inbound 提供
+# （v26.3.27+）。TUIC v5 无法提供——Xray 的 inbound 协议列表中没有 TUIC，
+# 第 5 条由 h3-direct 顶替（同为 QUIC 传输）。
 #
-# 本开关管两条**上下行分离**节点（split-cdnup-realitydown /
-# split-realityup-cdndown）。v3.1.0 起**默认开启**：用户选择整合上游
-# Yulinanami/my-xhttp-cdn-config 的全节点集（上游默认含这两条）。它们混用
-# CDN 域名 + Reality，在 TUN 模式下需手工加直连规则（见 client-config-v2rayn-tun.txt），
-# 普通模式下无此问题。设 FEATURE_SPLIT_NODES=false 可关闭。
-# 兼容 v2.0.1 短暂存在过的 FEATURE_CDN_NODES 旧名。
-FEATURE_SPLIT_NODES=${FEATURE_SPLIT_NODES:-${FEATURE_CDN_NODES:-true}}
+# 下面两个开关控制的节点依赖 **Xray ≥ 26.6.1**，原因见 03-xray-install.sh 的
+# require_xray_version：低于该版本时 finalmask 的 UDP listener 会在收到第一个
+# 无效包后死亡（issue #6184），Hysteria2 与 XHTTP/3 双双静默失效。
+# 版本不足时这两个开关会被自动置 false，只保留 3 条能用的节点（L1 best-effort）。
+FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
+FEATURE_HY2=${FEATURE_HY2:-true}
 

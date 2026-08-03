@@ -10,25 +10,16 @@ XHTTP over HTTP/3（UDP 443）
 # 经 CDN：由 Cloudflare 边缘终结 h3，回源仍是 TCP，服务端无需任何改动（需 CF 已开启 HTTP/3，默认开启）
 vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
 
-# 直连 VPS 的 h3 节点：v1.2.7 起一键脚本默认不再生成（FEATURE_H3_DIRECT=false）——
-# 用户在 Shadowrocket 下实测不通。想自行验证的用 FEATURE_H3_DIRECT=true 重跑脚本，
-# 此时需 Nginx 监听 UDP 443 quic 且防火墙放行 UDP 443；该监听曾在部分环境下导致
-# nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库）。手工配置前请先用一键脚本验证过。
+# 直连 VPS 的 h3 节点（v4.0.0 起默认生成，FEATURE_H3_DIRECT=true）：
+# 由 Xray 自己监听 UDP 443，**不经过 nginx**——因此不需要 nginx 的 listen quic，
+# 也就绕开了历史上那次 nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库）。
+# 需要 Xray >= 26.6.1，并在防火墙/安全组放行 UDP 443。
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-h3-direct-YOUR_HOST
 
-上下行分离（依赖 Xray 的 downloadSettings 字段）
-# v3.1.0 起一键脚本**默认输出**这两条（整合上游全节点集）。
-# 它们混用 CDN 域名 + Reality，TUN 模式下需手工加直连规则（见 client-config-v2rayn-tun.txt）；
-# 不需要时设 FEATURE_SPLIT_NODES=false 重跑即可关闭。
-# 【客户端支持性未验证】downloadSettings 是 Xray-core 特有字段，Shadowrocket 能否解析
-# 未经实测。推荐用 mihomo / onexray 使用这两条；SR 中若显示异常，改用上面的节点。
-# 下面两行是结构示意，YOUR_* 需替换；完整可用的版本请直接从一键脚本生成的
-# ~/client-config.txt 里取。
-
-# 上行经 CDN（防封锁）/ 下行直连 VPS 走 Reality（拿速度）
-vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_VPS_IPV4%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22show%22%3Afalse%2C%22serverName%22%3A%22YOUR_REALITY_DOMAIN%22%2C%22fingerprint%22%3A%22chrome%22%2C%22shortId%22%3A%22YOUR_SHORT_ID%22%2C%22publicKey%22%3A%22YOUR_PUBILC_KEY%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22%22%2C%22path%22%3A%22YOUR_PATH_ENC%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-split-cdnup-realitydown-YOUR_HOST
-
-# 上行直连 VPS 走 Reality / 下行经 CDN
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_CDN_DOMAIN%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22YOUR_CDN_DOMAIN%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22YOUR_CDN_DOMAIN%22%2C%22path%22%3A%22YOUR_PATH_ENC%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-split-realityup-cdndown-YOUR_HOST
+Hysteria2 + Salamander 混淆（UDP 8443）
+# v4.0.0 起由 Xray 原生 hysteria inbound 提供（v26.3.27+），不再需要独立的
+# hysteria 二进制。obfs 密码与认证密码是两个独立的值，两端必须一致。
+hysteria2://YOUR_HY2_PASSWORD@YOUR_VPS_IPV4:8443/?sni=YOUR_REALITY_DOMAIN&insecure=0&obfs=salamander&obfs-password=YOUR_OBFS_PASSWORD#Hysteria2-obfs-YOUR_HOST
 
 注意：
 - YOUR_UUID_1 的节点 (Vision 直连) encryption 保持 none，因为不过 CDN
@@ -38,6 +29,5 @@ vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&securi
 - flow 默认 xtls-rprx-vision（兼容性最好，且能走 Splice）
 - 只有客户端确认支持时才改成 xtls-rprx-vision-udp443（不拦截 UDP 443）；服务端永远只能写 xtls-rprx-vision
 - UDP 节点的 alpn 必须恰好只有 h3，Xray 与 Mihomo 才会走 HTTP/3；多写一个 h2 就会退回 TCP
-- 上下行分离节点的两条腿走的是 h2，不要改成 h3
 - 客户端 flow 留空会被服务端直接拒绝，详见 docs/10.流控调优.md 第 4 节
 - YOUR_PATH_ENC 是 YOUR_PATH 把 / 换成 %2F 后的值（如 /abc → %2Fabc）

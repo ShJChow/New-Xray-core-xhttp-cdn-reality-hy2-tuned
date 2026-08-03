@@ -80,20 +80,23 @@ v2rayN 里的设置位置
 
   最稳  1. Vless-reality-vision              裸 IP + TCP
         2. Vless-xhttp-reality               裸 IP + TCP
-        3. Hysteria2-direct                  裸 IP + UDP
-        4. Vless-xhttp-tls-H2-cdn            域名 + TCP/h2
+        3. Hysteria2-obfs                    裸 IP + UDP ${HY2_PORT}
+        4. Vless-xhttp-h3-direct             裸 IP + UDP ${H3_PORT}
   最弱  5. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
 
 注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 5 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的
 CDN 域名加进直连列表才能在 TUN 下正常工作。配好了它就是首选。
-节点 4 是同链路的 TCP 版本（alpn=h2），UDP/QUIC 被封时作为兜底。
+
+节点 3/4 是直连 VPS 裸 IP 的 UDP 节点，只要为 ${VPS_IP} 加了直连路由就不会自环，
+比节点 5 少一层域名解析的依赖。两者都需要在**云厂商安全组**里放行对应 UDP 端口
+（UDP ${H3_PORT} 与 UDP ${HY2_PORT}）——这一层在机器外面，脚本查不到也改不了。
 
 TCP 之所以更稳，是因为 dialer 绑定物理接口的保护在 TCP 路径上更完整；
 QUIC 是无连接 UDP，同样的保护在多数平台上兜不住。
 
-若照上面配好直连规则后节点 5 仍不通，**先换节点 1、2 或 4 验证**：
-1/2/4 能通而 5 不通 = 客户端 UDP 侧的问题，与服务端无关。
+若照上面配好直连规则后节点 5 仍不通，**先换节点 1 或 2 验证**：
+1/2 能通而 3/4/5 都不通 = 客户端 UDP 侧或安全组的问题，与 Xray 配置无关。
 
 
 mihomo / Clash 用户不需要这份清单

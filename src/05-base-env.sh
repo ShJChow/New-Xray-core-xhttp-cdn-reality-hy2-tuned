@@ -74,6 +74,41 @@ XHTTP_PATH="/$(echo "$UUID2" | tr -d '-' | cut -c1-8)"
 XHTTP_PADDING_PLACEMENT="queryInHeader"
 XHTTP_PADDING_METHOD="tokenish"
 
+# ==================================================
+# 直连 UDP 节点参数（v4.0.0）
+# ==================================================
+# 与 extensions/common-nodes/00-env-utils.sh:48 的实现保持一致。主安装脚本原先
+# 没有这个函数（只在扩展里有），节点 URI 里拼未转义的密码会产生非法 URI。
+rawurlencode() {
+  local string="$1"
+  local encoded="" i char hex
+  local LC_ALL=C
+
+  for ((i = 0; i < ${#string}; i++)); do
+    char="${string:i:1}"
+    case "$char" in
+      [a-zA-Z0-9.~_-]) encoded+="$char" ;;
+      *) printf -v hex '%%%02X' "'$char"; encoded+="$hex" ;;
+    esac
+  done
+  printf '%s' "$encoded"
+}
+
+# 密码用 hex：URL 安全，且避开 YAML 里需要引号的字符。
+# 允许用环境变量覆盖，便于重装时保持客户端配置不变。
+HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 16)}"
+OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
+
+# H3_PORT 走 UDP 443：与 Reality 的 TCP 443 不冲突（一个 UDP 一个 TCP），
+# 且标准 h3 端口在流量特征上最自然。HY2_PORT 沿用项目既有约定的 8443。
+H3_PORT="${H3_PORT:-443}"
+HY2_PORT="${HY2_PORT:-8443}"
+
+# 版本闸门与端口互检必须在端口变量定义之后、生成配置之前执行。
+# 前者可能把两个 FEATURE 开关置 false，后者在冲突时直接中止。
+require_xray_version_for_udp
+check_udp_port_conflict
+
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XRAY_XHTTP_PADDING_JSON=$(cat <<EOF
 ,

@@ -94,27 +94,24 @@ EOF
 )
 fi
 
-# 两条上下行分离节点按 FEATURE_SPLIT_NODES 决定是否输出（v2.0.2，见 01-env.sh）。
-# Vless-xhttp-tls-UDP-cdn 不受本开关控制，它是默认节点集的一员（实测最快）。
-# 用 heredoc 先渲染成变量再插进 client-config.txt——关闭时变量为空，
-# 随后的 sed 会删掉留下的空行。空行会被 base64 进订阅，v2rayN 里会多出一条空节点。
-# L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理，
-# 否则会出现「订阅里没有、mihomo 配置里还有」的不一致。
-if [[ "$FEATURE_SPLIT_NODES" == true ]]; then
-  SPLIT_NODE_LINES=$(cat << SPLITNODEEOF
-@@include templates/cdn-node-lines.txt.tmpl
-SPLITNODEEOF
-)
-  MIHOMO_SPLIT_PROXIES=$(cat << MIHOMOSPLITEOF
-@@include templates/mihomo-cdn-proxies.yaml.tmpl
-MIHOMOSPLITEOF
-)
-  info "节点集: Reality x2 + xhttp-tls-UDP-cdn + 上下行分离 x2（FEATURE_SPLIT_NODES=true）"
+# v4.0.0 节点集：3 条 QUIC/h3 + 2 条 TCP 兜底，全部由 Xray 单核心提供。
+# 两条直连 UDP 节点（h3-direct / Hysteria2）依赖 Xray ≥26.6.1，低版本时
+# FEATURE_H3_DIRECT / FEATURE_HY2 会在 03-xray-install.sh 里被置 false，
+# 此处渲染为空行，随后的 sed 删掉——空行若进了 base64 订阅会变成一条空节点。
+# L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理。
+if [[ "$FEATURE_H3_DIRECT" == true ]]; then
+  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
 else
-  SPLIT_NODE_LINES=""
-  MIHOMO_SPLIT_PROXIES=""
-  info "节点集: Reality x2 + xhttp-tls-UDP-cdn（默认，实测最快；FEATURE_SPLIT_NODES=true 可加两条上下行分离）"
+  H3_DIRECT_NODE_LINE=""
 fi
+
+if [[ "$FEATURE_HY2" == true ]]; then
+  HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")#Hysteria2-obfs-${HOSTNAME_TAG}"
+else
+  HY2_NODE_LINE=""
+fi
+
+info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

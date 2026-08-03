@@ -80,6 +80,143 @@ else
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":100,"tcpKeepAliveInterval":30,"tcpUserTimeout":10000}'
 fi
 
+# ==================================================
+# 直连 UDP inbound（v4.0.0）
+# --------------------------------------------------
+# 两者都用 acme 签发的真实证书（Reality+CDN 双域名 SAN，见 07-acme-cert.sh:34），
+# 而不是 Reality —— Hysteria2 与标准 h3 客户端都要求可验证的证书链。
+# 证书不存在时跳过这两个节点，不中断安装（L1 best-effort）。
+#
+# 配置字段依据 docs/llms-full.md（Xray 官方文档离线副本），非凭记忆书写（L3）：
+#   Hysteria2 inbound  : :3001  protocol=hysteria / settings.clients[].auth
+#   HysteriaObject     : :3102  hysteriaSettings.masquerade
+#   FinalMaskObject    : :8211  finalmask.udp[].type / .settings
+#   salamander settings: :8460  { "password": "..." }
+# 注意 obfs 走 finalmask.udp[]，不是原版 hysteria 的 obfs.salamander；
+# 认证是 clients[].auth，不是 users[]。
+# config.json 里写的是 /etc/ssl/private/ —— 该路径由 10-service-check.sh:13-16 的
+# acme.sh --install-cert 落地，**晚于本文件**。所以可用性判定必须查 acme 的源证书
+# （07-acme-cert.sh:18 的 ACME_CERT_HOME），查目标路径在首次安装时必然为空，
+# 会把两个节点误判为不可用。时序上没有问题：xray -test 在 10:23，install-cert 在 10:13。
+CERT_FILE="/etc/ssl/private/fullchain.cer"
+CERT_KEY="/etc/ssl/private/private.key"
+XRAY_H3_DIRECT_INBOUND=""
+XRAY_HY2_INBOUND=""
+
+if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
+  if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true ]]; then
+    warn "未找到 acme 证书 ${ACME_CERT_HOME}/fullchain.cer，已跳过 h3-direct 与 Hysteria2 两个直连 UDP 节点"
+    FEATURE_H3_DIRECT=false
+    FEATURE_HY2=false
+  fi
+fi
+
+if [[ "$FEATURE_H3_DIRECT" == true ]]; then
+  XRAY_H3_DIRECT_INBOUND=$(cat <<H3EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${H3_PORT},
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "${VLESSENC_DECRYPTION}"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h3"],
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ]
+                },
+                "xhttpSettings": {
+                    "host": "",
+                    "path": "${XHTTP_PATH}",
+                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+H3EOF
+)
+  info "已启用 h3-direct 直连节点: UDP ${H3_PORT}"
+fi
+
+if [[ "$FEATURE_HY2" == true ]]; then
+  XRAY_HY2_INBOUND=$(cat <<HY2EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${HY2_PORT},
+            "protocol": "hysteria",
+            "settings": {
+                "version": 2,
+                "clients": [
+                    {
+                        "auth": "${HY2_PASSWORD}",
+                        "level": 0
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "hysteria",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h3"],
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ]
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "masquerade": {
+                        "type": "proxy",
+                        "url": "https://127.0.0.1:8003",
+                        "rewriteHost": false,
+                        "insecure": true
+                    }
+                },
+                "finalmask": {
+                    "udp": [
+                        {
+                            "type": "salamander",
+                            "settings": {
+                                "password": "${OBFS_PASSWORD}"
+                            }
+                        }
+                    ]
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+HY2EOF
+)
+  info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆）"
+fi
+
 info "写入 /etc/nginx/nginx.conf ..."
 cat > /etc/nginx/nginx.conf << NGINXEOF
 @@include templates/nginx.conf.tmpl
@@ -109,7 +246,12 @@ info "写入 ${NODE_ENV_FILE} ..."
 {
   printf 'PROJECT_NAME=%q\n'      "$PROJECT_NAME"
   printf 'PROJECT_VERSION=%q\n'   "$PROJECT_VERSION"
-  printf 'FEATURE_SPLIT_NODES=%q\n' "$FEATURE_SPLIT_NODES"
+  printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
+  printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
+  printf 'H3_PORT=%q\n'           "$H3_PORT"
+  printf 'HY2_PORT=%q\n'          "$HY2_PORT"
+  printf 'HY2_PASSWORD=%q\n'      "$HY2_PASSWORD"
+  printf 'OBFS_PASSWORD=%q\n'     "$OBFS_PASSWORD"
   printf 'PROJECT_REPO=%q\n'      "$PROJECT_REPO"
   printf 'INSTALL_TIME=%q\n'      "$(date '+%Y-%m-%d %H:%M:%S %Z')"
   printf 'OS_ID=%q\n'             "$OS_ID"

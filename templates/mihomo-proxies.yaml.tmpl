@@ -1,4 +1,73 @@
+# 节点顺序 = HTTP/3 优先。mihomo-full.yaml.tmpl 的 proxy-groups 用 include-all: true，
+# 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
+# 前三条是 QUIC/h3，后两条是 TCP 兜底（UDP 被封时可用）。
 proxies:
+  # ---------- HTTP/3 (QUIC) ----------
+  # 1. 经 CDN 的 h3：实测最快。alpn 必须恰好只有 h3，mihomo 才走 HTTP/3
+  #    （transport/xhttp/client.go:159）。
+  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
+    type: vless
+    server: ${CDN_DOMAIN}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h3
+    servername: ${CDN_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # 2. 直连 VPS 的 h3（UDP ${H3_PORT}）：不经 CDN，Xray 自己监听 UDP。
+  #    sni 用 Reality 域名——证书是 Reality+CDN 双域名 SAN，直连侧用前者。
+  - name: Vless-xhttp-h3-direct-${HOSTNAME_TAG}
+    type: vless
+    server: ${VPS_IP}
+    port: ${H3_PORT}
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h3
+    servername: ${REALITY_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}
+    xhttp-opts:
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
+  #    inbound 提供，不再需要独立的 hysteria 二进制。
+  #    up/down 留空 = 客户端用 BBR；填具体值则切到 Brutal 模式。
+  - name: Hysteria2-obfs-${HOSTNAME_TAG}
+    type: hysteria2
+    server: ${VPS_IP}
+    port: ${HY2_PORT}
+    password: ${HY2_PASSWORD}
+    obfs: salamander
+    obfs-password: ${OBFS_PASSWORD}
+    sni: ${REALITY_DOMAIN}
+    skip-cert-verify: false
+    alpn:
+      - h3
+
+  # ---------- TCP 兜底（UDP/QUIC 被封时使用）----------
   - name: Vless-reality-vision-${HOSTNAME_TAG}
     type: vless
     server: ${VPS_IP}
@@ -41,54 +110,3 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-
-  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
-    type: vless
-    server: ${CDN_DOMAIN}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    network: xhttp
-    alpn:
-      - h3
-    servername: ${CDN_DOMAIN}
-    client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-
-  # H2-cdn：CDN + XHTTP over HTTP/2（alpn=h2，TCP）。UDP-cdn 的 TCP 降级备用
-  #（UDP/QUIC 被封时兜底）。与 UDP-cdn 同一服务端路径，仅 alpn 不同。
-  # scMinPosts 与 alpn 无关（它约束 packet-up 的 POST 间隔），h2/h3 都要写——
-  # 上游的 xhttp+TLS+H2 节点带它，本仓库同为 h2 的 split-cdnup 节点也带它。
-  - name: Vless-xhttp-tls-H2-cdn-${HOSTNAME_TAG}
-    type: vless
-    server: ${CDN_DOMAIN}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    network: xhttp
-    alpn:
-      - h2
-    servername: ${CDN_DOMAIN}
-    client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-${MIHOMO_SPLIT_PROXIES}
