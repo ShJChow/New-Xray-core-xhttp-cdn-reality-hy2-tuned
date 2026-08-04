@@ -99,10 +99,20 @@ rawurlencode() {
 HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 16)}"
 OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
 
-# H3_PORT 走 UDP 443：与 Reality 的 TCP 443 不冲突（一个 UDP 一个 TCP），
-# 且标准 h3 端口在流量特征上最自然。HY2_PORT 沿用项目既有约定的 8443。
-H3_PORT="${H3_PORT:-443}"
+# H3_PORT **不能用 443**（v4.0.3 修复）：
+# v4.0.0 曾按「一个 UDP 一个 TCP，协议不同不冲突」把它设成 443，那是**未经验证的假设**。
+# 实际上 Xray 的 XHTTP inbound 在 alpn=h3 下可能被静默忽略而退回 TCP
+# （XTLS/Xray-core#4391，closed as not planned；#5849 同类），一旦退回，
+# 它就与 Reality 的 TCP 443 抢同一个端口，后 bind 的那个失败 —— 表现为「Reality 不通」。
+# 用独立端口后，即使 h3 退回 TCP 也只影响它自己，不会波及主力节点。
+H3_PORT="${H3_PORT:-8444}"
 HY2_PORT="${HY2_PORT:-8443}"
+
+# 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
+if [[ "$H3_PORT" == "443" ]]; then
+  warn "H3_PORT=443 会与 Reality 抢占 TCP 443（见 Xray#4391），已改用 8444"
+  H3_PORT=8444
+fi
 
 # 顺序不能调换，三者依次收窄「哪些新节点真的可用」：
 #   1. 版本闸门   —— 内核 <26.6.1 时关掉两个新节点

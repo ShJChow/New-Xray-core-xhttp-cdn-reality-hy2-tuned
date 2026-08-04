@@ -37,10 +37,10 @@
 
 ## 节点列表
 
-v4.0.0 起默认输出**下表 5 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
+v4.0.3 起默认输出**下表 4 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
 inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 
-**节点顺序即 HTTP/3 优先顺序**：前 3 条走 QUIC，后 2 条是 UDP 被封时的 TCP 兜底。
+**节点顺序即 HTTP/3 优先顺序**：前 2 条走 QUIC，后 2 条是 UDP 被封时的 TCP 兜底。
 Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
 节点 1 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
@@ -52,14 +52,18 @@ Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
 | 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
-| 2 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 443** | XHTTP + TLS，alpn h3，不经 CDN |
-| 3 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
-| 4 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
-| 5 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
+| 2 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
+| 3 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
+| 4 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 
-节点 2/3 走裸 UDP 直连，需要在**云厂商安全组**放行 UDP 443 与 UDP 8443
-（这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时这两条会被
-自动禁用，只输出其余 3 条。
+节点 2 走裸 UDP 直连，需要在**云厂商安全组**放行 UDP 8443
+（这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时它会被自动禁用。
+
+> **`Vless-xhttp-h3-direct` 已降为 opt-in**（v4.0.3）：XHTTP over h3 在上游有两个
+> 未修复且已 closed as not planned 的问题——[#4391](https://github.com/XTLS/Xray-core/issues/4391)
+> `alpn=h3` 被静默忽略而退回 TCP、[#5849](https://github.com/XTLS/Xray-core/issues/5849)
+> h3 长期不工作。退回 TCP 后它会与 Reality 抢 443，实测表现为「Reality 节点不通」。
+> 需要时设 `FEATURE_H3_DIRECT=true` 启用，端口已改为 **8444**（不再与 443 冲突）。
 
 ### 从旧版升级
 
@@ -170,9 +174,9 @@ bash ~/install-xpadding.sh
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_H3_DIRECT` | `false` 关闭直连 h3 节点（UDP 443） | `true` |
+| `FEATURE_H3_DIRECT` | `true` 启用直连 h3 节点（UDP 8444，上游有已知问题，默认关） | `false` |
 | `FEATURE_HY2` | `false` 关闭 Hysteria2-obfs 节点（UDP 8443） | `true` |
-| `H3_PORT` / `HY2_PORT` | 两条直连 UDP 节点的端口 | `443` / `8443` |
+| `H3_PORT` / `HY2_PORT` | 两条直连 UDP 节点的端口（`H3_PORT` 禁止设 443，会被强制改回 8444） | `8444` / `8443` |
 | `KEEP_LEGACY_UDP` | `true` 保留旧的独立 hysteria / quic-h3 扩展（此时新的两条 UDP 节点会被关闭） | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
