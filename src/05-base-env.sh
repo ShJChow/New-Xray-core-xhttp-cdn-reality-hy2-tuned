@@ -104,9 +104,12 @@ OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
 H3_PORT="${H3_PORT:-443}"
 HY2_PORT="${HY2_PORT:-8443}"
 
-# 版本闸门与端口互检必须在端口变量定义之后、生成配置之前执行。
-# 前者可能把两个 FEATURE 开关置 false，后者在冲突时直接中止。
+# 顺序不能调换，三者依次收窄「哪些新节点真的可用」：
+#   1. 版本闸门   —— 内核 <26.6.1 时关掉两个新节点
+#   2. 旧组件迁移 —— 停用独立 hysteria / nginx quic 段，把 UDP 端口腾出来
+#   3. 端口复查   —— 迁移后仍被占用的，对应节点自动关闭（不中止安装）
 require_xray_version_for_udp
+migrate_legacy_udp_components
 check_udp_port_conflict
 
 if [[ "$FEATURE_XPADDING" == true ]]; then

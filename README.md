@@ -61,6 +61,18 @@ Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 （这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时这两条会被
 自动禁用，只输出其余 3 条。
 
+### 从旧版升级
+
+装过 `add-quic.sh`（独立 hysteria 二进制）或 `add-quic-h3.sh` 的机器，重跑安装脚本时
+会**自动迁移**：停用旧组件、备份配置到 `/var/backups/xray-xhttp-migrate/`、
+从 nginx 移除 quic 监听段，把 UDP 端口让给 Xray 原生实现。
+
+旧的独立 hysteria **没有 Salamander 混淆**，迁移后才会有。若想保留旧组件，
+设 `KEEP_LEGACY_UDP=true`——此时新的两条 UDP 节点会被自动关闭以避免端口冲突。
+
+Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine 除外），
+而不是跳过后静默关闭这两条节点。
+
 > **TUIC v5 未提供**：Xray-core 的 inbound 协议列表中没有 TUIC，在「仅用 Xray」的
 > 前提下无法实现。节点 2（XHTTP over h3 直连）传输层同为 QUIC，是最接近的替代。
 
@@ -161,6 +173,7 @@ bash ~/install-xpadding.sh
 | `FEATURE_H3_DIRECT` | `false` 关闭直连 h3 节点（UDP 443） | `true` |
 | `FEATURE_HY2` | `false` 关闭 Hysteria2-obfs 节点（UDP 8443） | `true` |
 | `H3_PORT` / `HY2_PORT` | 两条直连 UDP 节点的端口 | `443` / `8443` |
+| `KEEP_LEGACY_UDP` | `true` 保留旧的独立 hysteria / quic-h3 扩展（此时新的两条 UDP 节点会被关闭） | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |

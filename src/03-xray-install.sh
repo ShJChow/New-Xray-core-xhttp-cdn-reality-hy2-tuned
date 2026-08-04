@@ -49,28 +49,117 @@ require_xray_version_for_udp() {
 #   extensions/quic-h3        默认 UDP 443  （/etc/xhttp-cdn/quic-h3.env）
 #   extensions/common-nodes   默认 UDP 8443 （/etc/hysteria/config.yaml）
 # 纯 Xray 方案下这两个扩展已无必要，同时存在会抢同一个端口。
-check_udp_port_conflict() {
+# 旧版 UDP 组件的自动迁移（v4.0.1）
+# --------------------------------------------------
+# v4.0.0 起 Hysteria2 与 h3 直连都由 Xray 原生提供，早期版本的两个扩展
+# （add-quic.sh 的独立 hysteria 二进制、add-quic-h3.sh 的 nginx quic 段）
+# 会抢同一批 UDP 端口。这些组件本来就是本项目自己装的，所以由本脚本自动接管，
+# 而不是报错要求用户手工卸载——挡住用户的结果是他们继续用没有 obfs 的旧节点。
+#
+# 设 KEEP_LEGACY_UDP=true 可保留旧组件，此时改为关闭新节点避免端口冲突。
+LEGACY_BACKUP_DIR="/var/backups/xray-xhttp-migrate"
+
+migrate_legacy_udp_components() {
   local hy_conf="/etc/hysteria/config.yaml"
+  local h3_env="/etc/xhttp-cdn/quic-h3.env"
+  local nginx_conf="/etc/nginx/nginx.conf"
+  local found=false stamp
+  stamp="$(date +%Y%m%d-%H%M%S)"
 
-  if [[ "$FEATURE_H3_DIRECT" == true && -f /etc/xhttp-cdn/quic-h3.env ]]; then
-    error "检测到 add-quic-h3 扩展（/etc/xhttp-cdn/quic-h3.env），它默认占用 UDP ${H3_PORT}。
-    v4.0.0 的 h3-direct 节点由 Xray 直接提供，与该扩展重复且端口冲突。
-    请先卸载扩展再重跑：${MANAGE_CMD} uninstall 后重新安装，或手工删除 nginx 中
-    '# BEGIN quic-h3' 到 '# END quic-h3' 的段落与该 env 文件。"
+  [[ -f "$hy_conf" || -f "$h3_env" ]] && found=true
+  [[ "$found" == true ]] || return 0
+
+  if [[ "${KEEP_LEGACY_UDP:-false}" == true ]]; then
+    warn "KEEP_LEGACY_UDP=true：保留旧的独立 UDP 组件，改为关闭 Xray 原生的两个新节点"
+    [[ -f "$hy_conf" ]] && { FEATURE_HY2=false; warn "  → Hysteria2-obfs 已关闭（旧的独立 hysteria 无 Salamander 混淆）"; }
+    [[ -f "$h3_env" ]] && { FEATURE_H3_DIRECT=false; warn "  → h3-direct 已关闭"; }
+    return 0
   fi
 
-  if [[ "$FEATURE_HY2" == true && -f "$hy_conf" ]]; then
-    error "检测到独立 hysteria2 二进制的配置（${hy_conf}），它默认占用 UDP ${HY2_PORT}。
-    v4.0.0 的 Hysteria2 由 Xray 原生 inbound 提供，不再需要独立二进制。
-    请先停用并卸载：systemctl disable --now hysteria-server; rm -rf /etc/hysteria /usr/local/bin/hysteria"
+  info "检测到旧版 UDP 组件，开始自动迁移到 Xray 原生实现..."
+  install -d -m 700 "$LEGACY_BACKUP_DIR" 2>/dev/null || true
+
+  # ---- 独立 hysteria 二进制 → Xray 原生 hysteria inbound ----
+  if [[ -f "$hy_conf" ]]; then
+    cp -a "$hy_conf" "${LEGACY_BACKUP_DIR}/hysteria-config.yaml.${stamp}" 2>/dev/null || true
+    if [[ "$SERVICE_TYPE" == "systemd" ]]; then
+      systemctl disable --now hysteria-server >/dev/null 2>&1 || true
+    else
+      rc-service hysteria-server stop >/dev/null 2>&1 || true
+      rc-update del hysteria-server default >/dev/null 2>&1 || true
+    fi
+    rm -rf /etc/hysteria 2>/dev/null || true
+    rm -f /usr/local/bin/hysteria 2>/dev/null || true
+    rm -f /etc/systemd/system/hysteria-server.service /etc/init.d/hysteria-server 2>/dev/null || true
+    info "  已停用独立 hysteria 二进制（配置备份于 ${LEGACY_BACKUP_DIR}）"
+    info "  Hysteria2 改由 Xray 原生 inbound 提供，本次起带 Salamander 混淆"
   fi
+
+  # ---- add-quic-h3 的 nginx quic 段 → Xray 自己监听 UDP ----
+  # 不删掉的话 nginx 会继续占 UDP 443，Xray 的 h3-direct 无法 bind。
+  if [[ -f "$h3_env" ]]; then
+    if [[ -f "$nginx_conf" ]]; then
+      cp -a "$nginx_conf" "${LEGACY_BACKUP_DIR}/nginx.conf.${stamp}" 2>/dev/null || true
+      sed -i '/# BEGIN quic-h3/,/# END quic-h3/d' "$nginx_conf" 2>/dev/null || true
+      sed -i '/# BEGIN quic xhttp/,/# END quic xhttp/d' "$nginx_conf" 2>/dev/null || true
+      if command -v nginx >/dev/null 2>&1 && ! nginx -t >/dev/null 2>&1; then
+        warn "  移除 nginx quic 段后 nginx -t 未通过，已还原该文件"
+        cp -a "${LEGACY_BACKUP_DIR}/nginx.conf.${stamp}" "$nginx_conf" 2>/dev/null || true
+      else
+        info "  已从 nginx 移除 quic 监听段（改由 Xray 自己 bind UDP ${H3_PORT}）"
+      fi
+    fi
+    rm -f "$h3_env" 2>/dev/null || true
+  fi
+
+  [[ "$SERVICE_TYPE" == "systemd" ]] && systemctl daemon-reload >/dev/null 2>&1 || true
+  info "旧版 UDP 组件迁移完成，回滚可用 ${LEGACY_BACKUP_DIR} 中的备份"
+}
+
+# 迁移之后仍要确认端口确实空了出来——迁移可能因权限或非常规安装而部分失败。
+check_udp_port_conflict() {
+  command -v ss >/dev/null 2>&1 || return 0
+  local p
+
+  for p in "${H3_PORT}:FEATURE_H3_DIRECT:h3-direct" "${HY2_PORT}:FEATURE_HY2:Hysteria2-obfs"; do
+    local port="${p%%:*}" rest="${p#*:}"
+    local var="${rest%%:*}" name="${rest#*:}"
+    [[ "${!var}" == true ]] || continue
+    if ss -lnup 2>/dev/null | grep -qE ":${port}\b"; then
+      local holder
+      holder=$(ss -lnupH 2>/dev/null | grep -E ":${port}\b" | grep -oE 'users:\(\("[^"]+' | head -1 | sed 's/.*"//')
+      # xray 自己占着是重跑安装的正常情况（旧进程还没被 restart 掉），不算冲突
+      if [[ "$holder" == "xray" ]]; then continue; fi
+      warn "UDP ${port} 已被 ${holder:-未知进程} 占用，${name} 节点已自动关闭"
+      warn "  腾出该端口后重跑安装脚本即可启用；或用 ${var}=false 显式关闭本提示"
+      printf -v "$var" '%s' false
+    fi
+  done
 }
 
 install_xray() {
   info "Installing Xray-core..."
 
   if [ -f "/usr/local/bin/xray" ]; then
-    info "Xray already installed: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo 'unknown')"
+    local cur
+    cur=$(/usr/local/bin/xray version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    info "Xray already installed: ${cur:-unknown}"
+
+    # 已装但版本低于两个 UDP 节点的下限时**自动升级**，而不是跳过后再把节点关掉。
+    # 用户重跑安装脚本的意图就是让新功能生效；停在旧版只会让他们拿到一份
+    # 静默缺少 Hysteria2/h3 的配置，还以为是自己配错了。
+    if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
+      if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
+        warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
+        if [[ "$OS_ID" != "alpine" ]]; then
+          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root \
+            || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
+          info "升级后版本: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
+        else
+          warn "Alpine 下不自动升级，请手动更新后重跑（${MANAGE_CMD} update）"
+        fi
+      fi
+    fi
     return
   fi
 
