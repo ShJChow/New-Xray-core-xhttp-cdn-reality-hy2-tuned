@@ -151,7 +151,7 @@ else
                     "host": "",
                     "path": "${XHTTP_PATH}",
                     "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
-                }
+                }${XRAY_SOCKOPT_JSON}
             },
             "sniffing": {
                 "enabled": true,
