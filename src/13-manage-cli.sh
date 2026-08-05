@@ -133,6 +133,9 @@ cmd_info() {
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
   echo ""
+  echo -e "${CYAN}[+] CDN 独立 inbound${NC}"
+  echo "  CDN 独立端口:   TCP ${CDN_DIRECT_PORT:-10443}（TLS + XHTTP，走 CF Origin Rule 回源）"
+  echo ""
   echo -e "${CYAN}[+] 直连 UDP 节点${NC}"
   if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
     echo "  h3-direct:       UDP ${H3_PORT:-443}（Xray 自己监听，不经 nginx）"

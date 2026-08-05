@@ -100,6 +100,7 @@ fi
 # 会把两个节点误判为不可用。时序上没有问题：xray -test 在 10:23，install-cert 在 10:13。
 CERT_FILE="/etc/ssl/private/fullchain.cer"
 CERT_KEY="/etc/ssl/private/private.key"
+XRAY_CDN_DIRECT_INBOUND=""
 XRAY_H3_DIRECT_INBOUND=""
 XRAY_HY2_INBOUND=""
 
@@ -109,6 +110,59 @@ if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
     FEATURE_H3_DIRECT=false
     FEATURE_HY2=false
   fi
+fi
+
+# CDN 独立 inbound（v4.3.0）：CDN 流量不再走 Reality 443 的回落链，改由
+# 独立 TLS+XHTTP inbound 直接处理。客户端 URI 仍写 443（连 Cloudflare），
+# CF 侧用 Origin Rule 把 cdn 域名回源映射到 CDN_DIRECT_PORT。
+# 复用同一套 UUID2 / VLESS 加密 / XHTTP_PATH / xpadding（L19：与 443 回落路径同源）。
+# 证书不存在时跳过，CDN 节点仍走旧路径（443 回落）可用（L1 best-effort）。
+if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
+  warn "未找到 acme 证书，CDN 独立 inbound 已跳过（CDN 节点仍走 443 回落）"
+else
+  XRAY_CDN_DIRECT_INBOUND=$(cat <<CDNEOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${CDN_DIRECT_PORT},
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "${VLESSENC_DECRYPTION}"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h2","http/1.1"],
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ]
+                },
+                "xhttpSettings": {
+                    "host": "",
+                    "path": "${XHTTP_PATH}",
+                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+CDNEOF
+)
+  info "已启用 CDN 独立 inbound: TCP ${CDN_DIRECT_PORT}（TLS + XHTTP，走 CF Origin Rule）"
 fi
 
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
@@ -250,6 +304,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
   printf 'H3_PORT=%q\n'           "$H3_PORT"
   printf 'HY2_PORT=%q\n'          "$HY2_PORT"
+  printf 'CDN_DIRECT_PORT=%q\n'   "$CDN_DIRECT_PORT"
   printf 'HY2_PASSWORD=%q\n'      "$HY2_PASSWORD"
   printf 'OBFS_PASSWORD=%q\n'     "$OBFS_PASSWORD"
   printf 'PROJECT_REPO=%q\n'      "$PROJECT_REPO"

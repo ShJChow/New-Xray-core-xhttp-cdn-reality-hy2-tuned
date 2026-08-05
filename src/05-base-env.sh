@@ -108,6 +108,11 @@ OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
 H3_PORT="${H3_PORT:-8444}"
 HY2_PORT="${HY2_PORT:-8443}"
 
+# CDN 节点独立 inbound 端口（v4.3.0）：CDN 流量不再走 Reality 的 443 回落链，
+# 改由独立 TLS+XHTTP inbound 直接处理。客户端 URI 仍写 443（客户端连 Cloudflare），
+# Cloudflare 侧用 Origin Rule 把 cdn 域名的回源映射到本端口。
+CDN_DIRECT_PORT="${CDN_DIRECT_PORT:-10443}"
+
 # 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
 if [[ "$H3_PORT" == "443" ]]; then
   warn "H3_PORT=443 会与 Reality 抢占 TCP 443（见 Xray#4391），已改用 8444"
