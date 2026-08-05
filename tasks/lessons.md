@@ -647,3 +647,20 @@ TCP 443，后 bind 的失败——用户侧表现是「Reality 节点不通」�
 
 配套：把这类"不能共用"写成运行时兜底（本次是 `H3_PORT==443` 时强制改 8444），
 而不只是注释——注释拦不住下一个人把它改回去。
+
+## 2026-08-05 · v4.1.1 · releases/latest 返回的是"最后一个非 prerelease"，不是"最新版本"
+
+### L55 · `releases/latest` 端点语义 ≠ 最新版本，要看项目怎么标记 release
+
+**失败机制**：Xray-core 自 v26.4.25 起把**正式版** release 全部标记为 GitHub `prerelease`，
+`api.github.com/repos/XTLS/Xray-core/releases/latest` 只返回**最后一个非 prerelease**
+（v26.3.27，2026-03），实际最新 v26.7.28（2026-07）落后 4 个月。本项目的 `xh update`
+和官方 `install-release.sh` 默认都取这个端点 → 用户拿到的是 4 个月前的旧版，甚至
+`xh update` 会把已手动升级的新版**降级**回旧版，连带版本闸门（26.6.1）误判，
+两个直连 UDP 节点被静默关闭。
+
+**规则**：任何"取最新版本"的代码，先确认目标项目的 release 是否被标记为 prerelease
+（`GET /releases?per_page=3` 看 `prerelease` 字段）。若正式版也被标 prerelease，
+改用 `releases?per_page=1`（返回最新一条，不论 prerelease，排除 draft）而不是
+`releases/latest`。检测逻辑与安装逻辑必须走**同一套**版本来源——只改检测不改安装，
+官方脚本仍会用 `RELEASE_LATEST` 装回旧版，等于白改。
