@@ -1,10 +1,10 @@
 # ==================================================
 # 内核网络与句柄流控调优（函数库）
 #
-# v2.0.0：本模块**不再由安装脚本执行**。安装期不做任何参数优化，渲染出的
-# xray-config.json 与上游 Yulinanami/my-xhttp-cdn-config 逐字节一致。
+# v4.2.0：本模块由安装流程自动调用一次（安装完成时执行 `xh tuning on`），
+# 也可随时手动执行 `xh tuning on`，`xh tuning off` 可整体回滚。
 # 本文件被内联进管理命令 xh（src/13-manage-cli.sh 的 heredoc），
-# 只在用户显式执行 `xh tuning on` 时运行，`xh tuning off` 可整体回滚。
+# 全部 best-effort——OpenVZ / LXC 只读 sysctl 逐项跳过并告警，绝不阻断安装（L1）。
 #
 # 设计原则：
 #   1. 全部 best-effort。任何调优写操作失败只 warn，绝不中断（L1）。

@@ -4,7 +4,7 @@
 
  **xhttp+udp+cdn节点在软件（iOS）onexray和win11的v2rayN下，速度极快，快于histeria2(测试在Oracle 4ocpu+24运行)**
  
-基于 Xray-core 的 **XHTTP + CDN 上下行分离**一键部署方案，默认开启 **xpadding**（ECH 可选），并在内核、Nginx、Xray 三层把**流控参数全部打开**，附带常驻管理命令 `xh`。
+基于 Xray-core 的 **XHTTP + CDN 上下行分离**一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 5 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
 支持 V2rayN / Shadowrocket / Mihomo / onexray 客户端，支持 IPv4 与 IPv6。
 
@@ -13,14 +13,14 @@
 > **注意**：本方案使用 VLESS Encryption，客户端（V2rayN、Mihomo）需更新到支持 `vlessenc` / `xhttp` 的版本。
 >
 > **注意**：V2rayN v7.19.5+ 在 TUN 模式下链路可能不稳定，需启用旧版 TUN 保护选项（[PR #9005](https://github.com/2dust/v2rayN/pull/9005)）。
-安装所有节点和扩展histeria2节点后，运行 **xh tuning on**
+安装完成时**自动执行 `xh tuning on`**（内核层调优，best-effort；`FEATURE_AUTO_TUNING=false` 可跳过，`xh tuning off` 可回滚）
 ---
 
 ## 特性
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v4.0.0） | 默认 5 条，全部由 Xray 单核心提供：3 条 QUIC/h3（含 Hysteria2 obfs）+ 2 条 TCP 兜底。不再需要独立 hysteria 二进制 |
+| 节点集（v4.2.0） | 默认 5 条，全部由 Xray 单核心提供：3 条 QUIC/h3（含 Hysteria2 obfs）+ 2 条 TCP 兜底。不再需要独立 hysteria 二进制 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -37,14 +37,14 @@
 
 ## 节点列表
 
-v4.0.3 起默认输出**下表 4 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
+v4.2.0 起默认输出**下表 5 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
 inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 
-**节点顺序即 HTTP/3 优先顺序**：前 2 条走 QUIC，后 2 条是 UDP 被封时的 TCP 兜底。
+**节点顺序即 HTTP/3 优先顺序**：前 3 条走 QUIC，后 2 条是 UDP 被封时的 TCP 兜底。
 Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
 节点 1 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
-否则会自环（见 `tasks/lessons.md` L15）。节点 2/3 直连裸 IP，只需为 VPS IP 加直连路由。
+否则会自环（见 `tasks/lessons.md` L15）。节点 2–5 直连裸 IP，只需为 VPS IP 加直连路由。
 安装时生成的 `~/client-config-v2rayn-tun.txt` 已按本机实际值给出该清单。
 
 名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
@@ -52,18 +52,19 @@ Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
 | 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
-| 2 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
-| 3 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
-| 4 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
+| 2 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
+| 3 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
+| 4 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
+| 5 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 
-节点 2 走裸 UDP 直连，需要在**云厂商安全组**放行 UDP 8443
-（这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时它会被自动禁用。
+节点 2/3 走裸 UDP 直连，需要在**云厂商安全组**放行 UDP 8444 与 UDP 8443
+（这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时这两条会被自动禁用。
 
-> **`Vless-xhttp-h3-direct` 已降为 opt-in**（v4.0.3）：XHTTP over h3 在上游有两个
-> 未修复且已 closed as not planned 的问题——[#4391](https://github.com/XTLS/Xray-core/issues/4391)
+> **节点 2 的已知局限**（v4.0.3 曾降为 opt-in，v4.2.0 恢复默认开启）：XHTTP over h3
+> 在上游有两个未修复且已 closed as not planned 的问题——[#4391](https://github.com/XTLS/Xray-core/issues/4391)
 > `alpn=h3` 被静默忽略而退回 TCP、[#5849](https://github.com/XTLS/Xray-core/issues/5849)
-> h3 长期不工作。退回 TCP 后它会与 Reality 抢 443，实测表现为「Reality 节点不通」。
-> 需要时设 `FEATURE_H3_DIRECT=true` 启用，端口已改为 **8444**（不再与 443 冲突）。
+> h3 长期不工作。端口已独立为 **8444**，退回 TCP 也不会与 Reality 抢 443；
+> 最坏情况是它自己连不通。不需要时可设 `FEATURE_H3_DIRECT=false` 关闭。
 
 ### 从旧版升级
 
@@ -98,12 +99,13 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 ## 一键部署
 
 > **版本要求**：Xray 内核 ≥ `26.6.1`，Mihomo 内核 ≥ `1.19.24`。
-> Xray 的下限由两个直连 UDP 节点决定：Hysteria2 inbound 需 26.3.27+，finalmask 的 UDP listener 崩溃 bug（issue #6184）需 26.6.1+ 才修复。低于该版本时安装脚本会自动禁用这两条节点。
+> Xray 的下限由两条直连 UDP 节点决定：Hysteria2 inbound 需 26.3.27+，finalmask 的 UDP listener 崩溃 bug（issue #6184）需 26.6.1+ 才修复。低于该版本时安装脚本会自动禁用这两条节点。
 >
-> v4.1.0 起安全 / 混淆 / 优化功能**默认全部开启**：xpadding（XHTTP 填充混淆）、
-> ECH（加密 SNI，可选，默认不启用但交互会询问）、Hysteria2 finalmask + Salamander 混淆、
-> VLESS Encryption（ML-KEM-768）。
-> 需要最小化配置时用 `FEATURE_XPADDING=false FEATURE_CDN_ECH=false bash install.sh`。
+> v4.2.0 起**全部 5 条节点 + 全部功能默认开启**：xpadding（XHTTP 填充混淆）、
+> ECH（默认启用）、Hysteria2 finalmask + Salamander 混淆、VLESS Encryption（ML-KEM-768）、
+> h3-direct 直连节点，并在安装时自动应用内核层调优（`xh tuning on`，best-effort）。
+> 需要最小化配置时用
+> `FEATURE_H3_DIRECT=false FEATURE_XPADDING=false FEATURE_CDN_ECH=false FEATURE_AUTO_TUNING=false bash install.sh`。
 
 Debian / Ubuntu：
 
@@ -168,10 +170,11 @@ bash ~/install.sh
 | `FEATURE_XPADDING` | `false` 关闭 XHTTP 填充混淆（xpadding） | `true` |
 | `FEATURE_CDN_ECH` | `false` 关闭 ECH 询问（ECH 本身仍需 `CDN_ECH=y`） | `true` |
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
-| `CDN_ECH` | `y` 开启 ECH | `n` |
+| `CDN_ECH` | `n` 关闭 ECH | `y` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
-| `FEATURE_H3_DIRECT` | `true` 启用直连 h3 节点（UDP 8444，上游有已知问题，默认关） | `false` |
+| `FEATURE_H3_DIRECT` | `false` 关闭直连 h3 节点（UDP 8444，上游有已知问题，默认开） | `true` |
 | `FEATURE_HY2` | `false` 关闭 Hysteria2-obfs 节点（UDP 8443） | `true` |
+| `FEATURE_AUTO_TUNING` | `false` 跳过安装时的自动内核调优（`xh tuning off` 可随时回滚） | `true` |
 | `H3_PORT` / `HY2_PORT` | 两条直连 UDP 节点的端口（`H3_PORT` 禁止设 443，会被强制改回 8444） | `8444` / `8443` |
 | `KEEP_LEGACY_UDP` | `true` 保留旧的独立 hysteria / quic-h3 扩展（此时新的两条 UDP 节点会被关闭） | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |

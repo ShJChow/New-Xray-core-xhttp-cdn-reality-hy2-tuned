@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.1.1"
+PROJECT_VERSION="4.2.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -67,13 +67,10 @@ AUTO=${AUTO:-0}
 # require_xray_version：低于该版本时 finalmask 的 UDP listener 会在收到第一个
 # 无效包后死亡（issue #6184），Hysteria2 与 XHTTP/3 双双静默失效。
 # 版本不足时这两个开关会被自动置 false，只保留 3 条能用的节点（L1 best-effort）。
-# FEATURE_H3_DIRECT 默认**关闭**（v4.0.3）：
-# XHTTP over h3 在上游有两个未修复的问题，且都被 closed as not planned：
-#   #4391  alpn=h3 在 XHTTP 下被静默忽略，实际退回 h2/TCP
-#   #5849  xhttp h3 长期不工作
-# 退回 TCP 后它会与 Reality 抢端口（v4.0.2 之前默认同为 443），实测表现是
-# 「Reality 节点不通」。该节点本就是 v4.0.0 为顶替 TUIC 而加的替代品，
-# 不属于核心需求，因此降级为 opt-in：FEATURE_H3_DIRECT=true 可自行启用（走 8444）。
-FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-false}
+# FEATURE_H3_DIRECT 默认**开启**（v4.2.0）：5 节点全出。
+# XHTTP over h3 在上游有两个未修复的问题（#4391 alpn=h3 被静默忽略、#5849 长期不工作，
+# 均 closed as not planned）。v4.0.3 已把端口独立为 8444，最坏情况是 h3 退回 TCP 后
+# 它自己不通，不再与 Reality 抢占 443。不需要时可设 FEATURE_H3_DIRECT=false 关闭。
+FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
 

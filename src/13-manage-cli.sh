@@ -100,7 +100,7 @@ cmd_status() {
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
   else
-    printf '  %-32s %s\n' "调优配置文件" "未启用（系统层调优默认关闭，见 xh tuning on）"
+    printf '  %-32s %s\n' "调优配置文件" "未启用（安装时自动开启，或手动 xh tuning on）"
   fi
   if [[ "$SERVICE_TYPE" == "systemd" ]] && svc_active xray; then
     local pid
@@ -522,7 +522,7 @@ cmd_tuning() {
         echo -e "${CYAN}[+] ${SYSCTL_CONF}${NC}"
         cat "$SYSCTL_CONF"
       else
-        info "未开启系统层调优。安装期不做任何参数优化，需要时执行 ${MANAGE_CMD} tuning on"
+        info "系统层调优未开启。安装时默认自动执行（跳过用 FEATURE_AUTO_TUNING=false），也可手动 ${MANAGE_CMD} tuning on"
       fi
       [[ -f "$LIMITS_CONF" ]] && { echo ""; echo -e "${CYAN}[+] ${LIMITS_CONF}${NC}"; cat "$LIMITS_CONF"; }
       ;;
@@ -740,7 +740,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（安装期不做，默认关闭）
+  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（安装时默认自动开启）
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）
@@ -775,6 +775,15 @@ XHMANAGEEOF
 
 chmod +x "$MANAGE_BIN"
 info "管理命令已安装: ${MANAGE_BIN}"
+
+# v4.2.0：内核层调优在安装时自动执行（best-effort，失败不阻断）。
+# OpenVZ / LXC 只读 sysctl 会自动跳过并告警，不影响已跑通的节点。
+# 回滚: xh tuning off  /  跳过: FEATURE_AUTO_TUNING=false
+FEATURE_AUTO_TUNING=${FEATURE_AUTO_TUNING:-true}
+if [[ "$FEATURE_AUTO_TUNING" == true ]]; then
+  "$MANAGE_BIN" tuning on >/dev/null 2>&1 && info "系统层调优已自动应用（BBR / 缓冲区 / 句柄 / TFO）" || \
+    warn "自动调优未生效（不影响节点功能），可稍后手动 ${MANAGE_CMD} tuning on"
+fi
 
 if [[ "$FEATURE_KEEPALIVE" == true ]]; then
   if command -v crontab >/dev/null 2>&1; then

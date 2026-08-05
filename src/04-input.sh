@@ -148,7 +148,7 @@ fi
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
   echo ""
   echo -e "${YELLOW}[+] CDN ECH（作用于 CDN-TLS）${NC}"
-  ask CDN_ECH "是否启用 CDN ECH [y/N]: " "n"
+  ask CDN_ECH "是否启用 CDN ECH [Y/n]: " "y"
   if [[ "${CDN_ECH,,}" == "y" || "${CDN_ECH,,}" == "yes" ]]; then
     CDN_ECH_ENABLED=true
     CDN_ECH_QUERY="cloudflare-ech.com+https://223.5.5.5/dns-query"
@@ -179,5 +179,5 @@ if [[ "$FEATURE_CDN_ECH" == true ]]; then
     info "CDN ECH:          未开启"
   fi
 fi
-info "流控调优:          安装期不做，按需执行 ${MANAGE_CMD} tuning on"
+info "流控调优:          安装完成时自动执行（${MANAGE_CMD} tuning off 可回滚）"
 echo ""

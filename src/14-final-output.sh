@@ -87,4 +87,4 @@ echo "  ${MANAGE_CMD} update         更新 Xray-core（自检失败自动回滚
 echo "  ${MANAGE_CMD} tuning on      开启系统层调优（BBR / 缓冲区 / 句柄，可 tuning off 回滚）"
 echo "  ${MANAGE_CMD} uninstall      卸载全部组件"
 echo ""
-info "安装期不做任何参数优化：xray-config.json 与上游一致，未改动宿主机内核参数"
+info "已应用 Xray 应用层优化（bufferSize / sockopt）与系统层调优（BBR / 缓冲 / 句柄，${MANAGE_CMD} tuning off 可回滚）"
