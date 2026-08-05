@@ -134,7 +134,8 @@ cmd_info() {
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
   echo ""
   echo -e "${CYAN}[+] CDN 独立 inbound${NC}"
-  echo "  CDN 独立端口:   TCP ${CDN_DIRECT_PORT:-10443}（TLS + XHTTP，走 CF Origin Rule 回源）"
+  echo "  CDN 独立端口:   TCP ${CDN_DIRECT_PORT:-2053}（TLS + XHTTP，走 CF Origin Rule 回源）"
+  echo "    ⚠ 用真实证书，应在安全组只放行 Cloudflare IP 段，否则暴露源站 IP"
   echo ""
   echo -e "${CYAN}[+] 直连 UDP 节点${NC}"
   if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
@@ -322,6 +323,17 @@ cmd_diag() {
   # ---------- v4.0.0 的两条直连 UDP 节点（由 Xray 自己监听）----------
   # 与上面 nginx quic 段的区别：h3-direct 与 Hysteria2 都是 Xray 直接 bind UDP，
   # 既不经 nginx 也没有独立的 hysteria 二进制，所以要查的是 xray 进程的监听。
+  # CDN 独立 inbound（v4.3.0 起）：Xray 直接 bind TCP，不经 nginx。
+  # 没监听不算致命——Origin Rule 未配置时 CDN 流量仍走 443 回落链。
+  if command -v ss >/dev/null 2>&1; then
+    if ss -lntp 2>/dev/null | grep -qE ":${CDN_DIRECT_PORT:-2053}\b"; then
+      chk "CDN 独立 inbound 已监听 TCP ${CDN_DIRECT_PORT:-2053}" 0
+    else
+      chk "CDN 独立 inbound 未监听 TCP ${CDN_DIRECT_PORT:-2053}" 1 \
+        "证书缺失时会跳过该 inbound；CDN 节点仍可走 443 回落。查 ${MANAGE_CMD} log xray"
+    fi
+  fi
+
   if command -v ss >/dev/null 2>&1; then
     if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
       if ss -lnup 2>/dev/null | grep -qE ":${H3_PORT:-443}\b"; then

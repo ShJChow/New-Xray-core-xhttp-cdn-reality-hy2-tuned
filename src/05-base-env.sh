@@ -111,7 +111,24 @@ HY2_PORT="${HY2_PORT:-8443}"
 # CDN 节点独立 inbound 端口（v4.3.0）：CDN 流量不再走 Reality 的 443 回落链，
 # 改由独立 TLS+XHTTP inbound 直接处理。客户端 URI 仍写 443（客户端连 Cloudflare），
 # Cloudflare 侧用 Origin Rule 把 cdn 域名的回源映射到本端口。
-CDN_DIRECT_PORT="${CDN_DIRECT_PORT:-10443}"
+#
+# 端口**不能随便选**（v4.3.1 修正）：Cloudflare 代理只会向源站的固定几个端口回源，
+# HTTPS 侧是 443 / 2053 / 2083 / 2087 / 2096 / 8443（官方 network-ports 文档）。
+# v4.3.0 默认的 10443 不在此列——Origin Rule 根本配不出来，CF 连不到源站。
+# 443 已被 Reality 占用，因此默认取 2053（该端口 CF 侧默认不缓存，正合代理需要）。
+CDN_DIRECT_PORT="${CDN_DIRECT_PORT:-2053}"
+case "$CDN_DIRECT_PORT" in
+  2053|2083|2087|2096|8443) ;;
+  443)
+    warn "CDN_DIRECT_PORT 不能设为 443（已被 Reality 入站占用），已改回 2053"
+    CDN_DIRECT_PORT=2053
+    ;;
+  *)
+    warn "CDN_DIRECT_PORT=${CDN_DIRECT_PORT} 不在 Cloudflare 支持的 HTTPS 回源端口内"
+    warn "  可选: 2053 / 2083 / 2087 / 2096 / 8443；Origin Rule 无法指向其它端口，已改回 2053"
+    CDN_DIRECT_PORT=2053
+    ;;
+esac
 
 # 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
 if [[ "$H3_PORT" == "443" ]]; then

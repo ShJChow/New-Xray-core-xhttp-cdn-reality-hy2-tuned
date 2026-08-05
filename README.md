@@ -93,6 +93,18 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 4. 网络 → **gRPC 已开启**
 5. 缓存规则（建议）→ 将 XHTTP 路径设为绕过缓存，表达式在部署完成后由脚本给出
 6. 如需 ECH → Edge Certificates 中先开启 ECH
+7. **Origin Rules（v4.3.0 起，可选）**→ Rules → Origin Rules → 主机名 = CDN 域名 →
+   目标端口 = `2053`，让 CDN 流量走独立 inbound 而不是 Reality 的 443 回落链
+
+> **CDN 独立端口只能取这几个值**：Cloudflare 代理向源站回源时只使用固定端口，
+> HTTPS 侧为 `443 / 2053 / 2083 / 2087 / 2096 / 8443`
+> （[官方文档](https://developers.cloudflare.com/fundamentals/reference/network-ports/)）。
+> 443 已被 Reality 占用，所以默认取 **2053**。填其它端口 Origin Rule 无法生效。
+>
+> ⚠ **该端口使用真实证书，会暴露源站 IP**：任何人扫到这个端口都能读出 CDN 域名，
+> 从而绕过 Cloudflare 定位到你的 VPS。请在**云厂商安全组**上把 TCP 2053 只放行给
+> [Cloudflare IP 段](https://www.cloudflare.com/ips-v4)，不要对 `0.0.0.0/0` 开放。
+> 不配 Origin Rule 时 CDN 流量仍走 443 回落链，功能不受影响。
 
 每个入口域名使用独立的 `dist/<域名>/index.html` 作为回落页；可用 [SingleFile](https://chromewebstore.google.com/detail/singlefile/mpiodijhokgodhhofbcjdecpffjipkle) 抓取网页后上传。
 
@@ -100,6 +112,11 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 
 ## 一键部署
 
+> **Xray 版本**：v4.3.1 起安装脚本**每次运行都会把 Xray 升到官方最新版**（含 prerelease——
+> Xray 自 v26.4.25 把正式版全标记为 prerelease，所以走 `releases?per_page=1` + `--beta`
+> 而不是 `releases/latest`）。已是最新则跳过；GitHub API 不可达时保持现有版本不中断安装。
+> 需要固定版本用 `FEATURE_XRAY_AUTO_UPGRADE=false`。
+>
 > **版本要求**：Xray 内核 ≥ `26.6.1`，Mihomo 内核 ≥ `1.19.24`。
 > Xray 的下限由两条直连 UDP 节点决定：Hysteria2 inbound 需 26.3.27+，finalmask 的 UDP listener 崩溃 bug（issue #6184）需 26.6.1+ 才修复。低于该版本时安装脚本会自动禁用这两条节点。
 >
@@ -177,6 +194,8 @@ bash ~/install.sh
 | `FEATURE_H3_DIRECT` | `false` 关闭直连 h3 节点（UDP 8444，上游有已知问题，默认开） | `true` |
 | `FEATURE_HY2` | `false` 关闭 Hysteria2-obfs 节点（UDP 8443） | `true` |
 | `FEATURE_AUTO_TUNING` | `false` 跳过安装时的自动内核调优（`xh tuning off` 可随时回滚） | `true` |
+| `FEATURE_XRAY_AUTO_UPGRADE` | `false` 跳过安装时把 Xray 升到官方最新版（含 prerelease） | `true` |
+| `CDN_DIRECT_PORT` | CDN 独立 inbound 端口，**只能取 Cloudflare 支持的 HTTPS 回源端口**：`2053` / `2083` / `2087` / `2096` / `8443`（443 已被 Reality 占用），其它值会被强制改回 2053 | `2053` |
 | `H3_PORT` / `HY2_PORT` | 两条直连 UDP 节点的端口（`H3_PORT` 禁止设 443，会被强制改回 8444） | `8444` / `8443` |
 | `KEEP_LEGACY_UDP` | `true` 保留旧的独立 hysteria / quic-h3 扩展（此时新的两条 UDP 节点会被关闭） | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |

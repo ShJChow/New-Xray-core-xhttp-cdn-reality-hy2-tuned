@@ -137,6 +137,51 @@ check_udp_port_conflict() {
   done
 }
 
+# 查询官方最新版本号（含 prerelease）。取不到时输出空串，由调用方决定降级行为。
+# releases/latest 只返回最后一个非 prerelease——Xray 自 v26.4.25 起把正式版全部
+# 标记为 prerelease，那个端点会停在几个月前的旧版，所以必须用 releases?per_page=1。
+xray_latest_version() {
+  curl -fsSL --max-time 15 \
+    "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
+    | grep -m1 '"tag_name"' | cut -d'"' -f4 | sed 's/^v//'
+}
+
+# 已安装时把 Xray 升到官方最新版（含 prerelease）。
+# v4.3.1 修正：此前只在「低于 XRAY_MIN_VER_UDP」时才升级，于是任何 >= 26.6.1 的机器
+# 重跑安装脚本都直接 return，永远停在旧版——与「默认安装最新版」的预期不符。
+# 现在改为无条件比对最新 tag，落后就升。全程 best-effort：API 失败或升级失败都不中断安装。
+upgrade_xray_to_latest() {
+  local cur="$1" latest
+  [[ "${FEATURE_XRAY_AUTO_UPGRADE:-true}" == true ]] || {
+    info "FEATURE_XRAY_AUTO_UPGRADE=false，跳过 Xray 升级（保持 ${cur:-未知}）"
+    return 0
+  }
+
+  latest=$(xray_latest_version)
+  if [[ -z "$latest" ]]; then
+    warn "无法获取 Xray 最新版本号（GitHub API 不可达），保持当前版本 ${cur:-未知}"
+    return 0
+  fi
+
+  if [[ -n "$cur" ]] && ver_ge "$cur" "$latest"; then
+    info "Xray ${cur} 已是官方最新版（${latest}），无需升级"
+    return 0
+  fi
+
+  info "发现新版本 Xray ${latest}（当前 ${cur:-未知}），正在升级..."
+  if [[ "$OS_ID" == "alpine" ]]; then
+    warn "Alpine 下不自动升级，请手动执行 ${MANAGE_CMD} update"
+    return 0
+  fi
+
+  # --beta：让官方脚本取 PRE_RELEASE_LATEST（releases 列表第一条有 Linux zip 资产的版本）
+  if bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root; then
+    info "升级完成: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
+  else
+    warn "升级失败，将按现有版本 ${cur:-未知} 继续安装"
+  fi
+}
+
 install_xray() {
   info "Installing Xray-core..."
 
@@ -144,25 +189,7 @@ install_xray() {
     local cur
     cur=$(/usr/local/bin/xray version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     info "Xray already installed: ${cur:-unknown}"
-
-    # 已装但版本低于两个 UDP 节点的下限时**自动升级**，而不是跳过后再把节点关掉。
-    # 用户重跑安装脚本的意图就是让新功能生效；停在旧版只会让他们拿到一份
-    # 静默缺少 Hysteria2/h3 的配置，还以为是自己配错了。
-    if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
-      if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
-        warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
-        if [[ "$OS_ID" != "alpine" ]]; then
-          # --beta：Xray 自 v26.4.25 起把正式版 release 全部标记为 GitHub prerelease，
-          # releases/latest 只返回非 prerelease 的旧版。--beta 让官方脚本取
-          # PRE_RELEASE_LATEST（releases 列表里第一条有 Linux zip 资产的新版）。
-          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root \
-            || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
-          info "升级后版本: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
-        else
-          warn "Alpine 下不自动升级，请手动更新后重跑（${MANAGE_CMD} update）"
-        fi
-      fi
-    fi
+    upgrade_xray_to_latest "$cur"
     return
   fi
 
