@@ -13,8 +13,8 @@ pid /run/nginx.pid;
 
 events {
     # XHTTP 是持久长连接，每条客户端连接在 worker 里长期占位；1024 是 nginx 默认
-    # 值，并发稍高就触顶，表现为客户端 502。这是可指名的故障现象，按 tasks/
-    # lessons.md L25 归为正确性修复，而非吞吐旋钮。
+    # 值，并发稍高就触顶，表现为客户端 502。这是可指名的故障现象，属正确性修复
+    # 而非吞吐旋钮。
     # 代价：连接槽按此值预分配，约 15~20 MB/worker，worker_processes auto 下
     # 乘以核心数。小内存 VPS（< 1 GB）若觉得占用偏高，可自行调小到 8192。
     worker_connections 65535;

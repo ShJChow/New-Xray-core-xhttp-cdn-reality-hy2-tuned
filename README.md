@@ -44,7 +44,7 @@ inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
 节点 1 经 CDN、server 是域名，在 v2rayN TUN 模式下需要把 CDN 域名加入直连列表，
-否则会自环（见 `tasks/lessons.md` L15）。节点 2–5 直连裸 IP，只需为 VPS IP 加直连路由。
+否则会自环。节点 2–5 直连裸 IP，只需为 VPS IP 加直连路由。
 安装时生成的 `~/client-config-v2rayn-tun.txt` 已按本机实际值给出该清单。
 
 名称为纯 ASCII + 主机名后缀（`<host>` = `hostname -s`）：
