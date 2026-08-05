@@ -184,16 +184,14 @@ bash ~/install.sh
 `AUTO=1` 且 `FALLBACK_MODE=static` 时会自动生成占位 `index.html` 并跳过人工确认，事后可自行替换。
 
 ---
- ### 1. 下载脚本
+
+### 1. 下载脚本
   curl -O https://raw.githubusercontent.com/ShJChow/Xray-core-xhttp-cdn-tuned/main/tools/ubuntu_vps_optimize.sh
-
-  ### 2. 加执行权限
+### 2. 加执行权限
   chmod +x ubuntu_vps_optimize.sh
-
-  ### 3. 先「只看不碰」——检测 + 打印计划，零修改
+### 3. 先「只看不碰」——检测 + 打印计划，零修改
   sudo bash ubuntu_vps_optimize.sh --dry-run
-
-  ### 4. 确认无误后正式跑
+### 4. 确认无误后正式跑
   sudo bash ubuntu_vps_optimize.sh
 
 ##  管理命令 `xh`
