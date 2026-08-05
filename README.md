@@ -95,26 +95,20 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 
 ---
 
-## 一键部署（推荐：带 xpadding 的 XHTTP）
+## 一键部署
 
 > **版本要求**：Xray 内核 ≥ `26.6.1`，Mihomo 内核 ≥ `1.19.24`。
 > Xray 的下限由两个直连 UDP 节点决定：Hysteria2 inbound 需 26.3.27+，finalmask 的 UDP listener 崩溃 bug（issue #6184）需 26.6.1+ 才修复。低于该版本时安装脚本会自动禁用这两条节点。
-> xpadding 默认开启；ECH 可选，默认关闭。
+>
+> v4.1.0 起安全 / 混淆 / 优化功能**默认全部开启**：xpadding（XHTTP 填充混淆）、
+> ECH（加密 SNI，可选，默认不启用但交互会询问）、Hysteria2 finalmask + Salamander 混淆、
+> VLESS Encryption（ML-KEM-768）。
+> 需要最小化配置时用 `FEATURE_XPADDING=false FEATURE_CDN_ECH=false bash install.sh`。
 
 Debian / Ubuntu：
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
-bash ~/install-xpadding.sh
-```
-
-
-### 不带 xpadding 的普通版
-
-> Mihomo 内核 ≥ `1.19.23` 即可。
-
-```bash
 curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
@@ -150,7 +144,7 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/a
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install-xpadding.sh -o ~/install-xpadding.sh
+curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 AUTO=1 \
 REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \
@@ -159,7 +153,7 @@ FALLBACK_MODE=proxy \
 REALITY_FALLBACK_ORIGIN=https://www.sjsu.edu \
 CDN_FALLBACK_ORIGIN=https://www.harvard.edu \
 CDN_ECH=n \
-bash ~/install-xpadding.sh
+bash ~/install.sh
 ```
 
 可用环境变量：
@@ -171,6 +165,8 @@ bash ~/install-xpadding.sh
 | `IP_CHOICE` | `1`=IPv4，`2`=IPv6 | `1` |
 | `FALLBACK_MODE` | `static`（本地页面）/ `proxy`（反代） | `proxy` |
 | `REALITY_FALLBACK_ORIGIN` / `CDN_FALLBACK_ORIGIN` | `proxy` 模式下的回落站 | sjsu / harvard |
+| `FEATURE_XPADDING` | `false` 关闭 XHTTP 填充混淆（xpadding） | `true` |
+| `FEATURE_CDN_ECH` | `false` 关闭 ECH 询问（ECH 本身仍需 `CDN_ECH=y`） | `true` |
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` 开启 ECH | `n` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |

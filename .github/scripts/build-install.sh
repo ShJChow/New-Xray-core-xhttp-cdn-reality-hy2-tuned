@@ -31,42 +31,24 @@ append_with_includes() {
   done < "$1"
 }
 
+# v4.1.0：安全 / 混淆 / 优化功能统一默认开启。
+# 关闭方法：FEATURE_XPADDING=false FEATURE_CDN_ECH=false bash install.sh
 append_profile() {
-  local variant="$1"
-
-  case "$variant" in
-    normal)
-      cat <<'PROFILE'
+  cat <<'PROFILE'
 # ==================================================
-# 功能开关：普通版
+# 功能开关：默认全开（xpadding + ECH 可选）
 # ==================================================
-
-FEATURE_XPADDING=false
-FEATURE_CDN_ECH=false
-CDN_ECH_ENABLED=false
-CDN_ECH_QUERY=""
-PROFILE
-      ;;
-    xpadding)
-      cat <<'PROFILE'
-# ==================================================
-# 功能开关：xpadding 版
-# ==================================================
+# FEATURE_XPADDING  XHTTP 填充混淆（xPaddingObfsMode），绕过 CDN 侧特征检测
+# FEATURE_CDN_ECH   加密 TLS 握手 SNI（是否实际启用由交互 / CDN_ECH 环境变量决定）
+# 两个都可用环境变量覆盖为 false 关闭，无需重装即可切换。
 
 FEATURE_XPADDING=true
 FEATURE_CDN_ECH=true
 PROFILE
-      ;;
-    *)
-      echo "Unknown variant: $variant" >&2
-      return 1
-      ;;
-  esac
 }
 
 build_one() {
-  local variant="$1"
-  local output="$2"
+  local output="$1"
   local module
 
   cat > "$output" <<'SCRIPTHEADER'
@@ -77,7 +59,7 @@ SCRIPTHEADER
   for module in "${MODULES[@]}"; do
     append_with_includes "$ROOT_DIR/src/$module" >> "$output"
     if [[ "$module" == "01-env.sh" ]]; then
-      append_profile "$variant" >> "$output"
+      append_profile >> "$output"
     fi
   done
 
@@ -87,7 +69,9 @@ SCRIPTHEADER
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist}"
 mkdir -p "$OUT_DIR"
 
-build_one normal "$OUT_DIR/install.sh"
-build_one xpadding "$OUT_DIR/install-xpadding.sh"
+# v4.1.0 起两个版本功能开关完全一致，只保留 install.sh 作为唯一产物；
+# install-xpadding.sh 保留同名输出，保证既有文档与用户的链接不失效。
+build_one "$OUT_DIR/install.sh"
+cp "$OUT_DIR/install.sh" "$OUT_DIR/install-xpadding.sh"
 
 echo "Generated $OUT_DIR/install.sh and $OUT_DIR/install-xpadding.sh"
