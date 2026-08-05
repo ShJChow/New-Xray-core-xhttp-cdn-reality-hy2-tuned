@@ -439,7 +439,10 @@ cmd_update() {
   [[ -x "$XRAY_BIN" ]] || fail "未找到 ${XRAY_BIN}"
   local current latest backup
   current=$("$XRAY_BIN" version 2>/dev/null | head -1 | awk '{print $2}')
-  latest=$(curl -fsSL --max-time 15 https://api.github.com/repos/XTLS/Xray-core/releases/latest 2>/dev/null \
+  # Xray 自 v26.4.25 起把正式版 release 全标记为 GitHub prerelease，releases/latest
+  # 只返回最后一个非 prerelease 的旧版。releases?per_page=1 取最新一条（不论 prerelease），
+  # 返回格式 [{...}] 与旧端点的 {tag_name:...} 对 grep 提取兼容，无需改解析。
+  latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
     | grep -m1 '"tag_name"' | cut -d'"' -f4)
   latest="${latest#v}"
 
@@ -463,7 +466,9 @@ cmd_update() {
 
   local ok=0
   if [[ "${OS_ID:-}" != "alpine" ]]; then
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root && ok=1
+    # --beta：不加的话官方脚本会装 RELEASE_LATEST（最后一个非 prerelease 的旧版），
+    # 即使上面检测到新版本也会被装回旧版——必须与检测逻辑同一套。
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root && ok=1
   else
     local arch asset tmpdir
     arch=$(uname -m)
@@ -473,7 +478,8 @@ cmd_update() {
       *) warn "Alpine 暂不支持架构 ${arch}"; return 0 ;;
     esac
     tmpdir=$(mktemp -d)
-    if curl -fL "https://github.com/XTLS/Xray-core/releases/latest/download/${asset}" -o "${tmpdir}/xray.zip" &&
+    # 用已检测到的真实最新 tag 下载（releases/latest/download 只指向非 prerelease 的旧版）
+    if curl -fL "https://github.com/XTLS/Xray-core/releases/download/v${latest}/${asset}" -o "${tmpdir}/xray.zip" &&
        unzip -qo "${tmpdir}/xray.zip" -d "$tmpdir"; then
       install -m 755 "${tmpdir}/xray" "$XRAY_BIN"
       install -m 644 "${tmpdir}/geoip.dat" /usr/local/share/xray/geoip.dat 2>/dev/null || true
