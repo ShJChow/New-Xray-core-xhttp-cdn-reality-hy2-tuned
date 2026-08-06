@@ -78,18 +78,20 @@ EOF
 fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
+  # v4.3.2：与 URI 的 ech= 参数保持同一来源——查本次安装填的 CDN 域名，
+  # 而不是硬编码 cloudflare-ech.com（见 04-input.sh 的说明）。
   MIHOMO_ECH_PROXY_BLOCK=$(cat <<EOF
 
     ech-opts:
       enable: true
-      query-server-name: cloudflare-ech.com
+      query-server-name: ${CDN_DOMAIN}
 EOF
 )
   MIHOMO_ECH_DOWNLOAD_BLOCK=$(cat <<EOF
 
         ech-opts:
           enable: true
-          query-server-name: cloudflare-ech.com
+          query-server-name: ${CDN_DOMAIN}
 EOF
 )
 fi

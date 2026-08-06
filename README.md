@@ -24,7 +24,7 @@
 |---|---|
 | 节点集（v4.2.0） | 默认 5 条，全部由 Xray 单核心提供：3 条 QUIC/h3（含 Hysteria2 obfs）+ 2 条 TCP 兜底。不再需要独立 hysteria 二进制 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
-| ECH | 可选，加密 TLS 握手中的 SNI |
+| ECH | 默认开启，加密 TLS 握手中的 SNI。v4.3.2 起 ECH 配置从**本次安装填的 CDN 域名**拉取（不再硬编码 `cloudflare-ech.com`），换 VPS / 换域名自动适配；安装时会校验该域名是否真的发布了 ECH，没有就自动关闭并告警 |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
 | **流控全开** | BBR + fq、TFO、MTU 探测、句柄 1048576、Xray `sockopt` 与 `policy.bufferSize`、Nginx gRPC 长连接超时 |
 | **机型自适应** | 按内存自动分三档（≥16G / ≥4G / <4G）伸缩缓冲区与队列；ARM64 显式设置 `bufferSize`（默认仅 4 KB） |
@@ -190,6 +190,7 @@ bash ~/install.sh
 | `FEATURE_CDN_ECH` | `false` 关闭 ECH 询问（ECH 本身仍需 `CDN_ECH=y`） | `true` |
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding 字段 | `Referer` / `x_padding` |
 | `CDN_ECH` | `n` 关闭 ECH | `y` |
+| `CDN_ECH_DOH` | 拉取 ECH 配置用的 DoH 服务器。默认阿里 DNS——客户端多在中国大陆，`1.1.1.1` 的 DoH 在那边常被阻断 | `https://223.5.5.5/dns-query` |
 | `VISION_UDP443` | `1` 时节点 1 的 flow 用 `xtls-rprx-vision-udp443`（需客户端支持） | `0` |
 | `FEATURE_H3_DIRECT` | `false` 关闭直连 h3 节点（UDP 8444，上游有已知问题，默认开） | `true` |
 | `FEATURE_HY2` | `false` 关闭 Hysteria2-obfs 节点（UDP 8443） | `true` |

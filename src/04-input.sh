@@ -145,13 +145,52 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
   XHTTP_PADDING_KEY=${XHTTP_PADDING_KEY:-x_padding}
 fi
 
+# 查询某域名的 HTTPS(type=65) 记录里有没有 ech= 字段。
+#   0 = 确实发布了 ECH   1 = 确实没有   2 = 查不了（网络问题，不可判定）
+# 两个 DoH 都用 /resolve —— 它返回 presentation 格式（`alpn=h3,h2 ... ech=AEX+...`），
+# 直接 grep ech= 即可判定；不要用返回十六进制 wire 格式的端点，那种要按
+# SvcParamKey 解析，靠 grep 会误判（ipv4hint 的字节里也可能出现 00 05）。
+# AliDNS 在中国大陆可用，Google 在境外可用，任一成功即可判定。
+cdn_ech_published() {
+  local domain="$1" resp
+  for ep in "https://223.5.5.5/resolve" "https://dns.google/resolve"; do
+    resp=$(curl -fsSL --max-time 8 "${ep}?name=${domain}&type=HTTPS" 2>/dev/null)
+    [[ -n "$resp" ]] || continue
+    grep -q '"Answer"' <<< "$resp" || return 1   # 没有 HTTPS 记录 → 不可能有 ECH
+    grep -qi 'ech=' <<< "$resp" && return 0
+    return 1
+  done
+  return 2
+}
+
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
   echo ""
   echo -e "${YELLOW}[+] CDN ECH（作用于 CDN-TLS）${NC}"
   ask CDN_ECH "是否启用 CDN ECH [Y/n]: " "y"
   if [[ "${CDN_ECH,,}" == "y" || "${CDN_ECH,,}" == "yes" ]]; then
     CDN_ECH_ENABLED=true
-    CDN_ECH_QUERY="cloudflare-ech.com+https://223.5.5.5/dns-query"
+    # v4.3.2：ECH 配置从**本次安装填的 CDN 域名**拉，不再硬编码 cloudflare-ech.com。
+    # 客户端连的是 CDN_DOMAIN，就该用它自己发布的 ECH 配置——换 VPS / 换域名 /
+    # 换 CDN 厂商都自动跟着走，不需要改脚本。
+    # （实测：Cloudflare 各代理域名与 cloudflare-ech.com 发布的 ECH 配置字节相同，
+    #   所以这个改动对既有 CF 部署功能等价，只是不再依赖 CF 内部域名。）
+    # DoH 服务器可用 CDN_ECH_DOH 覆盖；默认 AliDNS——客户端多在中国大陆，
+    # 1.1.1.1 的 DoH 在那边常被阻断，而 223.5.5.5 可用且支持 HTTPS 记录查询。
+    CDN_ECH_DOH="${CDN_ECH_DOH:-https://223.5.5.5/dns-query}"
+    CDN_ECH_QUERY="${CDN_DOMAIN}+${CDN_ECH_DOH}"
+
+    # 该域名如果压根没发布 ECH，开着只会让 CDN 节点握手失败（其他节点不受影响，
+    # 表现就是「只有 CDN 这条不通」）。能明确判定没有时就关掉并告警；
+    # 查询失败（网络问题）不关——避免误伤（L1 best-effort）。
+    cdn_ech_published "$CDN_DOMAIN"
+    case $? in
+      0) info "已确认 ${CDN_DOMAIN} 发布了 ECH 配置" ;;
+      1) warn "${CDN_DOMAIN} 未发布 ECH 配置，已自动关闭 ECH"
+         warn "  需要 ECH 请到 Cloudflare → SSL/TLS → Edge Certificates 开启后重跑本脚本"
+         CDN_ECH_ENABLED=false
+         CDN_ECH_QUERY="" ;;
+      *) warn "无法验证 ${CDN_DOMAIN} 的 ECH 配置（DNS 查询失败），仍按开启处理" ;;
+    esac
   else
     CDN_ECH_ENABLED=false
     CDN_ECH_QUERY=""
