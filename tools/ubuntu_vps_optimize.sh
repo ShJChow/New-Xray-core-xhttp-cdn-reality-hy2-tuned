@@ -374,8 +374,8 @@ else
 fi
 # UDP 缓冲（QUIC / HTTP3 / Hysteria2 的关键项）
 try net.core.optmem_max 65536
-try net.ipv4.udp_rmem_min 8192
-try net.ipv4.udp_wmem_min 8192
+try net.ipv4.udp_rmem_min 16384
+try net.ipv4.udp_wmem_min 16384
 
 # ---- 队列与并发 ----
 try net.core.netdev_max_backlog "$BACKLOG"
@@ -401,7 +401,7 @@ try net.ipv4.tcp_syn_retries 4               # 出站 SYN ~30s 放弃（默认 6
 try net.ipv4.tcp_rfc1337 1                   # TIME_WAIT 暗杀保护
 try net.ipv4.tcp_fin_timeout 15
 # keepalive 先于 CDN/NAT 常见 900s 空闲回收探活
-try net.ipv4.tcp_keepalive_time 600
+try net.ipv4.tcp_keepalive_time 300
 try net.ipv4.tcp_keepalive_intvl 30
 try net.ipv4.tcp_keepalive_probes 5
 
@@ -565,8 +565,10 @@ _log "  50：降低 dentry/inode 回收倾向，连接数多时减少 inode 重�
 # legacy min_free_kbytes 也不动：内核自动计算的值对 24GB 机器足够准确。
 _log "  dirty_ratio / dirty_background_ratio：不调（转发型机器无落盘负载）"
 
-# overcommit_memory：Linux 默认 0（启发式）对转发负载足够。1（总是允许）是 Redis fork 快照场景的建议。
-_log "  vm.overcommit_memory：保持默认 0（启发式），不改 1"
+# overcommit_memory：显式写 0（启发式）。Xray 不是 Redis，不需 fork 快照的
+# overcommit 语义；1（总是允许）在极端情况下可能 OOM。
+try vm.overcommit_memory 0
+_log "  vm.overcommit_memory：已显式设为 0（启发式），防止极端 OOM"
 
 # ==================================================
 # sysctl 统一落盘

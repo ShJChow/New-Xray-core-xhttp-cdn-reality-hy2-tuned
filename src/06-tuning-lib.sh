@@ -92,8 +92,9 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
   # QUIC / HTTP3：本项目保留的 UDP+XHTTP+CDN 节点与 Hysteria2 扩展都会用到
   try_sysctl net.core.optmem_max 65536
-  try_sysctl net.ipv4.udp_rmem_min 8192
-  try_sysctl net.ipv4.udp_wmem_min 8192
+  # QUIC / HTTP3 / Hysteria2：8192 只够基础场景，提到 16384 减少 UDP 丢包
+  try_sysctl net.ipv4.udp_rmem_min 16384
+  try_sysctl net.ipv4.udp_wmem_min 16384
 
   # ---------- 队列与并发 ----------
   try_sysctl net.core.netdev_max_backlog "$NETDEV_BACKLOG"
@@ -138,7 +139,8 @@ apply_system_tuning() {
   # 该 RST。零成本，语义上是防御性的。
   try_sysctl net.ipv4.tcp_rfc1337 1
   try_sysctl net.ipv4.tcp_fin_timeout 15
-  try_sysctl net.ipv4.tcp_keepalive_time 600
+  # 300s 先于 CDN/NAT 常见的 900s 空闲回收探活，比 600s 更快回收死连接
+  try_sysctl net.ipv4.tcp_keepalive_time 300
   try_sysctl net.ipv4.tcp_keepalive_intvl 30
   try_sysctl net.ipv4.tcp_keepalive_probes 5
 
@@ -147,6 +149,9 @@ apply_system_tuning() {
   # dirty_ratio / dirty_background_ratio 作用在脏页回写，转发机器不落盘，故意不调。
   if [[ "$MEM_MB" -ge 4096 ]]; then try_sysctl vm.swappiness 10; else try_sysctl vm.swappiness 30; fi
   try_sysctl vm.vfs_cache_pressure 50
+  # 显式写 0（启发式），不写 1（总是允许 overcommit）。Xray 不是 Redis，
+  # 不需 fork 快照的 overcommit 语义；1 在极端情况下可能 OOM。
+  try_sysctl vm.overcommit_memory 0
 
   # ---------- 文件句柄 ----------
   try_sysctl fs.file-max 1048576
