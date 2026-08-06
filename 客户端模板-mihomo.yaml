@@ -105,6 +105,50 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"
 
+  # 上下行分离：上行 XHTTP+Reality 直连 VPS，下行 XHTTP+TLS 经 CDN。
+  # download-settings 末尾把 reality-opts 的 public-key 显式清空，必须保留：
+  # 不清空的话父级 reality-opts 会泄漏到走纯 TLS 的下行腿上。
+  - name: Vless-xhttp-split-realityup-cdndown-YOUR_HOST
+    type: vless
+    server: YOUR_VPS_IP
+    port: 443
+    uuid: YOUR_UUID_2
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h2
+    servername: YOUR_REALITY_DOMAIN
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: YOUR_PUBLIC_KEY
+      short-id: YOUR_SHORT_ID
+    encryption: YOUR_VLESSENC_ENCRYPTION
+    xhttp-opts:
+      host: YOUR_CDN_DOMAIN
+      path: YOUR_PATH
+      mode: auto
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"
+      download-settings:
+        host: YOUR_CDN_DOMAIN
+        path: YOUR_PATH
+        server: YOUR_CDN_DOMAIN
+        port: 443
+        tls: true
+        alpn:
+          - h2
+        servername: YOUR_CDN_DOMAIN
+        client-fingerprint: chrome
+        reality-opts: { public-key: "" }
+        reuse-settings:
+          max-concurrency: "16-32"
+          c-max-reuse-times: "0"
+          h-max-reusable-secs: "1800-3000"
+
   # 经 CDN 的 h3 节点。servername/host 必须是 CDN 域名——TLS 握手按 SNI 选服务端
   # server 块，写成 Reality 域名会落到回落网站上，节点必然不通。
   - name: Vless-xhttp-tls-UDP-cdn-YOUR_HOST

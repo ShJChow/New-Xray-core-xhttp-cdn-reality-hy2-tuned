@@ -21,6 +21,12 @@ Hysteria2 + Salamander 混淆（UDP 8443）
 # hysteria 二进制。obfs 密码与认证密码是两个独立的值，两端必须一致。
 hysteria2://YOUR_HY2_PASSWORD@YOUR_VPS_IPV4:8443/?sni=YOUR_REALITY_DOMAIN&insecure=0&obfs=salamander&obfs-password=YOUR_OBFS_PASSWORD#Hysteria2-obfs-YOUR_HOST
 
+上下行分离：上行 XHTTP+Reality 直连 / 下行 XHTTP+TLS 经 CDN
+# 上行走 Reality 直连，避开 CDN 的上传瓶颈；下行借 CDN 的回程带宽。
+# 下行腿的 alpn 必须是 h2（服务端 CDN 独立 inbound 的 alpn 是 ["h2","http/1.1"]）。
+# extra 里的 downloadSettings.path 用 YOUR_PATH_ENC（/ 已转义为 %2F）。
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_CDN_DOMAIN%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22YOUR_CDN_DOMAIN%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22YOUR_CDN_DOMAIN%22%2C%22path%22%3A%22YOUR_PATH_ENC%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-split-realityup-cdndown-YOUR_HOST
+
 注意：
 - YOUR_UUID_1 的节点 (Vision 直连) encryption 保持 none，因为不过 CDN
 - YOUR_UUID_2 的节点 (XHTTP) encryption 填入 xray vlessenc 生成的 ML-KEM-768 encryption 值
