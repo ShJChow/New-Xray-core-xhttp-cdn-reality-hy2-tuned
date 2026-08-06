@@ -1,6 +1,6 @@
 # 节点顺序 = HTTP/3 优先。mihomo-full.yaml.tmpl 的 proxy-groups 用 include-all: true，
 # 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
-# 前三条是 QUIC/h3，后两条是 TCP 兜底（UDP 被封时可用）。
+# 前三条是 QUIC/h3，后三条是 TCP 兜底（UDP 被封时可用）。
 proxies:
   # ---------- HTTP/3 (QUIC) ----------
   # 1. 经 CDN 的 h3：实测最快。alpn 必须恰好只有 h3，mihomo 才走 HTTP/3
@@ -110,3 +110,49 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # 6. 上下行分离：上行 xhttp+Reality 直连 VPS，下行 xhttp+TLS 走 CDN。
+  #    上行走 Reality 免去 CDN 的上传瓶颈，下行借 CDN 的回程带宽。
+  #    download-settings 末尾把 reality-opts 的 public-key 显式清空，必须保留：
+  #    （模板走 unquoted heredoc，注释里不能出现反引号，会被当命令替换执行）
+  #    不显式清空，父级的 reality-opts 会泄漏到走纯 TLS 的下行腿上。
+  - name: Vless-xhttp-split-realityup-cdndown-${HOSTNAME_TAG}
+    type: vless
+    server: ${VPS_IP}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h2
+    servername: ${REALITY_DOMAIN}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: ${PUBLIC_KEY}
+      short-id: ${SHORT_ID}
+    encryption: ${VLESSENC_ENCRYPTION}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+      download-settings:
+        host: ${CDN_DOMAIN}
+        path: ${XHTTP_PATH}
+        server: ${CDN_DOMAIN}
+        port: 443
+        tls: true
+        alpn:
+          - h2
+        servername: ${CDN_DOMAIN}
+        client-fingerprint: chrome${MIHOMO_ECH_DOWNLOAD_BLOCK}${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
+        reality-opts: { public-key: "" }
+        reuse-settings:
+          max-concurrency: "16-32"
+          c-max-reuse-times: "0"
+          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}

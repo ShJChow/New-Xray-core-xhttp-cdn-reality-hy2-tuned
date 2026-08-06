@@ -54,6 +54,7 @@
 | ۳ | `Hysteria2-obfs-<host>` | مستقیم به VPS، **UDP 8443** | Hysteria2 + مبهم‌سازی Salamander |
 | ۴ | `Vless-reality-vision-<host>` | مستقیم به VPS، TCP 443 | Reality + Vision؛ پشتیبان وقتی UDP مسدود است |
 | ۵ | `Vless-xhttp-reality-<host>` | مستقیم به VPS، TCP 443 | XHTTP + Reality، ارسال و دریافت روی یک مسیر |
+| ۶ | `Vless-xhttp-split-realityup-cdndown-<host>` | ارسال مستقیم به VPS TCP 443 / دریافت از طریق CDN | ارسال XHTTP + Reality، دریافت XHTTP + TLS (alpn h2)، مسیر ارسال و دریافت جدا |
 
 نودهای ۲ و ۳ روی UDP خام به سرور وصل می‌شوند، بنابراین باید **پورت‌های UDP 443 و UDP 8443 را در گروه امنیتی ارائه‌دهندهٔ ابری** باز کنید — این لایه بیرون از ماشین است و اسکریپت نه می‌بیندش نه می‌تواند تغییرش دهد. اگر نسخهٔ هستهٔ Xray کمتر از 26.6.1 باشد، این دو نود خودکار غیرفعال می‌شوند و فقط سه نود دیگر تولید می‌گردد.
 

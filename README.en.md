@@ -54,6 +54,7 @@ Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 | 3 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
 | 4 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; fallback when UDP is blocked |
 | 5 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
+| 6 | `Vless-xhttp-split-realityup-cdndown-<host>` | Upload direct to VPS TCP 443 / download via CDN | Upload XHTTP + Reality, download XHTTP + TLS (alpn h2), split up/down |
 
 Nodes 2/3 are bare UDP to the VPS, so you must open **UDP 443 and UDP 8443 in your cloud provider's security group** — that layer sits outside the machine and the script can neither see nor change it. If the Xray core is older than 26.6.1 these two nodes are disabled automatically and only the other three are emitted.
 

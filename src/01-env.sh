@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.3.2"
+PROJECT_VERSION="4.4.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -51,13 +51,27 @@ FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
-# v4.0.0 节点集：5 条，全部由 Xray 单核心提供
+# 节点集：6 条，全部由 Xray 单核心提供
 # ==================================================
 #   1. Vless-xhttp-tls-UDP-cdn   经 CDN，h3/QUIC —— 实测最快
 #   2. Vless-xhttp-h3-direct     直连 UDP 443，h3/QUIC
 #   3. Hysteria2-obfs            直连 UDP 8443，Salamander 混淆
 #   4. Vless-reality-vision      直连 TCP 443，Vision
 #   5. Vless-xhttp-reality       直连 TCP 443，XHTTP 上下行不分离
+#   6. Vless-xhttp-split-realityup-cdndown
+#                                上行 xhttp+Reality 直连 / 下行 xhttp+TLS 走 CDN
+#
+# 第 6 条对齐上游 my-xhttp-cdn-config 的「上行 xhttp+Reality | 下行 xhttp+TLS+CDN」，
+# v4.0.0 曾随两条上下行分离节点一并删除，此处按上游模板补回。
+#
+# ⚠ 已知未验证点：它的下行腿落在 CDN 独立 inbound（CDN_DIRECT_PORT，
+# 见 09-server-config.sh:123），与上行腿的 8001 inbound 不是同一个。
+# 上游原版以及本仓的 dual-ip / dual-cdn，两条腿都落在**同一个** inbound；
+# 本仓唯一形状相同的 extensions/quic-h3 自身就依赖 XHTTP-over-h3
+# （上游 #4391 / #5849 均 closed as not planned，见下方 FEATURE_H3_DIRECT 说明），
+# 它本身是否过流量也未测 —— 所以本仓**没有**已验证的跨 inbound 分离先例。
+# 若实机不通，需在服务端侧改（CF Origin Rule 掌握 cdn 域名 → CDN_DIRECT_PORT
+# 的映射，客户端 URI 无法把下行腿绕回 443 回落链）。
 #
 # 不再引入 sing-box 或独立 hysteria 二进制：Hysteria2 由 Xray 原生 inbound 提供
 # （v26.3.27+）。TUIC v5 无法提供——Xray 的 inbound 协议列表中没有 TUIC，

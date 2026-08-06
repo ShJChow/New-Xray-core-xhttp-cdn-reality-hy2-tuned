@@ -96,7 +96,7 @@ EOF
 )
 fi
 
-# v4.0.0 节点集：3 条 QUIC/h3 + 2 条 TCP 兜底，全部由 Xray 单核心提供。
+# 节点集：3 条 QUIC/h3 + 3 条 TCP 兜底，全部由 Xray 单核心提供。
 # 两条直连 UDP 节点（h3-direct / Hysteria2）依赖 Xray ≥26.6.1，低版本时
 # FEATURE_H3_DIRECT / FEATURE_HY2 会在 03-xray-install.sh 里被置 false，
 # 此处渲染为空行，随后的 sed 删掉——空行若进了 base64 订阅会变成一条空节点。
@@ -113,7 +113,7 @@ else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2"
+info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x3（vision / xhttp 不分离 / 上行 Reality+下行 CDN）"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
