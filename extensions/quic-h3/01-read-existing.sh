@@ -66,8 +66,15 @@ QUIC_H3_STATE_DIR="/etc/xhttp-cdn"
 QUIC_H3_STATE_FILE="${QUIC_H3_STATE_DIR}/quic-h3.env"
 [[ -f "$QUIC_H3_STATE_FILE" ]] && . "$QUIC_H3_STATE_FILE"
 
-read -rp "请输入 XHTTP H3 UDP 端口 [1-65535] (默认 ${XHTTP_H3_PORT:-443}): " _port
-XHTTP_H3_PORT=${_port:-${XHTTP_H3_PORT:-443}}
+# v4.4.1：默认端口 443 → 8445。
+# 原默认值是 443，与 Xray 的 Reality inbound（TCP 443）同号。2026-08-06 的实机
+# 故障里，本扩展插进 CDN 块的 quic 监听把主链路打死了，机制未查清（见
+# 02-server-config.sh 的长注释）。虽然 UDP/TCP 是两个独立的端口空间、同号本身
+# 不构成冲突，但在因果链没查清之前，让 h3 监听离生产端口远一点是**可回退的
+# 保守选择**（L25：不确定就选那个坏了也好查的）。
+# 8443 = Hysteria2，8444 = 主脚本 h3-direct，故取 8445。
+read -rp "请输入 XHTTP H3 UDP 端口 [1-65535] (默认 ${XHTTP_H3_PORT:-8445}): " _port
+XHTTP_H3_PORT=${_port:-${XHTTP_H3_PORT:-8445}}
 [[ "$XHTTP_H3_PORT" =~ ^[0-9]+$ ]] || error "端口必须是数字"
 (( XHTTP_H3_PORT >= 1 && XHTTP_H3_PORT <= 65535 )) || error "端口必须在 1-65535 之间"
 
@@ -75,6 +82,16 @@ XHTTP_H3_PORT=${_port:-${XHTTP_H3_PORT:-443}}
 if [[ -f /etc/hysteria/config.yaml ]] &&
    grep -Eq "^[[:space:]]*listen:[[:space:]]*:${XHTTP_H3_PORT}[[:space:]]*$" /etc/hysteria/config.yaml; then
   error "UDP ${XHTTP_H3_PORT} 已被 Hysteria2 占用，请换一个端口（Hysteria2 默认 8443）"
+fi
+
+# 通用占用检查：上面那条只认独立 hysteria 二进制的配置文件，而 v4.0.0 起
+# Hysteria2 与 h3-direct 都由 Xray 自己监听 UDP，配置文件里查不到。
+# 端口被抢的表现是「装完没报错、节点静默不通」，属于最难查的一类，
+# 所以这里直接问内核。
+if command -v ss >/dev/null 2>&1 &&
+   ss -uln 2>/dev/null | grep -Eq "[:.]${XHTTP_H3_PORT}[[:space:]]"; then
+  error "UDP ${XHTTP_H3_PORT} 已被占用（ss 查到现有监听），请换一个端口。
+    本机已知占用：8443 = Hysteria2，8444 = 主脚本 h3-direct 节点"
 fi
 
 info "XHTTP H3:     UDP ${XHTTP_H3_PORT}"

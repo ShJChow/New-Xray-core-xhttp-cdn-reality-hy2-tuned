@@ -119,3 +119,71 @@ Change Scope 全部完成。净变更 = 新增 1 条节点（URI 版 + mihomo �
 5. `extensions/dual-ip/03-client-config.sh:65,81,99,118` 的 awk 锚点
    `^  - name: xhttp\+Reality 上下行不分离` 在本仓从不命中（本仓发出的名字是
    `Vless-xhttp-reality-*`），疑似 v4.0.0 改名遗漏，既有缺陷，本次不修。
+
+---
+
+# 事故记录：quic-h3 扩展打死主链路（2026-08-06）
+
+## 现象
+用户跑 `add-quic-h3.sh` 后，**三条新节点全不通，且默认的
+`Vless-xhttp-tls-UDP-cdn` 节点也一起不通**。
+
+nginx error.log 持续报：
+```
+upstream rejected request with error 5 while reading response header from upstream,
+client: 127.0.0.1, server: cdn.xxx, request: "POST /<path>/<sessionid>/0 HTTP/2.0",
+upstream: "grpc://127.0.0.1:8001"
+```
+gRPC error 5 = NOT_FOUND，是 Xray 8001 在拒绝上行 POST。
+
+## 排查过程与两次判断失误
+1. 先按「三条节点的公因子是 h3 腿」推断根因在 UDP 不通（云安全组）。
+   诊断输出否定了它：nginx 确实在监听 UDP 443（4 socket = 4 worker × reuseport）、
+   quic 段插入位置正确、本机 nft 全 accept、nginx 无启动错误。
+2. 改推「h3 腿死 → 会话建不起来 → 上行 POST 404」。用户一句
+   「默认 CDN 节点也不通」直接推翻——error 5 是主症状不是连带症状。
+3. 单变量二分（删掉 BEGIN/END quic-h3 段 + 重启 nginx）→ **主链路立刻恢复**。
+   根因确定落在插入的那两行内。
+
+## 根因：定位到 2 行，机制未查清
+插入内容：
+```nginx
+listen ${PORT} quic reuseport;
+add_header Alt-Svc 'h3=":${PORT}"; ma=86400' always;
+```
+- **可排除 `add_header`**：它只作用于响应，而故障发生在「读上游响应头」
+  之前的请求阶段，响应头改不出 NOT_FOUND。
+- **嫌疑在 `listen ... quic reuseport`**，但「一个 UDP 监听为何会打死同一个
+  server 块里 TCP 8003 的请求路径」这条因果链**没有推出来**。
+- 用户要求立即修复，未做「只加 listen / 只加 add_header」的二次二分。
+
+## 修法：绕开而非修补
+既然机制未明，就不去修那一行，改成**生产路径一个字符都不动**：
+`extensions/quic-h3/02-server-config.sh` 由「往 CDN 块插 2 行」改为
+「往 http{} 末尾追加一个独立 server 块」（自带 server_name / 证书 /
+location ${XHTTP_PATH} / location / → 404）。故障就无从发生，与机制无关。
+
+配套：
+- 默认端口 UDP 443 → **8445**（远离 Reality 的 TCP 443；8443=Hy2、8444=h3-direct）。
+- 新增通用端口占用检查（`ss -uln`）——原检查只认独立 hysteria 二进制的
+  配置文件，而 v4.0.0 起 Hy2/h3-direct 都由 Xray 监听，查不到。
+- `PROJECT_VERSION` 4.4.0 → 4.4.1。
+- `docs/8.拓展-QUIC添加.md` 加勘误 + 替换手工配置片段。
+
+## 最重要的一条：自检失效
+这次故障里 `nginx -t` **通过**、`systemctl is-active` **通过**，扩展照常报成功，
+主链路却已经死了。「配置能解析」「进程活着」都不等于「业务还通」。
+
+已在 02-server-config.sh 新增第 ③ 道验证：改动**前**用 curl 对主链路取一次
+指纹（带 CDN 域名 SNI 打 8003 上的 XHTTP path，记 HTTP 状态码），改动**后**
+再取一次，不一致就自动回滚并重启 nginx。只断言「与改动前一致」、不断言具体值
+——写死期望值会在某次 Xray 上游变更后变成假警报。
+
+→ 通用规则：**任何往 nginx.conf 注入配置的扩展，都必须有一条「主链路是否还活着」
+的事后校验**。`nginx -t` + `is-active` 是必要不充分条件。
+
+## 仍未做的事
+- 「只加 listen / 只加 add_header」的二次二分（能把机制说死）。
+- Xray 侧 `journalctl -u xray` 在故障窗口的日志（会直接说明 8001 为何 NOT_FOUND）。
+- 新扩展在实机上是否真的能让三条 h3 节点通——**未验证**。修的是「不再打死主链路」，
+  不是「h3 节点从此可用」。XHTTP-over-h3 的上游问题（#4391 / #5849）依然在。
