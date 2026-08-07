@@ -3,9 +3,17 @@
         "loglevel": "info"
     },
     ${XRAY_POLICY_JSON}
+    ${XRAY_DNS_JSON}
     "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
+            {
+                "type": "field",
+                "inboundTag": [
+                    "dns-out"
+                ],
+                "outboundTag": "direct"
+            },
             {
                 "type": "field",
                 "ip": [

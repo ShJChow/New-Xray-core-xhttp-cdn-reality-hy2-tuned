@@ -81,6 +81,42 @@ else
 fi
 
 # ==================================================
+# DNS over HTTPS（v4.4.3）
+# --------------------------------------------------
+# 不配 dns 段时，Xray 走系统 /etc/resolv.conf —— 所有代理目标域名的解析都是
+# **明文 UDP 53**，VPS 的上游（云厂商 / 机房）能完整看到访问过哪些域名。
+# 这是纯粹的隐私缺口，与能否连通无关，因此本段只改解析路径、不改路由逻辑。
+#
+# 服务器地址写 **IP 形式**（1.1.1.1 / 8.8.8.8），不写 dns.google 之类的域名：
+# 域名形式的 DoH 需要先解析自己，会形成引导依赖，首次查询必然回落到系统 DNS，
+# 隐私缺口照旧存在（L3：Xray DNS 文档明确建议 DoH 用 IP 形式避免 bootstrap）。
+#
+# 末位保留 "localhost"（系统 DNS）作兜底：DoH 出网被阻断时仍能解析，
+# 代价是那种情况下退回明文——可用性优先于隐私（L1）。
+#
+# queryStrategy 跟随 IP_CHOICE：纯 IPv4 机器若查出 AAAA，freedom 出站会先试
+# IPv6 再超时回退，白白多一次 RTT（与本文件开头 nginx resolver 同一个道理）。
+if [[ "$IP_CHOICE" == "2" ]]; then
+  XRAY_DNS_QUERY_STRATEGY="UseIP"
+else
+  XRAY_DNS_QUERY_STRATEGY="UseIPv4"
+fi
+XRAY_DNS_JSON=$(cat <<DNSEOF
+"dns": {
+        "servers": [
+            "https://1.1.1.1/dns-query",
+            "https://8.8.8.8/dns-query",
+            "localhost"
+        ],
+        "queryStrategy": "${XRAY_DNS_QUERY_STRATEGY}",
+        "disableCache": false,
+        "tag": "dns-out"
+    },
+DNSEOF
+)
+info "已启用 DoH 解析（queryStrategy=${XRAY_DNS_QUERY_STRATEGY}，兜底 localhost）"
+
+# ==================================================
 # 直连 UDP inbound（v4.0.0）
 # --------------------------------------------------
 # 两者都用 acme 签发的真实证书（Reality+CDN 双域名 SAN，见 07-acme-cert.sh:34），
