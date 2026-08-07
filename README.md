@@ -87,6 +87,7 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 ## 前置条件
 
 运行脚本前需在 Cloudflare 完成（申请一个能托管到cloudflare 的[免费]域名：https://my.dnshe.com/index.php?m=domain_hub 或https://dash.domain.digitalplat.org/dashboard）：
+以下需要再cloudflare打开托管的域名操作（本项目适用于AI安全隐藏，小白需要在AI辅助下安装）：
 
 1. Reality 域名 DNS → **仅 DNS**（灰色云朵）
 2. CDN 域名 DNS → **代理开启**（橙色云朵）
