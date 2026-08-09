@@ -2,10 +2,10 @@
 # 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
 # h3 直连在前（QUIC），CDN/TCP 在后。
 proxies:
-  # ---------- CDN 节点（TCP）----------
-  # 1. 经 CDN 的 TLS+XHTTP：客户端以标准 TCP+TLS (h2) 连接 Cloudflare，
-  #    CF 自行处理 QUIC 回源，不依赖客户端 h3 实现（避免 Xray #4391/#5849 的 h3 不稳定问题）。
-  #    参考 argosbx 项目：CDN 路径用 h2，h3 仅用于直连端口。
+  # ---------- CDN 节点（QUIC/h3）----------
+  # 1. 经 CDN 的 TLS+XHTTP：客户端以 QUIC/h3 连接 Cloudflare（对齐 argosbx
+  #    Vless-xhttp-tls-CDN-UDP 实测配置），CF 边缘自行终止 QUIC 并以 h2 回源，
+  #    服务端 CDN_DIRECT inbound 的 alpn=[h2,http/1.1] 即足够。
   - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -16,7 +16,7 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h2
+      - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}

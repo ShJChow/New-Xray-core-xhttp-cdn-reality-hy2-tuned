@@ -281,7 +281,8 @@ cmd_diag() {
   if svc_active nginx; then chk "nginx 运行中" 0; else chk "nginx 未运行" 1 "${MANAGE_CMD} restart"; fi
   if svc_active xray;  then chk "xray 运行中"  0; else chk "xray 未运行"  1 "${MANAGE_CMD} restart"; fi
 
-  # 全部 CDN 流量经 Xray:443 fallback 落到 nginx:8003，再 grpc_pass 到 127.0.0.1:8001
+  # CDN 流量经 Xray:443 fallback 直达 127.0.0.1:8001 XHTTP inbound（对齐 argosbx/Yulinanami）；
+  # nginx:8003 仅用于 Reality 握手失败时的伪装站（realitySettings.target）
   if command -v ss >/dev/null 2>&1; then
     ss -lntp 2>/dev/null | grep -qE ':443'  && chk "已监听 TCP 443"  0 || chk "未监听 TCP 443"  1 "Xray 未启动？"
     ss -lntp 2>/dev/null | grep -qE ':8003' && chk "已监听 TCP 8003" 0 || chk "未监听 TCP 8003" 1 "nginx 未启动？"

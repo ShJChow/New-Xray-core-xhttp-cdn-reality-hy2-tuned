@@ -1,4 +1,4 @@
-vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${CDN_EXTRA_ENC}#Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
+vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${CDN_EXTRA_ENC}#Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
 ${H3_DIRECT_NODE_LINE}
 ${HY2_NODE_LINE}
 vless://${UUID1}@${VPS_IP_URI}:443?encryption=none&flow=${VISION_FLOW}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#Vless-reality-vision-${HOSTNAME_TAG}
