@@ -103,14 +103,23 @@ rawurlencode() {
 HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 16)}"
 OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
 
+# argosbx 兼容端口参数（v4.4.9）：与 argosbx 安装命令一致——
+# `xupt="" xcpt="" hypt=""` 空值 = shuf 随机；vlpt/xhpt 对应 Reality 443，
+# 本项目 Reality 固定 443（承载订阅 https://REALITY_DOMAIN/sub/...），不随机。
+# 优先级：argosbx 参数 > 本项目环境变量(H3_PORT/HY2_PORT/CDN_DIRECT_PORT) > 随机
+XUPT="${xupt:-${XUPT:-}}"
+XCPT="${xcpt:-${XCPT:-}}"
+HYPT="${hypt:-${HYPT:-}}"
+
 # H3_PORT **不能用 443**（v4.0.3 修复）：
 # v4.0.0 曾按「一个 UDP 一个 TCP，协议不同不冲突」把它设成 443，那是**未经验证的假设**。
 # 实际上 Xray 的 XHTTP inbound 在 alpn=h3 下可能被静默忽略而退回 TCP
 # （XTLS/Xray-core#4391，closed as not planned；#5849 同类），一旦退回，
 # 它就与 Reality 的 TCP 443 抢同一个端口，后 bind 的那个失败 —— 表现为「Reality 不通」。
 # 用独立端口后，即使 h3 退回 TCP 也只影响它自己，不会波及主力节点。
-H3_PORT="${H3_PORT:-8444}"
-HY2_PORT="${HY2_PORT:-8443}"
+# 默认随机（shuf 10000-65535，对齐 argosbx），环境变量可覆盖。
+H3_PORT="${XUPT:-${H3_PORT:-$(shuf -i 10000-65535 -n 1)}}"
+HY2_PORT="${HYPT:-${HY2_PORT:-$(shuf -i 10000-65535 -n 1)}}"
 
 # CDN 节点独立 inbound 端口（v4.3.0）：CDN 流量不再走 Reality 的 443 回落链，
 # 改由独立 TLS+XHTTP inbound 直接处理。客户端 URI 仍写 443（客户端连 Cloudflare），
@@ -119,8 +128,10 @@ HY2_PORT="${HY2_PORT:-8443}"
 # 端口**不能随便选**（v4.3.1 修正）：Cloudflare 代理只会向源站的固定几个端口回源，
 # HTTPS 侧是 443 / 2053 / 2083 / 2087 / 2096 / 8443（官方 network-ports 文档）。
 # v4.3.0 默认的 10443 不在此列——Origin Rule 根本配不出来，CF 连不到源站。
-# 443 已被 Reality 占用，因此默认取 2053（该端口 CF 侧默认不缓存，正合代理需要）。
-CDN_DIRECT_PORT="${CDN_DIRECT_PORT:-2053}"
+# 443 已被 Reality 占用，因此默认从其余 CF 支持端口随机取一个
+# （2053 该端口 CF 侧默认不缓存，正合代理需要；v4.4.9 起随机化对齐 argosbx，
+#  可用 xcpt= 或 CDN_DIRECT_PORT= 覆盖）。
+CDN_DIRECT_PORT="${XCPT:-${CDN_DIRECT_PORT:-$(shuf -e 2053 2083 2087 2096 8443 -n 1)}}"
 case "$CDN_DIRECT_PORT" in
   2053|2083|2087|2096|8443) ;;
   443)
