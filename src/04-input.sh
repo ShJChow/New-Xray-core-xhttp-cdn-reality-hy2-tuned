@@ -39,7 +39,7 @@ pause_confirm() {
 }
 
 echo -e "\n${CYAN}[+] XHTTP + CDN 一键部署脚本${NC}\n"
-echo -e "${GREEN}[+] 推荐系统: Ubuntu 24.04 / Debian 12${NC}"
+echo -e "${GREEN}[+] 推荐系统: Ubuntu 26.04 / Debian 13${NC}"
 [[ "$AUTO" == "1" ]] && info "非交互模式（AUTO=1），全部参数取环境变量或默认值"
 echo -e "${YELLOW}[+] 前置条件 (请确认已在 Cloudflare 完成):${NC}"
 echo "  1. Reality 域名 DNS → 仅 DNS (灰色云朵)"

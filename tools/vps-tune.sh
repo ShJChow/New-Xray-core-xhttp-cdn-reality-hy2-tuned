@@ -231,7 +231,8 @@ try() {  # try KEY VALUE —— 试写，成功才记入落盘清单
 
 # ---- BBR：先探测再写。没有 bbr 就保持系统默认，不硬塞 ----
 AVAIL=$(sysget net.ipv4.tcp_available_congestion_control)
-if [[ "$AVAIL" != *bbr* ]]; then
+# 精确匹配 bbr（空格分隔），避免 *bbr* 误匹配 bbr2 等变体
+if ! grep -qw 'bbr' <<< "$AVAIL"; then
   if $DRY_RUN; then
     # 加载内核模块是状态变更，--dry-run 承诺「不写任何东西」，这里不能 modprobe。
     # 改为只读判断模块是否可用。
@@ -244,7 +245,7 @@ if [[ "$AVAIL" != *bbr* ]]; then
     AVAIL=$(sysget net.ipv4.tcp_available_congestion_control)
   fi
 fi
-if [[ "$AVAIL" == *bbr* ]]; then
+if grep -qw 'bbr' <<< "$AVAIL"; then
   try net.core.default_qdisc fq                 # BBR 依赖的公平队列，缺它 BBR 退化
   try net.ipv4.tcp_congestion_control bbr       # 基于 BDP 估计，跨境高丢包链路收益最大
   ok "BBR 可用"

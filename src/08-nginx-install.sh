@@ -19,7 +19,10 @@ install_nginx() {
     --prefix=/usr/local/nginx \
     --sbin-path=/usr/sbin/nginx \
     --conf-path=/etc/nginx/nginx.conf \
-    --with-cc-opt="-Wno-error" \
+    # -DNGX_QUIC_OPENSSL_API=1：启用 OpenSSL 3.5 原生 QUIC API（nginx PR #751 默认关闭，
+    # 因 3.5.0 有 quic_transport_parameters bug；Ubuntu 26.04 使用 3.5.5+ 已修复）。
+    # 该宏在 OpenSSL <3.5 时被 nginx 源码的 OPENSSL_VERSION_NUMBER 守卫，对旧发行版无害。
+    --with-cc-opt="-Wno-error -DNGX_QUIC_OPENSSL_API=1" \
     --with-http_stub_status_module \
     --with-http_ssl_module \
     --with-http_realip_module \

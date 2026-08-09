@@ -69,11 +69,12 @@ XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"bufferSize\":${XRAY_BUFFER_KB
 # 失败（L3：字段名 tcpcongestion 全小写，见官方 sockopt 文档）。TFO/keepalive/
 # tcpUserTimeout 与拥塞算法无关，总是写。
 AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
-if [[ "$AVAIL" != *bbr* ]]; then
+# 精确匹配 bbr（空格分隔），避免 *bbr* 误匹配 bbr2 等变体
+if ! grep -qw 'bbr' <<< "$AVAIL"; then
   modprobe tcp_bbr >/dev/null 2>&1 || true
   AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
 fi
-if [[ "$AVAIL" == *bbr* ]]; then
+if grep -qw 'bbr' <<< "$AVAIL"; then
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":300,"tcpKeepAliveInterval":30,"tcpUserTimeout":30000}'
 else
   warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"

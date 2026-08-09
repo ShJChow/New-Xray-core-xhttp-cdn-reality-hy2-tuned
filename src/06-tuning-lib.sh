@@ -63,12 +63,14 @@ apply_system_tuning() {
 
   # ---------- BBR 能力探测 ----------
   AVAILABLE_CC=$(sysctl_get net.ipv4.tcp_available_congestion_control)
-  if [[ "$AVAILABLE_CC" != *bbr* ]]; then
+  # 精确匹配 bbr（空格分隔），避免 *bbr* 误匹配 bbr2 等变体
+  if ! grep -qw 'bbr' <<< "$AVAILABLE_CC"; then
     modprobe tcp_bbr >/dev/null 2>&1 || true
     AVAILABLE_CC=$(sysctl_get net.ipv4.tcp_available_congestion_control)
   fi
-  if [[ "$AVAILABLE_CC" == *bbr* ]]; then
+  if grep -qw 'bbr' <<< "$AVAILABLE_CC"; then
     TUNING_BBR_OK=true
+    modprobe sch_fq >/dev/null 2>&1 || true
     try_sysctl net.core.default_qdisc fq
     try_sysctl net.ipv4.tcp_congestion_control bbr
   else
@@ -84,10 +86,9 @@ apply_system_tuning() {
   # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
   try_sysctl net.ipv4.tcp_rmem "4096 262144 ${TCP_MEM_MAX}"
   try_sysctl net.ipv4.tcp_wmem "4096 262144 ${TCP_MEM_MAX}"
-  # 接收缓冲中留给协议开销的比例。负值表示按 1/2^|n| 计，-2 会让通告窗口更接近
-  # rmem 实际大小。新内核语义几经调整且 tcp_moderate_rcvbuf 已覆盖多数场景，
-  # 这里不断言收益；try_sysctl 在不支持的内核上只会记进 SKIPPED。
-  try_sysctl net.ipv4.tcp_adv_win_scale -2
+  # net.ipv4.tcp_adv_win_scale 自 Linux 6.6 起已废弃（内核提交 dfa2f048），
+  # 改为按 skb->len/skb->truesize 逐 socket 动态计算。sysctl 文件虽然仍可写
+  # 但已是 no-op，不再写入。
   # 按物理内存的 6% / 8% / 12% 推算（单位是页，已按 PAGESIZE 换算）
   try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
   # QUIC / HTTP3：本项目保留的 UDP+XHTTP+CDN 节点与 Hysteria2 扩展都会用到

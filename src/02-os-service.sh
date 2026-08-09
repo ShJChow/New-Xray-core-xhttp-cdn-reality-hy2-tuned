@@ -7,8 +7,10 @@ case "$OS_ID" in
     pkg_update()  { apt update -y; }
     pkg_install() { apt install -y "$@"; }
     install_build_deps() {
-      apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev libcrypt-dev wget make 2>/dev/null || \
-        apt-get install -y gcc g++ libpcre2-dev zlib1g-dev libssl-dev libcrypt-dev wget make
+      # PCRE2 优先（Ubuntu 26.04+ / Debian 13+ 不再提供 libpcre3），
+      # 安装失败时退回到 PCRE（旧发行版兼容）
+      apt-get install -y gcc g++ libpcre2-dev zlib1g-dev libssl-dev libcrypt-dev wget make 2>/dev/null || \
+        apt-get install -y gcc g++ libpcre3 libpcre3-dev zlib1g zlib1g-dev openssl libssl-dev libcrypt-dev wget make
     }
     ;;
   centos|rhel|almalinux|rocky|ol|amzn)

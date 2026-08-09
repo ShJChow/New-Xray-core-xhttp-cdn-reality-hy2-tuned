@@ -2,7 +2,7 @@
 # ==================================================
 # ubuntu_vps_optimize.sh —— Ubuntu VPS 全面性能优化（12 阶段）
 #
-# 适用：Ubuntu 24.04+ / ARM64(aarch64) / x86_64
+# 适用：Ubuntu 26.04+ / ARM64(aarch64) / x86_64
 # 用途：Xray Reality + XHTTP + CDN + Docker + AI Agent 高并发转发型 VPS
 #
 # 设计原则：
@@ -344,10 +344,11 @@ fi
 
 # ---- BBR ----
 AVAIL=$(sysget net.ipv4.tcp_available_congestion_control)
-if [[ "$AVAIL" != *bbr* ]]; then
+# 精确匹配 bbr（空格分隔），避免 *bbr* 误匹配 bbr2 等变体
+if ! grep -qw 'bbr' <<< "$AVAIL"; then
   $DRY_RUN || { modprobe tcp_bbr >/dev/null 2>&1; AVAIL=$(sysget net.ipv4.tcp_available_congestion_control); }
 fi
-if [[ "$AVAIL" == *bbr* ]]; then
+if grep -qw 'bbr' <<< "$AVAIL"; then
   try net.core.default_qdisc fq
   try net.ipv4.tcp_congestion_control bbr
   ok "BBR + fq 已就绪"
