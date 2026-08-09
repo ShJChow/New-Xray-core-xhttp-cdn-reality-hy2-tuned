@@ -31,8 +31,13 @@ fi
 
 rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null || true
 
-# v4.4.8：CDN 节点按用户要求逐项对齐 argosbx（无 ML-KEM、无 host、无 xpadding、
-# 无 xmux），CDN_*_ENC 变量随之移除。其余节点的 xpadding 仍由 FEATURE_XPADDING 控制。
+# CDN 节点（#1）固定 extra 参数（v4.5.1 恢复，用户要求 CDN 加 xpadding）：
+# xPadding 混淆 + scMinPostsIntervalMs + xmux 复用，与 FEATURE_XPADDING 解耦——
+# CDN 流量经 Cloudflare，混淆与连接复用参数始终写入。
+CDN_XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
+CDN_XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+CDN_EXTRA_ENC="%7B${CDN_XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${CDN_XMUX_ENC}%7D"
+
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
   # xmux 参数与上游 Yulinanami/my-xhttp-cdn-config 完全一致，本项目不再改动：

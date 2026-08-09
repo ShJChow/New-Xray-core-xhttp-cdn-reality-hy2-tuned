@@ -172,14 +172,14 @@ else
                         "level": 0
                     }
                 ],
-                "decryption": "none"
+                "decryption": "${VLESSENC_DECRYPTION}"
             },
             "streamSettings": {
                 "network": "xhttp",
                 "security": "tls",
                 "xhttpSettings": {
                     "path": "${XHTTP_PATH}",
-                    "mode": "auto"
+                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
                 },
                 "tlsSettings": {
                     "alpn": ["h2","http/1.1"],
