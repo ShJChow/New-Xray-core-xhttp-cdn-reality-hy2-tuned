@@ -5,12 +5,13 @@ proxies:
   # ---------- CDN 节点（QUIC/h3）----------
   # 1. 经 CDN 的 TLS+XHTTP：逐项对齐 argosbx Vless-xhttp-tls-CDN-UDP
   #    （argosbx.sh clxcpt）：encryption 无（none）、无 host、无 xpadding、
-  #    无 reuse-settings。服务端 CDN_DIRECT inbound 同为 argosbx xhttp-h23
-  #    形状（decryption=none、alpn h2/http1.1）。
+  #    无 reuse-settings。port 用 CDN_DIRECT_PORT（客户端连 CF 的端口 =
+  #    CF 回源端口，同 argosbx 的 $port_xc）。服务端 CDN_DIRECT inbound
+  #    同为 argosbx xhttp-h23 形状（decryption=none、alpn h2/http1.1、双栈）。
   - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
-    port: 443
+    port: ${CDN_DIRECT_PORT}
     uuid: ${UUID2}
     udp: true
     flow: ""

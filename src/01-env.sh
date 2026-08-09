@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.4.9"
+PROJECT_VERSION="4.5.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"

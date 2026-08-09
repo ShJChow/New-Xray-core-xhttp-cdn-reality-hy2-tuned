@@ -162,7 +162,7 @@ else
   XRAY_CDN_DIRECT_INBOUND=$(cat <<CDNEOF
 ,
         {
-            "listen": "0.0.0.0",
+            "listen": "::",
             "port": ${CDN_DIRECT_PORT},
             "protocol": "vless",
             "settings": {
