@@ -3,9 +3,10 @@
 # h3 直连在前（QUIC），CDN/TCP 在后。
 proxies:
   # ---------- CDN 节点（QUIC/h3）----------
-  # 1. 经 CDN 的 TLS+XHTTP：客户端以 QUIC/h3 连接 Cloudflare（对齐 argosbx
-  #    Vless-xhttp-tls-CDN-UDP 实测配置），CF 边缘自行终止 QUIC 并以 h2 回源，
-  #    服务端 CDN_DIRECT inbound 的 alpn=[h2,http/1.1] 即足够。
+  # 1. 经 CDN 的 TLS+XHTTP：逐项对齐 argosbx Vless-xhttp-tls-CDN-UDP
+  #    （argosbx.sh clxcpt）：encryption 无（none）、无 host、无 xpadding、
+  #    无 reuse-settings。服务端 CDN_DIRECT inbound 同为 argosbx xhttp-h23
+  #    形状（decryption=none、alpn h2/http1.1）。
   - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -19,22 +20,9 @@ proxies:
       - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:
-      host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
       mode: auto
-      x-padding-obfs-mode: true
-      x-padding-key: "${XHTTP_PADDING_KEY}"
-      x-padding-header: "${XHTTP_PADDING_HEADER}"
-      x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
-      x-padding-method: "${XHTTP_PADDING_METHOD}"
-      sc-min-posts-interval-ms: 30
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"
-        h-keep-alive-period: 0
 
   # ---------- HTTP/3 (QUIC) 直连 ----------
   # 2. 直连 VPS 的 h3（UDP ${H3_PORT}）：不经 CDN，Xray 自己监听 UDP。

@@ -149,10 +149,12 @@ if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
   fi
 fi
 
-# CDN 独立 inbound（v4.3.0）：CDN 流量不再走 Reality 443 的回落链，改由
-# 独立 TLS+XHTTP inbound 直接处理。客户端 URI 仍写 443（连 Cloudflare），
-# CF 侧用 Origin Rule 把 cdn 域名回源映射到 CDN_DIRECT_PORT。
-# 复用同一套 UUID2 / VLESS 加密 / XHTTP_PATH / xpadding（L19：与 443 回落路径同源）。
+# CDN 独立 inbound（v4.3.0 / v4.4.8 argosbx 对齐）：等价于 argosbx 的
+# xhttp-h23 inbound —— CF 回源 TLS 直达此端口，Xray 直接终止 TLS 处理 XHTTP。
+# 参数逐项对齐 argosbx（argosbx.sh xhttp-h23）：
+#   decryption  "none"        （argosbx 用 none，不做 ML-KEM 加密）
+#   xhttpSettings 仅 path+mode（argosbx 无 xpadding / host / sockopt）
+#   tlsSettings  alpn h2/http1.1（CF 回源用 h2，argosbx 同款）
 # 证书不存在时跳过，CDN 节点仍走旧路径（443 回落）可用（L1 best-effort）。
 if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
   warn "未找到 acme 证书，CDN 独立 inbound 已跳过（CDN 节点仍走 443 回落）"
@@ -170,11 +172,15 @@ else
                         "level": 0
                     }
                 ],
-                "decryption": "${VLESSENC_DECRYPTION}"
+                "decryption": "none"
             },
             "streamSettings": {
                 "network": "xhttp",
                 "security": "tls",
+                "xhttpSettings": {
+                    "path": "${XHTTP_PATH}",
+                    "mode": "auto"
+                },
                 "tlsSettings": {
                     "alpn": ["h2","http/1.1"],
                     "certificates": [
@@ -183,11 +189,7 @@ else
                             "keyFile": "${CERT_KEY}"
                         }
                     ]
-                },
-                "xhttpSettings": {
-                    "path": "${XHTTP_PATH}",
-                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
-                }${XRAY_SOCKOPT_JSON}
+                }
             },
             "sniffing": {
                 "enabled": true,
