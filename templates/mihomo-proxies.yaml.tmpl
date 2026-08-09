@@ -1,10 +1,11 @@
 # 节点顺序 = HTTP/3 优先。mihomo-full.yaml.tmpl 的 proxy-groups 用 include-all: true，
 # 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
-# 前三条是 QUIC/h3，后三条是 TCP 兜底（UDP 被封时可用）。
+# h3 直连在前（QUIC），CDN/TCP 在后。
 proxies:
-  # ---------- HTTP/3 (QUIC) ----------
-  # 1. 经 CDN 的 h3：实测最快。alpn 必须恰好只有 h3，mihomo 才走 HTTP/3
-  #    （transport/xhttp/client.go:159）。
+  # ---------- CDN 节点（TCP）----------
+  # 1. 经 CDN 的 TLS+XHTTP：客户端以标准 TCP+TLS (h2) 连接 Cloudflare，
+  #    CF 自行处理 QUIC 回源，不依赖客户端 h3 实现（避免 Xray #4391/#5849 的 h3 不稳定问题）。
+  #    参考 argosbx 项目：CDN 路径用 h2，h3 仅用于直连端口。
   - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -15,7 +16,7 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h3
+      - h2
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
@@ -28,8 +29,10 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
+  # ---------- HTTP/3 (QUIC) 直连 ----------
   # 2. 直连 VPS 的 h3（UDP ${H3_PORT}）：不经 CDN，Xray 自己监听 UDP。
   #    sni 用 Reality 域名——证书是 Reality+CDN 双域名 SAN，直连侧用前者。
+  #    alpn 必须恰好只有 h3，mihomo 才走 HTTP/3（transport/xhttp/client.go:159）。
   - name: Vless-xhttp-h3-direct-${HOSTNAME_TAG}
     type: vless
     server: ${VPS_IP}

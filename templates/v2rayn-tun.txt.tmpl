@@ -82,7 +82,7 @@ v2rayN 里的设置位置
         2. Vless-xhttp-reality               裸 IP + TCP
         3. Hysteria2-obfs                    裸 IP + UDP ${HY2_PORT}
         4. Vless-xhttp-h3-direct             裸 IP + UDP ${H3_PORT}
-  最弱  5. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
+  最弱  5. Vless-xhttp-tls-UDP-cdn           域名 + CDN/TLS
 
 注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 5 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的

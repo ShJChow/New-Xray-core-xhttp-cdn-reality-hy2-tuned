@@ -113,7 +113,7 @@ else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x3（vision / xhttp 不分离 / 上行 Reality+下行 CDN）"
+info "节点集: xhttp-tls-CDN + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x3（vision / xhttp 不分离 / 上行 Reality+下行 CDN）"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
