@@ -60,7 +60,8 @@ Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 | 3 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 4 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
 | 5 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
-| 6 | `Vless-xhttp-split-realityup-cdndown-<host>` | 上行直连 VPS TCP 443 / 下行经 CDN | 上行 XHTTP + Reality，下行 XHTTP + TLS（alpn h2），上下行分离 |
+
+> v4.4.7 起移除上下行分离节点 `Vless-xhttp-split-realityup-cdndown`（上行 Reality / 下行 CDN）：实测不通，且依赖跨 inbound 分离，无已验证先例，故精简为 5 条。
 
 节点 2/3 走裸 UDP 直连，需要在**云厂商安全组**放行 UDP 8444 与 UDP 8443
 （这一层在机器外面，脚本查不到也改不了）。Xray 版本低于 26.6.1 时这两条会被自动禁用。

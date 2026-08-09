@@ -56,16 +56,6 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
       x-padding-method: "${XHTTP_PADDING_METHOD}"
 EOF
 )
-  # 上下行分离节点的 download-settings 比 xhttp-opts 深一级，缩进各 +2
-  MIHOMO_XPADDING_DOWNLOAD_BLOCK=$(cat <<EOF
-
-        x-padding-obfs-mode: true
-        x-padding-key: "${XHTTP_PADDING_KEY}"
-        x-padding-header: "${XHTTP_PADDING_HEADER}"
-        x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
-        x-padding-method: "${XHTTP_PADDING_METHOD}"
-EOF
-)
   MIHOMO_SC_MIN_POSTS_BLOCK=$(cat <<EOF
 
       sc-min-posts-interval-ms: 30
@@ -74,11 +64,6 @@ EOF
   MIHOMO_REUSE_KEEPALIVE_XHTTP=$(cat <<EOF
 
         h-keep-alive-period: 0
-EOF
-)
-  MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=$(cat <<EOF
-
-          h-keep-alive-period: 0
 EOF
 )
 fi
@@ -93,16 +78,9 @@ if [[ "$CDN_ECH_ENABLED" == true ]]; then
       query-server-name: ${CDN_DOMAIN}
 EOF
 )
-  MIHOMO_ECH_DOWNLOAD_BLOCK=$(cat <<EOF
-
-        ech-opts:
-          enable: true
-          query-server-name: ${CDN_DOMAIN}
-EOF
-)
 fi
 
-# 节点集：3 条 QUIC/h3 + 3 条 TCP 兜底，全部由 Xray 单核心提供。
+# 节点集：3 条 QUIC/h3 + 2 条 TCP 兜底，全部由 Xray 单核心提供。
 # 两条直连 UDP 节点（h3-direct / Hysteria2）依赖 Xray ≥26.6.1，低版本时
 # FEATURE_H3_DIRECT / FEATURE_HY2 会在 03-xray-install.sh 里被置 false，
 # 此处渲染为空行，随后的 sed 删掉——空行若进了 base64 订阅会变成一条空节点。
@@ -119,7 +97,7 @@ else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: xhttp-tls-CDN + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x3（vision / xhttp 不分离 / 上行 Reality+下行 CDN）"
+info "节点集: xhttp-tls-CDN + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2（vision / xhttp）"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
