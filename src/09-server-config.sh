@@ -362,10 +362,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
-  if [[ "$FEATURE_XPADDING" == true ]]; then
-    printf 'XHTTP_PADDING_HEADER=%q\n' "$XHTTP_PADDING_HEADER"
-    printf 'XHTTP_PADDING_KEY=%q\n'    "$XHTTP_PADDING_KEY"
-  fi
+  printf 'XHTTP_PADDING_HEADER=%q\n' "$XHTTP_PADDING_HEADER"
+  printf 'XHTTP_PADDING_KEY=%q\n'    "$XHTTP_PADDING_KEY"
 } > "$NODE_ENV_FILE"
 chmod 600 "$NODE_ENV_FILE"
 

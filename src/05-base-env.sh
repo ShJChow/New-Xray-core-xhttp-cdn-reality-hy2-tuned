@@ -73,6 +73,10 @@ XHTTP_PATH="/$(echo "$UUID2" | tr -d '-' | cut -c1-8)"
 
 XHTTP_PADDING_PLACEMENT="queryInHeader"
 XHTTP_PADDING_METHOD="tokenish"
+# CDN 节点 (#1) 始终使用 xpadding（对齐 argosbx xhttp-h23），与 FEATURE_XPADDING 解耦
+# 当用户在 04-input.sh 跳过了 xpadding 交互时，这里用默认值补上
+XHTTP_PADDING_HEADER="${XHTTP_PADDING_HEADER:-Referer}"
+XHTTP_PADDING_KEY="${XHTTP_PADDING_KEY:-x_padding}"
 
 # ==================================================
 # 直连 UDP 节点参数（v4.0.0）
@@ -144,7 +148,7 @@ require_xray_version_for_udp
 migrate_legacy_udp_components
 check_udp_port_conflict
 
-if [[ "$FEATURE_XPADDING" == true ]]; then
+# 服务端 xpadding 始终注入所有 XHTTP inbound（CDN 节点必须，其他节点无害）
   XRAY_XHTTP_PADDING_JSON=$(cat <<EOF
 ,
                     "xPaddingObfsMode": true,
@@ -154,7 +158,7 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
                     "xPaddingMethod": "${XHTTP_PADDING_METHOD}"
 EOF
 )
-fi
+
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
   CDN_ECH_QUERY_ENC=$(echo "$CDN_ECH_QUERY" | sed -e 's/%/%25/g' -e 's/+/%2B/g' -e 's/:/%3A/g' -e 's/\//%2F/g')
