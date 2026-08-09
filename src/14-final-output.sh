@@ -26,14 +26,22 @@ echo "VLESS Enc(客户端): $VLESSENC_ENCRYPTION"
 echo "VLESS Dec(服务端): $VLESSENC_DECRYPTION"
 echo ""
 echo -e "${YELLOW}[+] CDN 独立 inbound${NC}"
-echo "CDN 独立端口:  TCP ${CDN_DIRECT_PORT:-2053}（TLS + XHTTP，双栈）"
-echo "  ※ CDN 节点客户端连 ${CDN_DOMAIN}:${CDN_DIRECT_PORT:-2053}（端口即回源，同 argosbx）；"
-echo "    需在 Cloudflare 后台把回源端口设为 ${CDN_DIRECT_PORT:-2053}（Origin Rule 或源站端口）："
-echo "    主机名 = ${CDN_DOMAIN} → 目标端口 ${CDN_DIRECT_PORT:-2053}"
-echo -e "${RED}  ⚠ 该端口用的是真实证书，任何人扫到都能读出 ${CDN_DOMAIN}，等于暴露源站 IP${NC}"
-echo "    务必在安全组/防火墙上把 TCP ${CDN_DIRECT_PORT:-2053} 只放行给 Cloudflare IP 段："
-echo "    https://www.cloudflare.com/ips-v4 与 https://www.cloudflare.com/ips-v6"
-echo "    不配这条时该端口对全网开放"
+echo "CDN 独立端口:  TCP ${CDN_DIRECT_PORT:-2053}（TLS + XHTTP，双栈，完全随机）"
+case "${CDN_DIRECT_PORT:-2053}" in
+  2053|2083|2087|2096|8443)
+    echo "  ※ CDN 节点客户端连 ${CDN_DOMAIN}:${CDN_DIRECT_PORT:-2053}（端口即回源）；"
+    echo "    需在 Cloudflare 后台把回源端口设为 ${CDN_DIRECT_PORT:-2053}（Origin Rule 或源站端口）："
+    echo "    主机名 = ${CDN_DOMAIN} → 目标端口 ${CDN_DIRECT_PORT:-2053}"
+    echo -e "${RED}  ⚠ 该端口用的是真实证书，任何人扫到都能读出 ${CDN_DOMAIN}，等于暴露源站 IP${NC}"
+    echo "    务必在安全组/防火墙上把 TCP ${CDN_DIRECT_PORT:-2053} 只放行给 Cloudflare IP 段："
+    echo "    https://www.cloudflare.com/ips-v4 与 https://www.cloudflare.com/ips-v6"
+    echo "    不配这条时该端口对全网开放"
+    ;;
+  *)
+    echo -e "${RED}  ⚠ 端口 ${CDN_DIRECT_PORT} 不在 Cloudflare 回源端口内（443/2053/2083/2087/2096/8443），"
+    echo "    CDN 节点不可用。请用 xcpt=2053 bash install.sh 重装，直到命中 CF 端口。${NC}"
+    ;;
+esac
 echo ""
 echo -e "${YELLOW}[+] 直连 UDP 节点${NC}"
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then

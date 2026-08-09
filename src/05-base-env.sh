@@ -127,21 +127,20 @@ HY2_PORT="${HYPT:-${HY2_PORT:-$(shuf -i 10000-65535 -n 1)}}"
 #
 # 端口**不能随便选**（v4.3.1 修正）：Cloudflare 代理只会向源站的固定几个端口回源，
 # HTTPS 侧是 443 / 2053 / 2083 / 2087 / 2096 / 8443（官方 network-ports 文档）。
-# v4.3.0 默认的 10443 不在此列——Origin Rule 根本配不出来，CF 连不到源站。
-# 443 已被 Reality 占用，因此默认从其余 CF 支持端口随机取一个
-# （2053 该端口 CF 侧默认不缓存，正合代理需要；v4.4.9 起随机化对齐 argosbx，
-#  可用 xcpt= 或 CDN_DIRECT_PORT= 覆盖）。
-CDN_DIRECT_PORT="${XCPT:-${CDN_DIRECT_PORT:-$(shuf -e 2053 2083 2087 2096 8443 -n 1)}}"
+# v4.4.9 起按用户要求完全随机（shuf 10000-65535，对齐 argosbx xcpt）：随机命中
+# CF 支持端口则 CDN 可用，否则客户端连 CF:端口失败、CDN 节点不可用——这是 argosbx
+# 的原始行为（只在命中 CF 端口时生成 CDN 节点）。可用 xcpt= 或 CDN_DIRECT_PORT= 指定。
+CDN_DIRECT_PORT="${XCPT:-${CDN_DIRECT_PORT:-$(shuf -i 10000-65535 -n 1)}}"
 case "$CDN_DIRECT_PORT" in
   2053|2083|2087|2096|8443) ;;
   443)
-    warn "CDN_DIRECT_PORT 不能设为 443（已被 Reality 入站占用），已改回 2053"
-    CDN_DIRECT_PORT=2053
+    warn "CDN_DIRECT_PORT 不能设为 443（已被 Reality 入站占用），已从 CF 支持端口池改选"
+    CDN_DIRECT_PORT=$(shuf -e 2053 2083 2087 2096 8443 -n 1)
     ;;
   *)
     warn "CDN_DIRECT_PORT=${CDN_DIRECT_PORT} 不在 Cloudflare 支持的 HTTPS 回源端口内"
-    warn "  可选: 2053 / 2083 / 2087 / 2096 / 8443；Origin Rule 无法指向其它端口，已改回 2053"
-    CDN_DIRECT_PORT=2053
+    warn "  CF 仅回源 443/2053/2083/2087/2096/8443；此端口下客户端连 CF 失败，CDN 节点不可用"
+    warn "  已保留该随机端口（用户要求完全随机）；若需保证可用请指定 xcpt=2053 重装"
     ;;
 esac
 
