@@ -35,6 +35,8 @@
 | **内核自动更新** | 每周更新 Xray-core，配置自检失败自动回滚 |
 | 扩展 | `add-quic-h3`（3 条 XHTTP over h3）/ `add-quic`（Hysteria2）/ 上下行不同 CDN / 上行 IPv4 下行 IPv6 |
 
+## 建议先申请证书，否则会安装失败，acme.sh ：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)申请。
+
 ---
 
 ## 节点列表
