@@ -38,7 +38,7 @@ append_profile() {
 # ==================================================
 # 功能开关：默认全开（xpadding + ECH 可选）
 # ==================================================
-# FEATURE_XPADDING  XHTTP 填充混淆（xPaddingObfsMode），绕过 CDN 侧特征检测
+# FEATURE_XPADDING  XHTTP 填充（xPaddingBytes 16-64），绕过 CDN 侧特征检测
 # FEATURE_CDN_ECH   加密 TLS 握手 SNI（是否实际启用由交互 / CDN_ECH 环境变量决定）
 # 两个都可用环境变量覆盖为 false 关闭，无需重装即可切换。
 

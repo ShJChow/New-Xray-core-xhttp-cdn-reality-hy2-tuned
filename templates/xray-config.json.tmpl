@@ -1,6 +1,6 @@
 {
     "log": {
-        "loglevel": "info"
+        "loglevel": "warning"
     },
     ${XRAY_POLICY_JSON}
     "routing": {
@@ -78,7 +78,7 @@
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
-                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                    "mode": "stream-up"${XRAY_XHTTP_PADDING_JSON}
                 }
             },
             "sniffing": {

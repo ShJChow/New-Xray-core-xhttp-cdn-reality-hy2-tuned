@@ -22,9 +22,9 @@ proxies:
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      mode: stream-up
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "8-16"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
@@ -46,9 +46,9 @@ proxies:
     encryption: ${VLESSENC_ENCRYPTION}
     xhttp-opts:
       path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      mode: stream-up
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "8-16"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
@@ -105,8 +105,8 @@ proxies:
       short-id: ${SHORT_ID}
     xhttp-opts:
       path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
+      mode: stream-up
       reuse-settings:
-        max-concurrency: "16-32"
+        max-concurrency: "8-16"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}

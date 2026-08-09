@@ -125,11 +125,7 @@ check_udp_port_conflict
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XRAY_XHTTP_PADDING_JSON=$(cat <<EOF
 ,
-                    "xPaddingObfsMode": true,
-                    "xPaddingKey": "${XHTTP_PADDING_KEY}",
-                    "xPaddingHeader": "${XHTTP_PADDING_HEADER}",
-                    "xPaddingPlacement": "${XHTTP_PADDING_PLACEMENT}",
-                    "xPaddingMethod": "${XHTTP_PADDING_METHOD}"
+                    "xPaddingBytes": "16-64"
 EOF
 )
 fi

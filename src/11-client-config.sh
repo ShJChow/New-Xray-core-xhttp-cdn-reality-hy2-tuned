@@ -32,49 +32,15 @@ fi
 rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null || true
 
 if [[ "$FEATURE_XPADDING" == true ]]; then
-  XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
-  # xmux 参数与上游 Yulinanami/my-xhttp-cdn-config 完全一致，本项目不再改动：
-  #   cMaxReuseTimes: 0    → leftUsage = -1，**无限复用**，不是"不复用"
-  #   hKeepAlivePeriod: 0  → h3 取 quic-go 默认、h2 取 Chrome 默认，不是"禁用"
-  #                          （负值才是禁用，见 dialer.go:154-186）
-  # 这两项写死为"采用默认"，改成拍脑袋的正值等于覆盖掉更好的默认（L16）。
-  XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
-  XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
-
-  MIHOMO_XPADDING_XHTTP_BLOCK=$(cat <<EOF
-
-      x-padding-obfs-mode: true
-      x-padding-key: "${XHTTP_PADDING_KEY}"
-      x-padding-header: "${XHTTP_PADDING_HEADER}"
-      x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
-      x-padding-method: "${XHTTP_PADDING_METHOD}"
-EOF
-)
-  # 上下行分离节点的 download-settings 比 xhttp-opts 深一级，缩进各 +2
-  MIHOMO_XPADDING_DOWNLOAD_BLOCK=$(cat <<EOF
-
-        x-padding-obfs-mode: true
-        x-padding-key: "${XHTTP_PADDING_KEY}"
-        x-padding-header: "${XHTTP_PADDING_HEADER}"
-        x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
-        x-padding-method: "${XHTTP_PADDING_METHOD}"
-EOF
-)
-  MIHOMO_SC_MIN_POSTS_BLOCK=$(cat <<EOF
-
-      sc-min-posts-interval-ms: 30
-EOF
-)
-  MIHOMO_REUSE_KEEPALIVE_XHTTP=$(cat <<EOF
-
-        h-keep-alive-period: 0
-EOF
-)
-  MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=$(cat <<EOF
-
-          h-keep-alive-period: 0
-EOF
-)
+  # 客户端 extra 只保留 xmux 复用（参考优化：8-16 并发 / 2-4 连接 / 600-900 次 /
+  # 1800-3000s 复用）；xPaddingBytes 是服务端参数，客户端无需 padding 字段。
+  XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%228-16%22%2C%22maxConnections%22%3A%222-4%22%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%7D"
+  XPAD_EXTRA_ENC="%7B${XMUX_ENC}%7D"
+  MIHOMO_XPADDING_XHTTP_BLOCK=""
+  MIHOMO_XPADDING_DOWNLOAD_BLOCK=""
+  MIHOMO_SC_MIN_POSTS_BLOCK=""
+  MIHOMO_REUSE_KEEPALIVE_XHTTP=""
+  MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=""
 fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
@@ -100,7 +66,7 @@ fi
 # 此处渲染为空行，随后的 sed 删掉——空行若进了 base64 订阅会变成一条空节点。
 # L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
+  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
 else
   H3_DIRECT_NODE_LINE=""
 fi
