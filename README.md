@@ -15,7 +15,7 @@
 > **注意**：V2rayN v7.19.5+ 在 TUN 模式下链路可能不稳定，需启用旧版 TUN 保护选项（[PR #9005](https://github.com/2dust/v2rayN/pull/9005)）。
 安装完成时**自动执行 `xh tuning on`**（内核层调优，best-effort；`FEATURE_AUTO_TUNING=false` 可跳过，`xh tuning off` 可回滚）。
 > 
-> 若证书申请失败，可使用acme：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)申请。
+## 若证书申请失败，可使用acme：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)。使用不开小黄元的那个域名
 ---
 
 ## 特性
@@ -35,7 +35,7 @@
 | **内核自动更新** | 每周更新 Xray-core，配置自检失败自动回滚 |
 | 扩展 | `add-quic-h3`（3 条 XHTTP over h3）/ `add-quic`（Hysteria2）/ 上下行不同 CDN / 上行 IPv4 下行 IPv6 |
 
-## 建议先申请证书，否则会安装失败，acme.sh ：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)申请。
+## 建议先申请证书，否则会安装失败，acme.sh ：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)申请。使用不开小黄元的那个域名reality.yourdomain...
 
 ---
 
