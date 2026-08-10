@@ -4,7 +4,7 @@
 
  **测试在Oracle 4ocpu+24 ubuntu 26.04 运行)**
  
-基于 Xray-core 的 **XHTTP + CDN 上下行分离**一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 5 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
+基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 5 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
 支持 V2rayN / Shadowrocket / Mihomo / onexray 客户端，支持 IPv4 与 IPv6。
 
