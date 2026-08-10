@@ -75,6 +75,16 @@
             },
             "streamSettings": {
                 "network": "xhttp",
+                // 本入站只接受来自 127.0.0.1 的 Nginx 反代，nginx.conf 已通过
+                // grpc_set_header 传入 X-Real-IP / X-Forwarded-For（经 CDN 时由
+                // $http_cf_connecting_ip 取得真实客户端 IP）。不声明本项时 Xray
+                // 不信任该头，会退回使用 socket 对端地址——即 127.0.0.1，导致：
+                //   1) 所有经 CDN 的流量在日志里都记成 127.0.0.1，真实客户端 IP 丢失，
+                //      只有直连 Reality 的流量能看到真实 IP；
+                //   2) 每个请求打一条 Warning，实测占 xray 日志总量的约 50%。
+                // 取值只写 127.0.0.1：本入站仅监听回环，不存在其他合法来源；
+                // 写宽了等于允许伪造 X-Forwarded-For。
+                "sockopt": {"trustedXForwardedFor": ["127.0.0.1"]},
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
