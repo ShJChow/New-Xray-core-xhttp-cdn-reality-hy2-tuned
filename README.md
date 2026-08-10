@@ -51,7 +51,7 @@ Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn h3，**实测最快** |
+| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.2.2 由 h3 改回 TCP，见 docs/10 §8） |
 | 2 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
 | 3 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 4 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
