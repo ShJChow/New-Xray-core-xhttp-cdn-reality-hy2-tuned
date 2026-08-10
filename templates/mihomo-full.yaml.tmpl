@@ -98,6 +98,27 @@ proxy-groups:
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9ed.svg
 
+  # 自动择优（v4.2.3 新增）：按延迟自动选路，节点变慢或失效时自动切走。
+  # 引入原因：此前所有组都是 select（纯手选），CDN 节点因运营商限速 UDP 443
+  # 而单独变慢时不会被自动规避，只能人工发现——本项目 v4.2.2 的改动正是这么被发现的。
+  # tolerance: 50   延迟差小于 50ms 不切换，避免抖动导致来回横跳。
+  # lazy: true      仅在该组被实际使用时才测速，空闲时不额外打流量。
+  # 注意：QUIC 节点（h3-direct / Hysteria2）冷启动可能超过 timeout 被判失败，
+  # 这是测速的固有特性，tolerance + max-failed-times 已尽量减少误切。
+  # 仍可在「节点选择」里手动指定具体节点，自动只是默认项。
+  - name: 自动选择
+    type: url-test
+    interval: 300
+    timeout: 3000
+    url: https://www.google.com/generate_204
+    lazy: true
+    tolerance: 50
+    max-failed-times: 3
+    hidden: false
+    include-all: true
+    filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
+    icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
+
   - name: 节点选择
     type: select
     interval: 300
@@ -106,6 +127,8 @@ proxy-groups:
     lazy: true
     max-failed-times: 3
     hidden: false
+    proxies:
+      - 自动选择
     include-all: true
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/adjust.svg
