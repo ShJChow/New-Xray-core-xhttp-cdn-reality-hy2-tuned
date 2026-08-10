@@ -1,10 +1,18 @@
 # 节点顺序 = HTTP/3 优先。mihomo-full.yaml.tmpl 的 proxy-groups 用 include-all: true，
 # 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
-# 前三条是 QUIC/h3，后两条是 TCP 兜底（UDP 被封时可用）。
+# 第 1 条经 CDN 走 TCP(h2)，第 2、3 条是 QUIC/h3 直连，后两条是 TCP 直连兜底。
 proxies:
-  # ---------- HTTP/3 (QUIC) ----------
-  # 1. 经 CDN 的 h3：实测最快。alpn 必须恰好只有 h3，mihomo 才走 HTTP/3
-  #    （transport/xhttp/client.go:159）。
+  # ---------- 经 CDN / QUIC 直连 ----------
+  # 1. 经 CDN：走 TCP（h2）。alpn 恰好只有 h3 时 mihomo 才走 HTTP/3
+  #    （transport/xhttp/client.go:159），本节点**刻意不这么做**。
+  #    改动理由（v4.2.2）：h3 把这条链路压在 UDP 443 上，而中国移动等运营商
+  #    对出境 UDP 443 普遍限速，且 alpn 只有 h3 时 mihomo 不会回落 TCP，
+  #    表现为该节点单独很慢而其余节点正常。
+  #    实测（服务器本机发起，CF 边缘就近，回源侧无差异）：
+  #      h3 65-77 MB/s，h2 73-85 MB/s，h2+http/1.1 73-85 MB/s，上行均 ~26 MB/s。
+  #    h3 的收益仅存在于 UDP 通畅的网络，代价是 UDP 被限速时无解。
+  #    故改为 h2 + http/1.1（Chrome 真实 ALPN 组合，指纹也更自然）。
+  #    仍需要 QUIC 时用 Vless-xhttp-h3-direct（直连 UDP ${H3_PORT}，不经 CDN）。
   - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
@@ -15,7 +23,8 @@ proxies:
     tls: true
     network: xhttp
     alpn:
-      - h3
+      - h2
+      - http/1.1
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
