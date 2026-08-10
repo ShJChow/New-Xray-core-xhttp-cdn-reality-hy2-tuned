@@ -2,7 +2,7 @@
 
 **语言：** **简体中文** · [English](./README.en.md) · [فارسی](./README.fa.md)
 
- **xhttp+udp+cdn节点在软件（iOS）onexray和win11的v2rayN下，速度极快，快于histeria2(测试在Oracle 4ocpu+24运行)**
+ **测试在Oracle 4ocpu+24 ubuntu 26.04 运行)**
  
 基于 Xray-core 的 **XHTTP + CDN 上下行分离**一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 5 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
