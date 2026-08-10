@@ -49,7 +49,7 @@ Node names are plain ASCII plus a hostname suffix (`<host>` = `hostname -s`):
 
 | # | Node name | Path | Transport |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (switched from h3 to TCP in v4.2.2, see docs/10 §8) |
+| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (switched from h3 to TCP in v4.6.0, see docs/10 §8) |
 | 2 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 443** | XHTTP + TLS, alpn h3, no CDN |
 | 3 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
 | 4 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; fallback when UDP is blocked |

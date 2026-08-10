@@ -43,7 +43,7 @@ inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 **节点顺序**：第 1 条经 CDN 走 TCP，第 2、3 条 QUIC 直连，后 2 条 TCP 直连兜底。
 Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
-v4.2.3 起 Mihomo 订阅带 **`自动选择`（url-test）**策略组，并作为 `节点选择` 的默认项：
+v4.6.0 起 Mihomo 订阅带 **`自动选择`（url-test）**策略组，并作为 `节点选择` 的默认项：
 按延迟自动选路，节点变慢或失效时自动切走，不必人工排查。仍可在 `节点选择` 里手动
 指定具体节点。详见 [docs/10 §9](docs/10.流控调优.md)。
 
@@ -55,7 +55,7 @@ v4.2.3 起 Mihomo 订阅带 **`自动选择`（url-test）**策略组，并作�
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.2.2 由 h3 改回 TCP，见 docs/10 §8） |
+| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.6.0 由 h3 改回 TCP，见 docs/10 §8） |
 | 2 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
 | 3 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 4 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
