@@ -49,7 +49,7 @@
 
 | # | نام نود | مسیر | ترابرد |
 |---|---|---|---|
-| ۱ | `Vless-xhttp-tls-UDP-cdn-<host>` | از طریق CDN، **UDP 443** | XHTTP + TLS، alpn h3 — **سریع‌ترین در آزمایش** |
+| ۱ | `Vless-xhttp-tls-UDP-cdn-<host>` | از طریق CDN، **TCP 443** | XHTTP + TLS، alpn h2 + http/1.1 (در v4.2.2 از h3 به TCP تغییر کرد، به docs/10 §8 مراجعه کنید) |
 | ۲ | `Vless-xhttp-h3-direct-<host>` | مستقیم به VPS، **UDP 443** | XHTTP + TLS، alpn h3، بدون CDN |
 | ۳ | `Hysteria2-obfs-<host>` | مستقیم به VPS، **UDP 8443** | Hysteria2 + مبهم‌سازی Salamander |
 | ۴ | `Vless-reality-vision-<host>` | مستقیم به VPS، TCP 443 | Reality + Vision؛ پشتیبان وقتی UDP مسدود است |

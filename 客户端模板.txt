@@ -8,7 +8,7 @@ vless://YOUR_UUID_2@[2001:db8::1]:443?encryption=YOUR_VLESSENC_ENCRYPTION&securi
 
 XHTTP over HTTP/3（UDP 443）
 # 经 CDN：由 Cloudflare 边缘终结 h3，回源仍是 TCP，服务端无需任何改动（需 CF 已开启 HTTP/3，默认开启）
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
+vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
 
 # 直连 VPS 的 h3 节点（v4.0.0 起默认生成，FEATURE_H3_DIRECT=true）：
 # 由 Xray 自己监听 UDP 443，**不经过 nginx**——因此不需要 nginx 的 listen quic，
