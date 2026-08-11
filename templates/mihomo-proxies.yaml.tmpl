@@ -1,6 +1,7 @@
 # 节点顺序 = HTTP/3 优先。mihomo-full.yaml.tmpl 的 proxy-groups 用 include-all: true，
 # 不逐条列节点名，因此策略组里的排列顺序完全由这里的 proxies 数组顺序决定。
-# 第 1 条经 CDN 走 TCP(h2)，第 2、3 条是 QUIC/h3 直连，后两条是 TCP 直连兜底。
+# 第 1 条经 CDN 走 TCP(h2)，第 2 条 QUIC/h3 直连，第 3 条是它的 TCP 孪生体（v4.7.0），
+# 第 4 条 Hysteria2，后两条是 Reality TCP 直连兜底。
 proxies:
   # ---------- 经 CDN / QUIC 直连 ----------
   # 1. 经 CDN：走 TCP（h2）。alpn 恰好只有 h3 时 mihomo 才走 HTTP/3
@@ -50,6 +51,34 @@ proxies:
     network: xhttp
     alpn:
       - h3
+    servername: ${REALITY_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}
+    xhttp-opts:
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # 2b. 直连 VPS 的 h2（TCP ${H2_PORT}）：与上面的 h3 节点同 UUID、同 path、
+  #     同 decryption，只把传输层换成 TCP。存在理由是 h3 节点整条压在 UDP 上，
+  #     运营商封 UDP 或 QUIC 丢包严重时它完全不可用，而 mihomo 在 alpn 只有 h3
+  #     时不会自动回落 TCP（transport/xhttp/client.go:159）——表现为该节点
+  #     单独连不上。两者由下面的「直连回落」fallback 组按顺序自动接管。
+  - name: Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}
+    type: vless
+    server: ${VPS_IP}
+    port: ${H2_PORT}
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h2
+      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}

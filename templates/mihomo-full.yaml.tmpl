@@ -119,6 +119,28 @@ proxy-groups:
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
 
+  # 直连回落（fallback，本次新增）：按列表顺序取第一个健康节点，不比延迟。
+  # 与「自动选择」的分工：url-test 按延迟择优，但延迟抖动时会来回横跳；
+  # fallback 的顺序是确定的，专治「UDP 通就用 QUIC，UDP 被封就落到 TCP」这一类
+  # 故障——h3-direct 与 h2-tcp-direct 是同一入站的 QUIC/TCP 孪生体（同 UUID、
+  # 同 path，仅传输层不同），互为兜底最干净。
+  # 必须逐条列节点、不能用 include-all：fallback 的语义完全由顺序决定。
+  # interval 60：比其他组的 300 更短，让 UDP 被封后的切换更快。
+  - name: 直连回落
+    type: fallback
+    interval: 60
+    timeout: 3000
+    url: https://www.google.com/generate_204
+    lazy: true
+    max-failed-times: 3
+    hidden: false
+    proxies:
+      - Vless-xhttp-h3-direct-${HOSTNAME_TAG}
+      - Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}
+      - Hysteria2-obfs-${HOSTNAME_TAG}
+      - Vless-reality-vision-${HOSTNAME_TAG}
+    icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/fallback.svg
+
   - name: 节点选择
     type: select
     interval: 300
@@ -129,6 +151,7 @@ proxy-groups:
     hidden: false
     proxies:
       - 自动选择
+      - 直连回落
     include-all: true
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/adjust.svg

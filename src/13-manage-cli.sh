@@ -139,6 +139,11 @@ cmd_info() {
   else
     echo "  h3-direct:       未启用"
   fi
+  if [[ "${FEATURE_H2_DIRECT:-false}" == true ]]; then
+    echo "  h2-direct:       TCP ${H2_PORT:-8445}（h3-direct 的 TCP 孪生体）"
+  else
+    echo "  h2-direct:       未启用"
+  fi
   if [[ "${FEATURE_HY2:-false}" == true ]]; then
     echo "  Hysteria2:       UDP ${HY2_PORT:-8443}"
     echo "    认证密码:      ${HY2_PASSWORD}"
@@ -325,6 +330,14 @@ cmd_diag() {
         chk "h3-direct 已监听 UDP ${H3_PORT:-443}" 0
       else
         chk "h3-direct 未监听 UDP ${H3_PORT:-443}" 1 "config.json 里有该 inbound 但未 bind；查 ${MANAGE_CMD} log xray"
+      fi
+    fi
+    # h2-direct 是 TCP，查 -lnt
+    if [[ "${FEATURE_H2_DIRECT:-false}" == true ]]; then
+      if ss -lnt 2>/dev/null | grep -qE ":${H2_PORT:-8445}\b"; then
+        chk "h2-direct 已监听 TCP ${H2_PORT:-8445}" 0
+      else
+        chk "h2-direct 未监听 TCP ${H2_PORT:-8445}" 1 "config.json 里有该 inbound 但未 bind；查 ${MANAGE_CMD} log xray"
       fi
     fi
     if [[ "${FEATURE_HY2:-false}" == true ]]; then
