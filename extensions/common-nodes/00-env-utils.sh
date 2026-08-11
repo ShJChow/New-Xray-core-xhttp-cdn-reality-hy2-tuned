@@ -166,3 +166,32 @@ find_client_files() {
 # 关闭时同时跳过 nginx 的 location/listen 插入——节点 2（xhttp-reality）直连
 # xray 的 TCP 443、不经 nginx，所以那段配置只服务这条 h3 节点，留着就是死配置。
 FEATURE_XHTTP_H3_NODE=${FEATURE_XHTTP_H3_NODE:-false}
+
+# ==================================================
+# v4.7.0：本扩展 QUIC 节点的 TCP 兜底提示
+# ==================================================
+# 本扩展只产出 UDP/QUIC 节点，运营商封 UDP 时它整条不可用。主脚本 v4.7.0 起
+# 已经提供对应的 TCP 通路，所以这里**不重复生成**节点（重复会让订阅里出现
+# 两条实际同链路的条目），只在结尾指出该走哪一条——以及主脚本版本过旧、
+# 那条 TCP 通路根本不存在时，明确告诉用户怎么补。
+#
+# 判定依据是 client-config.txt 里有没有 h2-tcp-direct 节点，而不是 node.env
+# 里的 FEATURE_H2_DIRECT：本系列扩展一律从客户端配置反查参数（见 01-read-existing.sh），
+# 保持同一个信息源，node.env 缺失或过期时也不会误报。
+report_tcp_twin() {
+  # QUIC_TWIN_DESC 由各扩展的 03-client-config.sh 设置，描述本扩展的 QUIC
+  # 节点在主脚本里对应哪一条 TCP 节点。未设置时跳过整段。
+  [[ -n "${QUIC_TWIN_DESC:-}" ]] || return 0
+
+  echo ""
+  echo -e "${YELLOW}[+] UDP 被封时的兜底${NC}"
+  echo "  本扩展新增的是 QUIC/UDP 节点，运营商封 UDP 时整条不可用。"
+  echo "  ${QUIC_TWIN_DESC}"
+
+  if grep -q '#Vless-xhttp-h2-tcp-direct-' "$V2RAYN_FILE" 2>/dev/null; then
+    echo "  Mihomo 订阅里的「直连回落」策略组已按 QUIC → TCP 的顺序自动切换。"
+  else
+    warn "  当前订阅里没有 h2-tcp-direct 节点（主脚本早于 v4.7.0）"
+    warn "  重跑一次主安装脚本即可补上它与「直连回落」策略组，本扩展的节点不受影响"
+  fi
+}

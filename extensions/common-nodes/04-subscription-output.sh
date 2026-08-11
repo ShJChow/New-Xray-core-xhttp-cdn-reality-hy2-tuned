@@ -72,4 +72,5 @@ SUBLINKEOF
 }
 
 update_subscriptions
+report_tcp_twin
 info "客户端更新订阅后即可看到新节点"
