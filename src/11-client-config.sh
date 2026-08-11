@@ -105,13 +105,21 @@ else
   H3_DIRECT_NODE_LINE=""
 fi
 
+# h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
+# alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
+if [[ "$FEATURE_H2_DIRECT" == true ]]; then
+  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}"
+else
+  H2_DIRECT_NODE_LINE=""
+fi
+
 if [[ "$FEATURE_HY2" == true ]]; then
   HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")#Hysteria2-obfs-${HOSTNAME_TAG}"
 else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2"
+info "节点集: xhttp-tls-UDP-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

@@ -80,17 +80,20 @@ v2rayN 里的设置位置
 
   最稳  1. Vless-reality-vision              裸 IP + TCP
         2. Vless-xhttp-reality               裸 IP + TCP
-        3. Hysteria2-obfs                    裸 IP + UDP ${HY2_PORT}
-        4. Vless-xhttp-h3-direct             裸 IP + UDP ${H3_PORT}
-  最弱  5. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
+        3. Vless-xhttp-h2-tcp-direct         裸 IP + TCP ${H2_PORT}
+        4. Hysteria2-obfs                    裸 IP + UDP ${HY2_PORT}
+        5. Vless-xhttp-h3-direct             裸 IP + UDP ${H3_PORT}
+  最弱  6. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
 
-注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 5 实测是最快的一条
+注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 6 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的
 CDN 域名加进直连列表才能在 TUN 下正常工作。配好了它就是首选。
 
-节点 3/4 是直连 VPS 裸 IP 的 UDP 节点，只要为 ${VPS_IP} 加了直连路由就不会自环，
-比节点 5 少一层域名解析的依赖。两者都需要在**云厂商安全组**里放行对应 UDP 端口
-（UDP ${H3_PORT} 与 UDP ${HY2_PORT}）——这一层在机器外面，脚本查不到也改不了。
+节点 3 是直连 VPS 裸 IP 的 TCP 节点（v4.7.0 新增），传输层与节点 1/2 同属 TCP，
+在 TUN 下同样稳健，且不受运营商封 UDP 影响——节点 5 连不上时优先试它。
+节点 4/5 是直连 VPS 裸 IP 的 UDP 节点，只要为 ${VPS_IP} 加了直连路由就不会自环，
+比节点 6 少一层域名解析的依赖。三者都需要在**云厂商安全组**里放行对应端口
+（UDP ${H3_PORT}、UDP ${HY2_PORT}、TCP ${H2_PORT}）——这一层在机器外面，脚本查不到也改不了。
 
 TCP 之所以更稳，是因为 dialer 绑定物理接口的保护在 TCP 路径上更完整；
 QUIC 是无连接 UDP，同样的保护在多数平台上兜不住。

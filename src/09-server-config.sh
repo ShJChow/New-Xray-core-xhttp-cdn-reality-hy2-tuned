@@ -101,12 +101,14 @@ fi
 CERT_FILE="/etc/ssl/private/fullchain.cer"
 CERT_KEY="/etc/ssl/private/private.key"
 XRAY_H3_DIRECT_INBOUND=""
+XRAY_H2_DIRECT_INBOUND=""
 XRAY_HY2_INBOUND=""
 
 if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
-  if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true ]]; then
-    warn "未找到 acme 证书 ${ACME_CERT_HOME}/fullchain.cer，已跳过 h3-direct 与 Hysteria2 两个直连 UDP 节点"
+  if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true || "$FEATURE_H2_DIRECT" == true ]]; then
+    warn "未找到 acme 证书 ${ACME_CERT_HOME}/fullchain.cer，已跳过 h3-direct / h2-direct / Hysteria2 三个直连节点"
     FEATURE_H3_DIRECT=false
+    FEATURE_H2_DIRECT=false
     FEATURE_HY2=false
   fi
 fi
@@ -155,6 +157,56 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
 H3EOF
 )
   info "已启用 h3-direct 直连节点: UDP ${H3_PORT}"
+fi
+
+# h2-direct（v4.7.0）：与上面的 h3-direct 共用 UUID2、decryption 和 XHTTP_PATH，
+# 仅传输层不同（TCP + alpn h2/http1.1）。客户端把两者编成 fallback 对，
+# UDP 被封时自动落到这条。sockopt 与 Reality 入站保持一致。
+if [[ "$FEATURE_H2_DIRECT" == true ]]; then
+  XRAY_H2_DIRECT_INBOUND=$(cat <<H2EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${H2_PORT},
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "${VLESSENC_DECRYPTION}"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h2", "http/1.1"],
+                    "minVersion": "1.2",
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ]
+                }${XRAY_SOCKOPT_JSON},
+                "xhttpSettings": {
+                    "host": "",
+                    "path": "${XHTTP_PATH}",
+                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+H2EOF
+)
+  info "已启用 h2-direct 直连节点: TCP ${H2_PORT}"
 fi
 
 if [[ "$FEATURE_HY2" == true ]]; then
@@ -248,7 +300,9 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'PROJECT_VERSION=%q\n'   "$PROJECT_VERSION"
   printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
   printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
+  printf 'FEATURE_H2_DIRECT=%q\n' "$FEATURE_H2_DIRECT"
   printf 'H3_PORT=%q\n'           "$H3_PORT"
+  printf 'H2_PORT=%q\n'           "$H2_PORT"
   printf 'HY2_PORT=%q\n'          "$HY2_PORT"
   printf 'HY2_PASSWORD=%q\n'      "$HY2_PASSWORD"
   printf 'OBFS_PASSWORD=%q\n'     "$OBFS_PASSWORD"

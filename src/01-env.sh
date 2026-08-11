@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.6.0"
+PROJECT_VERSION="4.7.0"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -73,4 +73,14 @@ AUTO=${AUTO:-0}
 # 它自己不通，不再与 Reality 抢占 443。不需要时可设 FEATURE_H3_DIRECT=false 关闭。
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
+
+# FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体，同 UUID / 同 path /
+# 同 decryption，只把传输层从 QUIC 换成 TCP（alpn h2 + http/1.1）。
+# 引入原因：h3-direct 整条链路压在 UDP 上，运营商封 UDP 或 QUIC 丢包严重时
+# 完全不可用，且 mihomo 在 alpn 只有 h3 时不会自动回落 TCP
+# （transport/xhttp/client.go:159），表现为该节点单独连不上而非降速。
+# 直连侧此前的 TCP 兜底只有 Reality，多一条 XHTTP TCP 可以和 h3-direct 组成
+# fallback 对，客户端「直连回落」策略组即依赖这一对。
+# 默认跟随 FEATURE_H3_DIRECT：关掉 h3 的人不会想单独留一条它的孪生体。
+FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-$FEATURE_H3_DIRECT}
 

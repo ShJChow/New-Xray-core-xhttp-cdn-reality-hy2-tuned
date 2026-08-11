@@ -31,6 +31,11 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
 else
   echo "h3-direct:      未启用"
 fi
+if [[ "$FEATURE_H2_DIRECT" == true ]]; then
+  echo "h2-direct:      TCP ${H2_PORT}（h3-direct 的 TCP 孪生体，UDP 被封时的兜底）"
+else
+  echo "h2-direct:      未启用"
+fi
 if [[ "$FEATURE_HY2" == true ]]; then
   echo "Hysteria2:      UDP ${HY2_PORT}"
   echo "  认证密码:     ${HY2_PASSWORD}"
@@ -40,8 +45,8 @@ if [[ "$FEATURE_HY2" == true ]]; then
 else
   echo "Hysteria2:      未启用"
 fi
-if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true ]]; then
-  echo -e "${RED}※ 这两条节点需要在云厂商安全组放行 UDP ${H3_PORT} 与 UDP ${HY2_PORT}${NC}"
+if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true || "$FEATURE_H2_DIRECT" == true ]]; then
+  echo -e "${RED}※ 直连节点需要在云厂商安全组放行 UDP ${H3_PORT}、UDP ${HY2_PORT} 与 TCP ${H2_PORT}${NC}"
   echo "  安全组在虚拟机外面，本机 ss 显示监听正常也可能被云平台丢包。"
 fi
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
