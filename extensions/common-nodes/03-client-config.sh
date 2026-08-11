@@ -14,6 +14,10 @@ NODE_HY2_TAG=$(rawurlencode "$NODE_HY2_NAME")
 
 BASE_SERVER_URI=$(format_uri_host "$BASE_SERVER")
 
+# 本扩展的 h3 节点挂在 Reality 域名（sni=${REALITY_DOMAIN}、同 UUID2、同 path），
+# 与主脚本 v4.7.0 的 h2-direct 是同一条链路的 QUIC / TCP 两面，端口不同而已。
+QUIC_TWIN_DESC="对应的 TCP 节点是主脚本的 Vless-xhttp-h2-tcp-direct（同 sni ${REALITY_DOMAIN}、同 path，走 TCP），UDP 不通时改用它。"
+
 # 本扩展的 nginx 监听与 location 都挂在 Reality 域名的 server 块（见
 # 02-server-config.sh），因此 sni/host 必须同为 Reality 域名（灰云直连），
 # 否则 TLS 握手落到别的 server_name 上，节点必然不通。ECH 是 Cloudflare CDN
