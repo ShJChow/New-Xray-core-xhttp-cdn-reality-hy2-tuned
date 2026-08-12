@@ -119,19 +119,31 @@ proxy-groups:
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
 
-  # 直连回落（fallback，本次新增）：按列表顺序取第一个健康节点，不比延迟。
-  # 与「自动选择」的分工：url-test 按延迟择优，但延迟抖动时会来回横跳；
-  # fallback 的顺序是确定的，专治「UDP 通就用 QUIC，UDP 被封就落到 TCP」这一类
-  # 故障——h3-direct 与 h2-tcp-direct 是同一入站的 QUIC/TCP 孪生体（同 UUID、
-  # 同 path，仅传输层不同），互为兜底最干净。
-  # 必须逐条列节点、不能用 include-all：fallback 的语义完全由顺序决定。
-  # interval 60：比其他组的 300 更短，让 UDP 被封后的切换更快。
-  - name: 直连回落
-    type: fallback
+  # 直连择优（url-test）：在 4 条直连节点里按实测延迟自动选，只要有更快的就切过去。
+  #
+  # v4.7.0 引入时是 fallback（按列表顺序取第一个「健康」的），v4.7.3 改掉。
+  # 原因：fallback 只判断通不通，不判断快不快。晚高峰 h3-direct 卡到 200ms、
+  # 丢包 10% 时它依然「健康」，于是一直被占用，后面的 TCP 孪生体和 Hysteria2
+  # 永远轮不到——而这恰恰是最需要切走的时刻。url-test 覆盖了这个场景，
+  # 且「UDP 被完全封锁」时它同样会切（那时 h3 直接测速失败），是 fallback 的超集。
+  #
+  # 与「自动选择」的分工：那个组 include-all（含 CDN 节点），这个组只含直连节点，
+  # 用于「我明确要走直连」的场景，两者互不替代。
+  #
+  # tolerance: 50   延迟差小于 50ms 不切，避免抖动导致来回横跳。
+  # interval  60    比其他组的 300 更短，晚高峰劣化能在 1 分钟内被发现。
+  # 逐条列节点而不用 include-all：这个组的成员必须限定为直连节点。
+  #
+  # 已知局限：url-test 测的是 generate_204 的**握手延迟**，不是吞吐也不是丢包率。
+  # Hysteria2 的优势在高丢包下的吞吐（Brutal 无视丢包硬发），这一项测不出来，
+  # 所以它在本组里通常不会被选中——真到重丢包时段仍需手动切过去。
+  - name: 直连择优
+    type: url-test
     interval: 60
     timeout: 3000
     url: https://www.google.com/generate_204
     lazy: true
+    tolerance: 50
     max-failed-times: 3
     hidden: false
     proxies:
@@ -139,7 +151,7 @@ proxy-groups:
       - Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}
       - Hysteria2-obfs-${HOSTNAME_TAG}
       - Vless-reality-vision-${HOSTNAME_TAG}
-    icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/fallback.svg
+    icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
 
   - name: 节点选择
     type: select
@@ -151,7 +163,7 @@ proxy-groups:
     hidden: false
     proxies:
       - 自动选择
-      - 直连回落
+      - 直连择优
     include-all: true
     filter: ^(?!.*(官网|套餐|流量|异常|剩余)).*$
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/adjust.svg
