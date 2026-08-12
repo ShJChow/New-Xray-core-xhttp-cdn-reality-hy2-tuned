@@ -199,18 +199,46 @@ LIMITSEOF
     fi
   fi
 
-  # systemd 用 drop-in，不改官方 Xray-install 维护的 unit，避免更新后被覆盖
+  # systemd 用 drop-in，不改官方 Xray-install 维护的 unit，避免更新后被覆盖。
+  #
+  # v4.7.3：文件名从 override.conf 改为 10-xray-xhttp.conf。
+  # 起因：override.conf 是**用户手工加固的约定俗成文件名**（Restart=always、
+  # OOMScoreAdjust、After=network-online.target 之类都习惯写在这里），而本函数是
+  # `cat >` 整体覆写。用户加过料之后再跑一次 `xh tuning off && xh tuning on`，
+  # 那些设置会被静默吃掉——没有报错、没有提示，只有下次机器没自动拉起时才发现。
+  #
+  # systemd 会把 <unit>.service.d/ 下所有 *.conf 按文件名序合并，所以换个专属文件名
+  # 就从根本上解决了：我们只管自己的文件，用户的 override.conf 原样保留；
+  # 数字前缀 10- 保证排在 override.conf 之前，用户想覆盖我们的值也依然有效。
   if [[ "$SERVICE_TYPE" == "systemd" ]]; then
+    local dropin="10-xray-xhttp.conf" migrated=0 kept=0
     for unit in xray nginx; do
-      install -d -m 755 "/etc/systemd/system/${unit}.service.d" 2>/dev/null || continue
-      cat > "/etc/systemd/system/${unit}.service.d/override.conf" <<'DROPINEOF' || warn "写入 ${unit} drop-in 失败"
+      local dir="/etc/systemd/system/${unit}.service.d"
+      install -d -m 755 "$dir" 2>/dev/null || continue
+      cat > "${dir}/${dropin}" <<'DROPINEOF' || warn "写入 ${unit} drop-in 失败"
+# xray-xhttp 句柄上限，由 xh tuning on 生成 / xh tuning off 移除。
+# 本项目只写这一个文件，同目录下你自己的 override.conf 不会被改动。
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=infinity
 DROPINEOF
+      # 旧版留下的 override.conf：内容与历史生成物逐字一致才删（说明用户没动过），
+      # 否则一律保留——那是用户的加固，宁可留下一份内容重复的文件，也不能删掉它。
+      local legacy="${dir}/override.conf"
+      if [[ -f "$legacy" ]]; then
+        if [[ "$(grep -vE '^\s*(#|$)' "$legacy" | tr -d '[:space:]')" \
+              == "[Service]LimitNOFILE=1048576LimitNPROC=infinity" ]]; then
+          rm -f "$legacy" && migrated=1
+        else
+          kept=1
+        fi
+      fi
     done
     systemctl daemon-reload >/dev/null 2>&1 || warn "systemctl daemon-reload 失败"
-    info "已为 xray / nginx 写入 systemd drop-in（LimitNOFILE=1048576）"
+    info "已为 xray / nginx 写入 systemd drop-in（LimitNOFILE=1048576 → ${dropin}）"
+    [[ "$migrated" -eq 1 ]] && info "已清理旧版留下的 override.conf（内容与本项目生成物一致）"
+    [[ "$kept" -eq 1 ]] && \
+      warn "检测到你自己修改过的 override.conf，已原样保留；它排在本项目文件之后，同名字段以你的为准"
   else
     if [[ -d /etc/conf.d ]]; then
       grep -q '^rc_ulimit=' /etc/conf.d/xray 2>/dev/null || \
