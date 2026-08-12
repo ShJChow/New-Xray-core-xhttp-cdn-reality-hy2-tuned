@@ -83,11 +83,18 @@ v2rayN 里的设置位置
         3. Vless-xhttp-h2-tcp-direct         裸 IP + TCP ${H2_PORT}
         4. Hysteria2-obfs                    裸 IP + UDP ${HY2_PORT}
         5. Vless-xhttp-h3-direct             裸 IP + UDP ${H3_PORT}
-  最弱  6. Vless-xhttp-tls-UDP-cdn           域名 + QUIC/h3
+        6. Vless-xhttp-tls-UDP-cdn           域名 + TCP/h2
+  最弱  7. Vless-xhttp-h3-cdn                域名 + QUIC/h3
 
 注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 6 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的
 CDN 域名加进直连列表才能在 TUN 下正常工作。配好了它就是首选。
+
+节点 6 的名字里有 "UDP" 是 v4.6.0 之前的历史遗留——那次实测后它已改走 TCP/h2
+（h3 65-77 MB/s vs h2 73-85 MB/s），名字为兼容既有客户端的节点选择未改。
+真正走 QUIC 的 CDN 节点是 v4.7.4 新增的节点 7，它同时踩中「域名」与「QUIC」
+两个敏感点，是对 TUN 配置最挑剔的一条：CDN 域名必须在直连列表里，
+且平台需要允许 UDP 443 出站。
 
 节点 3 是直连 VPS 裸 IP 的 TCP 节点（v4.7.0 新增），传输层与节点 1/2 同属 TCP，
 在 TUN 下同样稳健，且不受运营商封 UDP 影响——节点 5 连不上时优先试它。
