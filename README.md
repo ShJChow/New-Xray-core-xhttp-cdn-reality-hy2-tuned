@@ -119,7 +119,7 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 每个入口域名使用独立的 `dist/<域名>/index.html` 作为回落页；可用 [SingleFile](https://chromewebstore.google.com/detail/singlefile/mpiodijhokgodhhofbcjdecpffjipkle) 抓取网页后上传。
 
 
-acme.sh 证书申请：Naiveproxy / Hysteria2 / Tuic 使用真实 TLS 证书 ：若证书申请失败，可使用acme：
+acme.sh 证书申请：若证书申请失败，可使用acme：
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)
 ---
 
