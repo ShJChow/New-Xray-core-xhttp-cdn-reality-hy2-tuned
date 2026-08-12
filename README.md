@@ -4,7 +4,7 @@
 
  **测试在Oracle 4ocpu+24 ubuntu 26.04 运行)**
  
-基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 6 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
+基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 7 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
 支持 V2rayN / Shadowrocket / Mihomo / onexray 客户端，支持 IPv4 与 IPv6。
 
@@ -20,7 +20,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v4.7.0） | 默认 6 条，全部由 Xray 单核心提供：3 条 QUIC/h3（含 Hysteria2 obfs）+ 3 条 TCP 兜底（含新增的 h2-direct）。不再需要独立 hysteria 二进制 |
+| 节点集（v4.7.4） | 默认 7 条，全部由 Xray 单核心提供：4 条 QUIC/h3（含 Hysteria2 obfs 与新增的 h3-cdn）+ 3 条 TCP 兜底。不再需要独立 hysteria 二进制 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | 可选，加密 TLS 握手中的 SNI |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
@@ -37,10 +37,11 @@
 
 ## 节点列表
 
-v4.7.0 起默认输出**下表 6 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
+v4.7.4 起默认输出**下表 7 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
 inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 
-**节点顺序**：第 1 条经 CDN 走 TCP，第 2、3 条 QUIC 直连，后 2 条 TCP 直连兜底。
+**节点顺序**：第 1、2 条经 CDN（分别走 TCP/h2 与 UDP/h3），第 3、4 条直连 XHTTP
+（QUIC 与 TCP 孪生体），第 5 条 Hysteria2，后 2 条 TCP 直连兜底。
 Mihomo 的策略组用 `include-all: true`，排序直接由此决定。
 
 v4.6.0 起 Mihomo 订阅带 **`自动选择`（url-test）**策略组，并作为 `节点选择` 的默认项：
@@ -48,8 +49,8 @@ v4.6.0 起 Mihomo 订阅带 **`自动选择`（url-test）**策略组，并作�
 指定具体节点。详见 [docs/10 §9](docs/10.流控调优.md)。
 
 v4.7.0 新增 **`直连择优`**策略组（v4.7.3 前叫 `直连回落`，类型是 fallback）：
-只含 4 条直连节点，按实测延迟自动选。新节点 3（`h2-tcp-direct`）正是为此引入：
-它是节点 2 的 TCP 孪生体（同 UUID、同 path、同 decryption，仅传输层不同），
+只含 4 条直连节点，按实测延迟自动选。节点 `h2-tcp-direct` 正是为此引入：
+它是 `h3-direct` 的 TCP 孪生体（同 UUID、同 path、同 decryption，仅传输层不同），
 此前直连侧的 TCP 兜底只有 Reality。
 
 改用 url-test 的原因：fallback 只判断通不通、不判断快不快。晚高峰 h3-direct
@@ -69,15 +70,17 @@ v4.7.0 新增 **`直连择优`**策略组（v4.7.3 前叫 `直连回落`，类�
 
 | # | 节点名 | 链路 | 传输 |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.6.0 由 h3 改回 TCP，见 docs/10 §8） |
-| 2 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
-| 3 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1（v4.7.0 新增，节点 2 的 TCP 孪生体） |
-| 4 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
-| 5 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
-| 6 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
+| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.6.0 由 h3 改回 TCP，见 docs/10 §8；名字里的 UDP 是那次改动前的遗留，为不打断既有客户端的节点选择而保留） |
+| 2 | `Vless-xhttp-h3-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn 仅 h3（v4.7.4 新增，节点 1 的 QUIC 孪生体，服务端零改动） |
+| 3 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
+| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1（v4.7.0 新增，节点 3 的 TCP 孪生体） |
+| 5 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
+| 6 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
+| 7 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
 
-节点 2/4 走裸 UDP 直连、节点 3 走 TCP 8445，都需要在**云厂商安全组**放行
-（UDP 8444、UDP 8443、TCP 8445）——这一层在机器外面，脚本查不到也改不了。
+节点 3/5 走裸 UDP 直连、节点 4 走 TCP 8445，都需要在**云厂商安全组**放行
+（UDP 8444、UDP 8443、TCP 8445）。节点 2 经 CDN，走的是 Cloudflare 的 UDP 443，
+**不需要**在安全组开任何端口——这一层在机器外面，脚本查不到也改不了。
 Xray 版本低于 26.6.1 时节点 2/4 会被自动禁用。节点 3 的端口可用 `H2_PORT=<port>`
 指定，不需要时设 `FEATURE_H2_DIRECT=false` 关闭。
 
@@ -122,7 +125,7 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 > **版本要求**：Xray 内核 ≥ `26.6.1`，Mihomo 内核 ≥ `1.19.24`。
 > Xray 的下限由两条直连 UDP 节点决定：Hysteria2 inbound 需 26.3.27+，finalmask 的 UDP listener 崩溃 bug（issue #6184）需 26.6.1+ 才修复。低于该版本时安装脚本会自动禁用这两条节点。
 >
-> v4.7.0 起**全部 6 条节点 + 全部功能默认开启**：xpadding（XHTTP 填充混淆）、
+> v4.7.4 起**全部 7 条节点 + 全部功能默认开启**：xpadding（XHTTP 填充混淆）、
 > ECH（默认启用）、Hysteria2 finalmask + Salamander 混淆、VLESS Encryption（ML-KEM-768）、
 > h3-direct 直连节点，并在安装时自动应用内核层调优（`xh tuning on`，best-effort）。
 > 需要最小化配置时用
