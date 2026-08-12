@@ -19,6 +19,16 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 fail()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+# 本脚本自身的版本，由安装时的 sed 从占位符替换而来（见本文件末尾）。
+# 不能直接写 ${PROJECT_VERSION}：外层 heredoc 是 quoted 的，不做变量展开。
+#
+# 它与 node.env 里的 PROJECT_VERSION 是**两个不同的东西**：
+#   XH_VERSION      —— 生成这个 xh 脚本的版本
+#   PROJECT_VERSION —— 当初安装这套节点的版本（node.env，装完就不再变）
+# 两者不一致是正常的（升级过 xh、或手工替换过），`xh version` 会同时打印，
+# 这样"我这台机器的 xh 是新是旧"一眼可见——此前只能靠 grep 源码里的特征字符串判断。
+XH_VERSION="@@XH_VERSION@@"
+
 MANAGE_CMD="xh"
 STATE_DIR="/etc/xhttp-cdn"
 NODE_ENV_FILE="${STATE_DIR}/node.env"
@@ -548,8 +558,25 @@ cmd_tuning() {
       ;;
     off)
       rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
-      rm -f /etc/systemd/system/xray.service.d/override.conf             /etc/systemd/system/nginx.service.d/override.conf
-      rmdir /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d 2>/dev/null || true
+      # v4.7.3：只删本项目自己的 drop-in。用户手工加固的 override.conf 一律不动
+      # ——除非它的内容与旧版生成物逐字一致（说明是本项目留下的，用户没改过）。
+      # 旧实现无条件 rm override.conf，会连用户的 Restart=always / OOMScoreAdjust
+      # 一起删掉，且不留任何提示。
+      local d kept_user=0
+      for d in /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d; do
+        rm -f "${d}/10-xray-xhttp.conf"
+        if [[ -f "${d}/override.conf" ]]; then
+          if [[ "$(grep -vE '^\s*(#|$)' "${d}/override.conf" | tr -d '[:space:]')" \
+                == "[Service]LimitNOFILE=1048576LimitNPROC=infinity" ]]; then
+            rm -f "${d}/override.conf"
+          else
+            kept_user=1
+          fi
+        fi
+        rmdir "$d" 2>/dev/null || true
+      done
+      [[ "$kept_user" -eq 1 ]] && \
+        warn "你自己修改过的 override.conf 已保留（本命令只移除本项目写入的 10-xray-xhttp.conf）"
       [[ "$SERVICE_TYPE" == "systemd" ]] && systemctl daemon-reload >/dev/null 2>&1
       sysctl --system >/dev/null 2>&1 || true
       info "已移除本项目写入的全部调优配置"
@@ -780,11 +807,30 @@ case "${1:-menu}" in
   autoupdate) shift; cmd_autoupdate "$@" ;;
   guard)      cmd_guard ;;
   uninstall)  cmd_uninstall ;;
-  version)    [[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version | head -1; echo "xray-xhttp ${PROJECT_VERSION:-unknown} (manage cli)" ;;
+  version)
+    [[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version | head -1
+    echo "xray-xhttp ${XH_VERSION:-unknown} (manage cli)"
+    # node.env 里的 PROJECT_VERSION 是安装时刻的版本，只在两者不同时才提示，
+    # 避免绝大多数（未升级过）机器上多出一行噪音。
+    # 这里用 if 而非 `[[ ]] && echo`：后者作为分支最后一条语句，会在条件为假时
+    # 把整个 xh version 的退出码变成 1（此处已是脚本末尾，没有后续命令兜底）。
+    XH_INSTALLED_VER=""
+    [[ -f "$NODE_ENV_FILE" ]] && \
+      XH_INSTALLED_VER=$(sed -n 's/^PROJECT_VERSION=//p' "$NODE_ENV_FILE" | head -1)
+    if [[ -n "$XH_INSTALLED_VER" && "$XH_INSTALLED_VER" != "${XH_VERSION:-}" ]]; then
+      echo "  （本机节点安装于 ${XH_INSTALLED_VER}，之后 xh 被更新过；节点配置不会因 xh 更新而改变）"
+    fi
+    ;;
   -h|--help|help) usage ;;
   *)          usage; exit 1 ;;
 esac
 XHMANAGEEOF
+
+# 把版本号注入生成好的 xh。上面的 heredoc 是 quoted 的（不展开变量），这是刻意的：
+# xh 里满是 ${VAR} 与 $(...)，一旦改成非 quoted，整个脚本会在安装时就被展开掉。
+# 因此版本号只能事后替换。占位符用 @@..@@ 而非 ${..}，就是为了不与 shell 语法冲突。
+sed -i "s|@@XH_VERSION@@|${PROJECT_VERSION}|" "$MANAGE_BIN" || \
+  warn "版本号注入失败，${MANAGE_CMD} version 将显示占位符（不影响其它功能）"
 
 chmod +x "$MANAGE_BIN"
 info "管理命令已安装: ${MANAGE_BIN}"
