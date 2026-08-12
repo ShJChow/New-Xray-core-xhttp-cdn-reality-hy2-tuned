@@ -80,7 +80,7 @@ FEATURE_HY2=${FEATURE_HY2:-true}
 # 完全不可用，且 mihomo 在 alpn 只有 h3 时不会自动回落 TCP
 # （transport/xhttp/client.go:159），表现为该节点单独连不上而非降速。
 # 直连侧此前的 TCP 兜底只有 Reality，多一条 XHTTP TCP 可以和 h3-direct 组成
-# fallback 对，客户端「直连回落」策略组即依赖这一对。
+# 对，客户端「直连择优」策略组即依赖这一对。
 # 默认跟随 FEATURE_H3_DIRECT：关掉 h3 的人不会想单独留一条它的孪生体。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-$FEATURE_H3_DIRECT}
 
