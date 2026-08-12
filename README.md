@@ -237,7 +237,7 @@ xh uninstall           卸载全部组件
 ### `xh tuning on` 会做什么
 
 BBR + fq、`rmem/wmem`（按内存分档 64/32/16 MB）、`tcp_fastopen=3`、`tcp_mtu_probing=1`、
-`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲（QUIC/H3）、
+`tcp_slow_start_after_idle=0`、`tcp_notsent_lowat`、`somaxconn=65535`、UDP 缓冲与 `udp_mem`（QUIC/H3）、
 `limits.d` + systemd drop-in（`nofile=1048576`）。
 
 全部写入独立文件 `/etc/sysctl.d/99-xray-xhttp.conf` 与

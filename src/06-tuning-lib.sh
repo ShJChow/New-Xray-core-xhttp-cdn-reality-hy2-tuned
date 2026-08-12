@@ -94,6 +94,16 @@ apply_system_tuning() {
   try_sysctl net.core.optmem_max 65536
   try_sysctl net.ipv4.udp_rmem_min 8192
   try_sysctl net.ipv4.udp_wmem_min 8192
+  # udp_mem（v4.7.2）：全系统 UDP 内存池上限，单位是页。上面两项是**单个套接字**的
+  # 保底值，管不到这个总量；触顶后内核直接丢包且不回任何错误，表现为 h3-direct 与
+  # Hysteria2 在高并发下莫名丢包，而 TCP 节点一切正常——极难定位，因此显式设置。
+  # 本项目有 h3-direct(8444) 与 Hysteria2(8443) 两条纯 UDP 节点，吃这个池子。
+  # 比例取 2%/4%/8%，比 tcp_mem 的 6/8/12% 保守：UDP 无重传与拥塞控制，池子过大
+  # 只会让积压的坏包多占内存，并不会换来吞吐。
+  # 小内存机不设：8% 可能低于内核按物理内存算出的默认值，写下去反而是降级。
+  if [[ "$MEM_MB" -ge 1024 ]]; then
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 8 / 100 ))"
+  fi
 
   # ---------- 队列与并发 ----------
   try_sysctl net.core.netdev_max_backlog "$NETDEV_BACKLOG"
@@ -125,6 +135,11 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_notsent_lowat 16384
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
+  # tcp_no_metrics_save = 1（v4.7.2）：不把连接结束时的 cwnd / ssthresh 缓存进路由表。
+  # 默认行为（0）在同质网络里是优化，在代理机上是负担：对端遍布全球，线路质量差异
+  # 极大，一条丢包严重的连接会把偏低的 ssthresh 写进缓存，之后**同网段**的新连接
+  # 全部继承这个坏起点，慢启动被人为压制。关掉后每条连接独立探测。
+  try_sysctl net.ipv4.tcp_no_metrics_save 1
   # tcp_retries2 = 8：死连接在内核层约 1 分钟内被关闭（默认 15 约 15 分钟）。
   # 代理机器上对端死亡（掉线/关机/被墙）后，连接表槽位与 fd 被僵尸连接占住，
   # 收得越快、给正常连接腾的资源越多。代价是瞬时网络抖动可能更早报错——
