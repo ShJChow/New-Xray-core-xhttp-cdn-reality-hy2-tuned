@@ -117,7 +117,14 @@ EOF
 EOF
   else
     cat <<EOF
-            proxy_pass ${fallback_origin};
+            # 变量形式走 resolver（ipv6=off）：写死域名会在启动期解析出 AAAA，
+            # 无 IPv6 的机器上反复 connect() 失败
+            set \$masq_upstream ${fallback_origin};
+            proxy_pass \$masq_upstream\$request_uri;
+            # 回落站带浏览器 UA 时响应头超过默认 4k，nginx 会回 502（可指纹）
+            proxy_buffer_size   32k;
+            proxy_buffers     8 32k;
+            proxy_busy_buffers_size 64k;
             proxy_ssl_server_name on;
             proxy_ssl_name ${fallback_host};
             proxy_redirect http://${fallback_host}/ https://\$host/;

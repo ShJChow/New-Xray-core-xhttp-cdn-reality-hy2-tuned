@@ -39,6 +39,7 @@ sed -i "/^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:spa
         # BEGIN quic xhttp\\
         location ${XHTTP_PATH} {\\
             grpc_pass 127.0.0.1:8001;\\
+            grpc_buffer_size 512k;\\
             grpc_socket_keepalive on;\\
             grpc_read_timeout     1h;\\
             grpc_send_timeout     1h;\\
@@ -46,7 +47,7 @@ sed -i "/^[[:space:]]*server_name[[:space:]][[:space:]]*${REALITY_DOMAIN};[[:spa
             grpc_set_header Host                  \$host;\\
             grpc_set_header X-Real-IP             \$real_client_ip;\\
             grpc_set_header Forwarded             \$proxy_add_forwarded;\\
-            grpc_set_header X-Forwarded-For       \$proxy_add_x_forwarded_for;\\
+            grpc_set_header X-Forwarded-For       \$real_client_ip;\\
             grpc_set_header X-Forwarded-Proto     \$scheme;\\
         }\\
         # END quic xhttp" "$NGINX_CONF"
