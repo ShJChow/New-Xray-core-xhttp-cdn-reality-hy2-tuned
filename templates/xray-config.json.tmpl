@@ -82,9 +82,13 @@
                 //   1) 所有经 CDN 的流量在日志里都记成 127.0.0.1，真实客户端 IP 丢失，
                 //      只有直连 Reality 的流量能看到真实 IP；
                 //   2) 每个请求打一条 Warning，实测占 xray 日志总量的约 50%。
-                // 取值只写 127.0.0.1：本入站仅监听回环，不存在其他合法来源；
-                // 写宽了等于允许伪造 X-Forwarded-For。
-                "sockopt": {"trustedXForwardedFor": ["127.0.0.1"]},
+                // 注意语义：本项填的是「头名」而非 IP —— Xray 只有在请求里存在
+                // 列表中任一头名时才采信 X-Forwarded-For，并取其最左一段作为客户端 IP
+                // （见 common/protocol/http.ApplyTrustedXForwardedFor）。填 IP 永远不匹配，
+                // 结果是每个请求打一条 [Error] ignored potentially forged。
+                // 取 X-Real-IP：nginx 用 grpc_set_header 无条件覆盖该头，客户端伪造不进来；
+                // 本入站又仅监听回环，只可能由 nginx 回源到达。
+                "sockopt": {"trustedXForwardedFor": ["X-Real-IP"]},
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
