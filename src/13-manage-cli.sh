@@ -105,8 +105,21 @@ cmd_status() {
   printf '  %-32s %s\n' "net.ipv4.tcp_congestion_control" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.core.rmem_max"               "$(sysctl -n net.core.rmem_max 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.ipv4.tcp_fastopen"           "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo n/a)"
-  printf '  %-32s %s\n' "机型 / 调优档位" "${CPU_CORES:-?} 核 / ${MEM_MB:-?} MB / ${ARCH:-?} → ${TUNE_TIER:-未知}"
-  printf '  %-32s %s\n' "Xray policy.bufferSize" "${XRAY_BUFFER_KB:-未设置} KB"
+  # 机型/档位与 bufferSize 现场探测：这些变量只在 tuning_on 的流程里赋值，
+  # status 是独立子命令、不经过那段代码，直接引用永远是空的（显示 "? 核 / 未设置"）。
+  # 分档阈值与 tuning_on 保持一致（>=16384 large / >=4096 medium / 其余 small）。
+  local _cores _mem _arch _tier _buf
+  _cores=$(nproc 2>/dev/null || echo '?')
+  _mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+  _arch=$(uname -m 2>/dev/null || echo unknown)
+  if   [[ "$_mem" -ge 16384 ]]; then _tier=large
+  elif [[ "$_mem" -ge 4096  ]]; then _tier=medium
+  else _tier=small; fi
+  # config.json 带 // 注释（JSONC），jq 解析不了，用文本提取
+  _buf=$(grep -oE '"bufferSize"[[:space:]]*:[[:space:]]*[0-9]+' "$XRAY_CONF" 2>/dev/null \
+         | head -1 | grep -oE '[0-9]+$')
+  printf '  %-32s %s\n' "机型 / 调优档位" "${_cores} 核 / ${_mem} MB / ${_arch} → ${_tier}"
+  printf '  %-32s %s\n' "Xray policy.bufferSize" "${_buf:-未设置} KB"
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
   else
@@ -294,8 +307,8 @@ cmd_diag() {
 
   # 全部 CDN 流量经 Xray:443 fallback 落到 nginx:8003，再 grpc_pass 到 127.0.0.1:8001
   if command -v ss >/dev/null 2>&1; then
-    ss -lntp 2>/dev/null | grep -qE ':443'  && chk "已监听 TCP 443"  0 || chk "未监听 TCP 443"  1 "Xray 未启动？"
-    ss -lntp 2>/dev/null | grep -qE ':8003' && chk "已监听 TCP 8003" 0 || chk "未监听 TCP 8003" 1 "nginx 未启动？"
+    ss -lntp 2>/dev/null | grep -qE ':443\b'  && chk "已监听 TCP 443"  0 || chk "未监听 TCP 443"  1 "Xray 未启动？"
+    ss -lntp 2>/dev/null | grep -qE ':8003\b' && chk "已监听 TCP 8003" 0 || chk "未监听 TCP 8003" 1 "nginx 未启动？"
   else
     warn "未安装 ss，跳过端口监听检查"
   fi
@@ -381,14 +394,25 @@ cmd_diag() {
   fi
 
   # 本机防火墙：只报告，不改动（规则可能是用户或云厂商 agent 写的）
+  # 判据是「input 链是否默认拒绝」，不是「有没有 UDP 规则」：
+  # 默认放行时没有 UDP 规则完全正常，旧写法在只装了 fail2ban / mangle 表
+  # （policy accept）的机器上必然误报，把人往云安全组的方向带偏。
   if command -v nft >/dev/null 2>&1 && nft list ruleset 2>/dev/null | grep -q .; then
-    nft list ruleset 2>/dev/null | grep -qiE 'udp.*(accept|dport)' \
-      && chk "nftables 有 UDP 相关规则" 0 \
-      || chk "nftables 未见放行 UDP 的规则" 1 "直连 UDP 节点可能被本机防火墙挡下"
-  elif command -v iptables >/dev/null 2>&1 && [[ $(iptables -S 2>/dev/null | wc -l) -gt 3 ]]; then
-    iptables -S 2>/dev/null | grep -qi 'udp' \
-      && chk "iptables 有 UDP 相关规则" 0 \
-      || chk "iptables 未见放行 UDP 的规则" 1 "直连 UDP 节点可能被本机防火墙挡下"
+    if nft list ruleset 2>/dev/null | grep -qE 'hook input .*policy drop'; then
+      nft list ruleset 2>/dev/null | grep -qiE 'udp.*(accept|dport)' \
+        && chk "nftables input 默认拒绝，但有 UDP 放行规则" 0 \
+        || chk "nftables input 链 policy drop 且未放行 UDP" 1 "直连 UDP 节点会被本机防火墙挡下"
+    else
+      chk "nftables input 链默认放行（不拦 UDP）" 0
+    fi
+  elif command -v iptables >/dev/null 2>&1; then
+    if iptables -S 2>/dev/null | grep -qE '^-P INPUT (DROP|REJECT)'; then
+      iptables -S 2>/dev/null | grep -qi 'udp' \
+        && chk "iptables INPUT 默认拒绝，但有 UDP 放行规则" 0 \
+        || chk "iptables INPUT 链 policy DROP 且未放行 UDP" 1 "直连 UDP 节点会被本机防火墙挡下"
+    else
+      chk "iptables INPUT 链默认放行（不拦 UDP）" 0
+    fi
   fi
 
   echo ""
