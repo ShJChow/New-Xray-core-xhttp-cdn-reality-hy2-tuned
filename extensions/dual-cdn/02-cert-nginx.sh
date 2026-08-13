@@ -104,7 +104,14 @@ EOF
 EOF
   else
     cat <<EOF
-            proxy_pass ${fallback_origin};
+            # 变量形式走 resolver（ipv6=off）：写死域名会在启动期解析出 AAAA，
+            # 无 IPv6 的机器上反复 connect() 失败
+            set \$masq_upstream ${fallback_origin};
+            proxy_pass \$masq_upstream\$request_uri;
+            # 回落站带浏览器 UA 时响应头超过默认 4k，nginx 会回 502（可指纹）
+            proxy_buffer_size   32k;
+            proxy_buffers     8 32k;
+            proxy_busy_buffers_size 64k;
             proxy_ssl_server_name on;
             proxy_ssl_name ${fallback_host};
             proxy_redirect http://${fallback_host}/ https://\$host/;
@@ -122,10 +129,14 @@ EOF
 
         location ${XHTTP_PATH} {
             grpc_pass 127.0.0.1:8001;
+            # 默认 4k 会把下行切成 4k 一片经 h2 转发，是 CDN 节点慢的主因
+            grpc_buffer_size 512k;
             grpc_set_header Host                  \$host;
             grpc_set_header X-Real-IP             \$real_client_ip;
             grpc_set_header Forwarded             \$proxy_add_forwarded;
-            grpc_set_header X-Forwarded-For       \$proxy_add_x_forwarded_for;
+            # 只传单值：\$proxy_add_x_forwarded_for 会追加本跳的 127.0.0.1，
+            # Xray 判定整条链不可信而丢弃，并每请求打一条 forged XFF 错误日志
+            grpc_set_header X-Forwarded-For       \$real_client_ip;
             grpc_set_header X-Forwarded-Proto     \$scheme;
         }
     }

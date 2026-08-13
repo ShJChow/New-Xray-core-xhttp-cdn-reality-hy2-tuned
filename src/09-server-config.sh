@@ -28,7 +28,18 @@ nginx_fallback_config() {
 EOF
   else
     cat <<EOF
-            proxy_pass $2;
+            # 用变量形式 proxy_pass：写死域名时 nginx 在启动期用 getaddrinfo 解析，
+            # 会拿到 AAAA 并在无 IPv6 的机器上反复 connect() 失败
+            # （error.log: Network is unreachable → upstream server temporarily disabled）。
+            # 变量形式改走上面的 resolver（ipv6=off），只解析 A 记录。
+            set \$masq_upstream $2;
+            proxy_pass \$masq_upstream\$request_uri;
+            # 回落站带浏览器 UA 时会返回一大堆 Set-Cookie/CSP，默认 4k 头缓冲装不下，
+            # nginx 报 "upstream sent too big header" 并回 502——主动探测看到 502
+            # 而真站看到 200，本身就是可指纹的差异。
+            proxy_buffer_size   32k;
+            proxy_buffers     8 32k;
+            proxy_busy_buffers_size 64k;
             # 伪装源是第三方站点，慢响应/黑洞时按默认 60s 占住 worker，并发探测下
             # 会把连接池拖满，连带影响正常的 XHTTP 流量。
             # 但不能收得太紧：回落站的用途就是让主动探测看到真实站点内容，超时提前

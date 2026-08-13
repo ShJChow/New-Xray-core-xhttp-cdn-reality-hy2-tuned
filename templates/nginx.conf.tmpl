@@ -59,6 +59,16 @@ http {
     map \$http_forwarded \$proxy_add_forwarded {
         default "\$proxy_forwarded_elem";
     }
+    # XHTTP 回源上游：不走 upstream 块时，nginx 为每个 POST/GET 流新建一条到
+    # 8001 的 TCP+HTTP/2 连接。packet-up 模式下上行是大量小 POST，这笔握手开销
+    # 直接落在每个包上。keepalive 让回源连接复用。
+    upstream xray_xhttp {
+        server 127.0.0.1:8001;
+        keepalive          128;
+        keepalive_requests 1000000;
+        keepalive_timeout  3600s;
+    }
+
     server {
         listen       8003 ssl;
         http2        on;
@@ -97,7 +107,10 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
         }
 
         location ${XHTTP_PATH} {
-            grpc_pass 127.0.0.1:8001;
+            grpc_pass grpc://xray_xhttp;
+            # 下行吞吐：grpc_buffer_size 默认 4k，Xray 的下行数据要被切成 4k 一片
+            # 经 HTTP/2 转发，系统调用数与 h2 帧开销成倍上升，是 CDN 节点慢的主因。
+            grpc_buffer_size 512k;
             # XHTTP 是长连接：Nginx 默认 60s 读写超时会直接切断上下行，必须放大
             grpc_socket_keepalive on;
             grpc_read_timeout     1h;
@@ -106,7 +119,10 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
             grpc_set_header Host                  \$host;
             grpc_set_header X-Real-IP             \$real_client_ip;
             grpc_set_header Forwarded             \$proxy_add_forwarded;
-            grpc_set_header X-Forwarded-For       \$proxy_add_x_forwarded_for;
+            # 只传一个值：\$proxy_add_x_forwarded_for 会把本跳的 \$remote_addr
+            # （回落进来时恒为 127.0.0.1）追加到链尾，Xray 判定整条链不可信而丢弃，
+            # 每个请求打一条 [Error] ignored potentially forged "X-Forwarded-For"。
+            grpc_set_header X-Forwarded-For       \$real_client_ip;
             grpc_set_header X-Forwarded-Proto     \$scheme;
         }
     }
