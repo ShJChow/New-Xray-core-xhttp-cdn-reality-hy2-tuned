@@ -137,9 +137,12 @@ check_udp_port_conflict() {
   done
 
   # h2-direct 走 TCP，要查的是 ss -lnt 而不是 -lnu（v4.7.0）。
-  if [[ "$FEATURE_H2_DIRECT" == true ]] && ss -lnt 2>/dev/null | grep -qE ":${H2_PORT}\b"; then
+  # -p 不可省：没有它 ss 根本不输出 users:(("proc",...)) 那一列，h2_holder 恒为空，
+  # 于是 "" != "xray" 成立——重跑安装时旧 xray 还占着 8445，节点就被无声关掉。
+  # 上面的 UDP 分支用的是 -lnup / -lnupH，这里必须对齐（v4.7.7）。
+  if [[ "$FEATURE_H2_DIRECT" == true ]] && ss -lntp 2>/dev/null | grep -qE ":${H2_PORT}\b"; then
     local h2_holder
-    h2_holder=$(ss -lntH 2>/dev/null | grep -E ":${H2_PORT}\b" | grep -oE 'users:\(\("[^"]+' | head -1 | sed 's/.*"//')
+    h2_holder=$(ss -lntpH 2>/dev/null | grep -E ":${H2_PORT}\b" | grep -oE 'users:\(\("[^"]+' | head -1 | sed 's/.*"//')
     if [[ "$h2_holder" != "xray" ]]; then
       warn "TCP ${H2_PORT} 已被 ${h2_holder:-未知进程} 占用，h2-direct 节点已自动关闭"
       warn "  换端口用 H2_PORT=<port> 重跑；或用 FEATURE_H2_DIRECT=false 显式关闭本提示"
