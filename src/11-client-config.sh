@@ -156,6 +156,34 @@ cat > "$MIHOMO_NODES_FILE" << MIHOMOEOF
 @@include templates/mihomo-nodes.yaml.tmpl
 MIHOMOEOF
 
+# 按 FEATURE_* 裁剪 mihomo 配置里的可选节点（v4.7.8）。
+# URI 侧靠 ${..._NODE_LINE} 置空 + 删空行处理，mihomo 侧原先没有对应机制，
+# 于是 h3-direct / h2-direct / Hysteria2 被关掉时，yaml 里仍留着这些节点——
+# 客户端拿到的是指向不存在入站的死节点，「直连择优」组还会一直去测它们。
+#
+# 做法是在模板里用 YAML 注释打成对标记：
+#   #<<FEATURE_H2_DIRECT ... #>>FEATURE_H2_DIRECT
+# 开则只删标记行，关则连同标记之间的内容一起删。
+# 用注释而不是变量占位有两个好处：模板本身仍是合法 YAML（可直接 lint），
+# 且万一裁剪没跑，产物退化成「多了几行注释」而不是「YAML 语法错」。
+#
+# L19：同一节点在 mihomo-proxies（节点定义）与 mihomo-full（「直连择优」组的
+# 成员列表）里各出现一次，两处都打了标记，靠同一次裁剪一起处理。
+prune_mihomo_features() {
+  local file="$1" feat
+  [[ -f "$file" ]] || return 0
+  for feat in FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2; do
+    if [[ "${!feat}" == true ]]; then
+      sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
+    else
+      sed -i "/^[[:space:]]*#<<${feat}\$/,/^[[:space:]]*#>>${feat}\$/d" "$file"
+    fi
+  done
+}
+
+prune_mihomo_features "$MIHOMO_FULL_FILE"
+prune_mihomo_features "$MIHOMO_NODES_FILE"
+
 chown "$(stat -c '%u:%g' "$USER_HOME")" \
   "$USER_HOME/client-config.txt" \
   "$V2RAYN_TUN_FILE" \

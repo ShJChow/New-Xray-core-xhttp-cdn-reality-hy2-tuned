@@ -147,9 +147,15 @@ proxy-groups:
     max-failed-times: 3
     hidden: false
     proxies:
+      #<<FEATURE_H3_DIRECT
       - Vless-xhttp-h3-direct-${HOSTNAME_TAG}
+      #>>FEATURE_H3_DIRECT
+      #<<FEATURE_H2_DIRECT
       - Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}
+      #>>FEATURE_H2_DIRECT
+      #<<FEATURE_HY2
       - Hysteria2-obfs-${HOSTNAME_TAG}
+      #>>FEATURE_HY2
       - Vless-reality-vision-${HOSTNAME_TAG}
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
 
