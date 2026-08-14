@@ -71,6 +71,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
+  #<<FEATURE_H3_DIRECT
   # 2. 直连 VPS 的 h3（UDP ${H3_PORT}）：不经 CDN，Xray 自己监听 UDP。
   #    sni 用 Reality 域名——证书是 Reality+CDN 双域名 SAN，直连侧用前者。
   - name: Vless-xhttp-h3-direct-${HOSTNAME_TAG}
@@ -94,7 +95,9 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+  #>>FEATURE_H3_DIRECT
 
+  #<<FEATURE_H2_DIRECT
   # 2b. 直连 VPS 的 h2（TCP ${H2_PORT}）：与上面的 h3 节点同 UUID、同 path、
   #     同 decryption，只把传输层换成 TCP。存在理由是 h3 节点整条压在 UDP 上，
   #     运营商封 UDP 或 QUIC 丢包严重时它完全不可用，而 mihomo 在 alpn 只有 h3
@@ -122,7 +125,9 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+  #>>FEATURE_H2_DIRECT
 
+  #<<FEATURE_HY2
   # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
   #    inbound 提供，不再需要独立的 hysteria 二进制。
   #    up/down 留空 = 客户端用 BBR；填具体值则切到 Brutal 模式。
@@ -137,6 +142,7 @@ proxies:
     skip-cert-verify: false
     alpn:
       - h3
+  #>>FEATURE_HY2
 
   # ---------- TCP 兜底（UDP/QUIC 被封时使用）----------
   - name: Vless-reality-vision-${HOSTNAME_TAG}
