@@ -73,7 +73,7 @@ v4.7.0 新增 **`直连择优`**策略组（v4.7.3 前叫 `直连回落`，类�
 | 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.6.0 由 h3 改回 TCP，见 docs/10 §8；名字里的 UDP 是那次改动前的遗留，为不打断既有客户端的节点选择而保留） |
 | 2 | `Vless-xhttp-h3-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn 仅 h3（v4.7.4 新增，节点 1 的 QUIC 孪生体，服务端零改动） |
 | 3 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
-| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1（v4.7.0 新增，节点 3 的 TCP 孪生体） |
+| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1（v4.7.0 新增，节点 3 的 TCP 孪生体），推荐手机使用 |
 | 5 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 6 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
 | 7 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
