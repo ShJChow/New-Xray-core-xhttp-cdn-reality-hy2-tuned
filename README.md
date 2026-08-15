@@ -105,6 +105,18 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 > **TUIC v5 未提供**：Xray-core 的 inbound 协议列表中没有 TUIC，在「仅用 Xray」的
 > 前提下无法实现。节点 2（XHTTP over h3 直连）传输层同为 QUIC，是最接近的替代。
 
+## 版本更新
+
+v4.7.4 之后的四个修复，均已包含在当前 **v4.7.8**。这些改动**不影响节点列表与订阅格式**
+（仍是上表 7 条），重跑安装脚本即可获得。
+
+| 版本 | 修复 |
+|---|---|
+| v4.7.5 | **CDN 回源吞吐 +25%**。nginx 的 `grpc_buffer_size` 沿用默认 4k，Xray 的下行数据被切成 4k 一片经 HTTP/2 转发，系统调用数与帧头开销成倍放大；改为 512k 后，同链路回环实测 100MB 下载由 131–162 MB/s 升至 177–193 MB/s。同时新增 `upstream xray_xhttp` + keepalive，避免每条 POST/GET 流都新建一条到 8001 的连接（packet-up 上行是大量小 POST，这笔握手开销原本落在每个包上）。 |
+| v4.7.6 | **修经 CDN 的连接丢失真实客户端 IP**。`sockopt.trustedXForwardedFor` 的语义是「可信**头名**列表」而非可信对端 IP，原先填 `["127.0.0.1"]` 永远匹配不到任何头名，`X-Forwarded-For` 一律被判为伪造（线上 90 分钟内产生 8290 条 `ignored potentially forged` 错误，占日志绝大多数），所有经 CDN 的连接在日志与路由里都退回记成 127.0.0.1。改填 `["X-Real-IP"]`——该头由 nginx 无条件覆盖，客户端伪造不进来。 |
+| v4.7.7 | **修重装会静默关掉 h2-direct 节点**。端口占用探测用的 `ss -lnt` 少了 `-p`，不输出 `users:(("proc",pid=…))` 那一列，持有者恒为空串，于是「8445 上有监听」即被判为被外部进程占用——而重跑安装脚本时占着 8445 的恰恰是上一版自己的 xray。后果是每次重装都把 `FEATURE_H2_DIRECT` 落成 false，订阅从 7 条节点掉到 6 条。 |
+| v4.7.8 | **mihomo 订阅不再下发死节点**。mihomo 模板此前无条件渲染 h3-direct / h2-direct / Hysteria2 三条节点，不受 `FEATURE_*` 开关约束（URI 侧有对应机制，mihomo 侧一直没有）。任一节点被关闭时（证书缺失、端口被占、或显式设 `FEATURE_*=false`），v2rayN 订阅正确地少一条，mihomo 订阅却仍列着它，客户端拿到指向不存在入站的死节点，「直连择优」url-test 组还会每 60s 去测一遍。改为按 `FEATURE_*` 裁剪。 |
+
 ## 前置条件
 
 运行脚本前需在 Cloudflare 完成（申请一个能托管到cloudflare 的[免费]域名：https://my.dnshe.com/index.php?m=domain_hub 或https://dash.domain.digitalplat.org/dashboard）：
