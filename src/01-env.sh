@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.7.9"
+PROJECT_VERSION="4.7.10"
 PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -84,3 +84,39 @@ FEATURE_HY2=${FEATURE_HY2:-true}
 # 默认跟随 FEATURE_H3_DIRECT：关掉 h3 的人不会想单独留一条它的孪生体。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-$FEATURE_H3_DIRECT}
 
+
+# ==================================================
+# 未识别环境变量检查（v4.7.10）
+# ==================================================
+# 本脚本全靠环境变量做非交互配置，而 bash 对不存在的变量没有任何反馈：
+# 拼错一个名字（CDN_DIRECT_PORT、FEATURE_XRAY_AUTO_UPGRADE 这类看起来
+# 很合理但脚本里根本没有的），安装照常成功、日志一切正常，
+# 用户以为配置生效了，实际被静默忽略——排查时几乎不可能想到这一层。
+#
+# 已知变量表不写死：直接在脚本自身里搜这个名字有没有被引用。
+# 好处是永远不会和实现漂移——新增一个变量就自动被认可，删掉一个就自动开始告警。
+# 代价是脚本得能读到自己；`bash <(curl ...)` 这种进程替换下 $0 是
+# /dev/fd/63 且已被读尽，读不到就跳过检查（best-effort，绝不因此中断安装）。
+check_unknown_env_vars() {
+  local self="${BASH_SOURCE[0]}" name unknown=() code
+  [[ -r "$self" && -s "$self" ]] || return 0
+
+  # 必须先剥掉整行注释再搜：上面那段注释里举了两个「不存在的变量」当例子，
+  # 直接搜原文会把它们搜到，检查永远报不出东西（第一版就栽在这）。
+  # 只剥整行注释、不碰行尾注释——后者要正确处理引号内的 # 才不会误伤代码。
+  code=$(grep -v '^[[:space:]]*#' "$self")
+
+  # 只看长得像本项目参数的变量，避免把系统里成百上千的环境变量全扫一遍
+  while IFS= read -r name; do
+    grep -q "\b${name}\b" <<< "$code" || unknown+=("$name")
+  done < <(compgen -v | grep -E '^(AUTO|FEATURE_|CDN_|REALITY_|XHTTP_|HY2_|OBFS_|H2_|H3_|IP_CHOICE|FALLBACK_|VISION_|KEEP_|NODE_|XRAY_)')
+
+  [[ ${#unknown[@]} -eq 0 ]] && return 0
+  warn "以下环境变量本脚本不认识，已被忽略（通常是拼写或版本差异）："
+  for name in "${unknown[@]}"; do
+    echo -e "         ${YELLOW}${name}${NC}=${!name}"
+  done
+  warn "确认拼写无误后再继续；可用变量见 README「可用环境变量」一节"
+  echo ""
+}
+check_unknown_env_vars
