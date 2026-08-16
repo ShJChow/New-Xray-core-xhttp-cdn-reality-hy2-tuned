@@ -127,17 +127,17 @@ v4.7.4 之后的八个修复，均已包含在当前 **v4.7.12**。这些改动*
 
 运行脚本前需在 Cloudflare 完成（申请一个能托管到cloudflare 的[免费]域名：https://my.dnshe.com/index.php?m=domain_hub 或https://dash.domain.digitalplat.org/dashboard）：
 
-1. Reality 域名 DNS → **仅 DNS**（灰色云朵）
-2. CDN 域名 DNS → **代理开启**（橙色云朵）
+1. Reality 域名 DNS → **仅 DNS**（灰色云朵）指向你的vps ip,用来申请证书。
+2. CDN 域名 DNS → **代理开启**（橙色云朵）,指向你的vps ip
 3. SSL/TLS 加密 → **完全（严格）**
 4. 网络 → **gRPC 已开启**
 5. 缓存规则（建议）→ 将 XHTTP 路径设为绕过缓存，表达式在部署完成后由脚本给出
-6. 如需 ECH → Edge Certificates 中先开启 ECH
+6. 如需 ECH → Edge Certificates 中先开启 ECH,默认不开启。
 
-每个入口域名使用独立的 `dist/<域名>/index.html` 作为回落页；可用 [SingleFile](https://chromewebstore.google.com/detail/singlefile/mpiodijhokgodhhofbcjdecpffjipkle) 抓取网页后上传。
+或者，每个入口域名使用独立的 `dist/<域名>/index.html` 作为回落页；可用 [SingleFile](https://chromewebstore.google.com/detail/singlefile/mpiodijhokgodhhofbcjdecpffjipkle) 抓取网页后上传。
 
 
-acme.sh 证书申请：若证书申请失败，可使用acme：
+acme.sh 证书申请：若证书申请失败，可Reality 域名 DNS使用acme：
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)
 ---
 
