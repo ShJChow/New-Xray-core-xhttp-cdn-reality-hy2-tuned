@@ -231,7 +231,7 @@ if [[ "$FEATURE_HY2" == true ]]; then
                 "version": 2,
                 "clients": [
                     {
-                        "auth": "${HY2_PASSWORD}",
+                        "password": "${HY2_PASSWORD}",
                         "level": 0
                     }
                 ]
