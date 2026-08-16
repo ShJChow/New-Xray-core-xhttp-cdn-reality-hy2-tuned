@@ -219,8 +219,35 @@ bash ~/install.sh
 | `FEATURE_XHTTP_H3_NODE` | Hysteria2 扩展的开关：`true` 恢复 `Vless-xhttp-tls-h3-direct` 节点与配套 nginx quic 监听 | `false` |
 | `FEATURE_KEEPALIVE` | `false` 不装保活 cron | `true` |
 | `FEATURE_AUTOUPDATE` | `false` 不装自动更新 cron | `true` |
+| `NODE_TAG` | 节点名后缀，替代主机名 | 主机名（为空或 `localhost` 时用 `vps`） |
+| `NODE_NAME_MAP` / `NODE_NAME_FILE` | 自定义节点名，每行 `旧名=新名`；`NODE_NAME_FILE` 指向同格式的文件 | — |
 
 `AUTO=1` 且 `FALLBACK_MODE=static` 时会自动生成占位 `index.html` 并跳过人工确认，事后可自行替换。
+
+#### 自定义节点名
+
+默认节点名是 `Vless-xhttp-h3-cdn-${主机名}`。多数 VPS 镜像的主机名就是 `localhost`，
+这种后缀在多机订阅里无法区分，所以 `localhost` 会被当成没设置、回退到 `vps`；
+想要有意义的后缀就设 `NODE_TAG=hk-oracle`。
+
+要换成机场式的完整名字（emoji + 地区），用 `NODE_NAME_MAP`，左边写默认生成的
+完整节点名（含后缀），右边写想要的显示名：
+
+```bash
+NODE_TAG=vps \
+NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 US-CDN-TLS
+Vless-xhttp-h3-cdn-vps=🇺🇸 US-CDN-H3
+Vless-xhttp-h3-direct-vps=🇺🇸 US-H3-Direct
+Vless-xhttp-h2-tcp-direct-vps=🇺🇸 US-H2-Direct
+Hysteria2-obfs-vps=🇺🇸 US-Hysteria2
+Vless-reality-vision-vps=🇺🇸 US-Reality-Vision
+Vless-xhttp-reality-vps=🇺🇸 US-Reality-XHTTP' \
+AUTO=1 ... bash install.sh
+```
+
+改名同时作用于 `client-config.txt`、两份 mihomo yaml（含 proxy-groups 里的引用）
+和据此生成的订阅。URI 的 fragment 会自动百分号编码——带空格的节点名不编码会被
+Shadowrocket 一类客户端在空格处截断。
 
 ---
  ### 1. 下载脚本

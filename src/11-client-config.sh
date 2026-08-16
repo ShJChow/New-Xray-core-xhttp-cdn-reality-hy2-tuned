@@ -184,6 +184,42 @@ prune_mihomo_features() {
 prune_mihomo_features "$MIHOMO_FULL_FILE"
 prune_mihomo_features "$MIHOMO_NODES_FILE"
 
+# 自定义节点名（v4.7.9）。NODE_TAG 只能换后缀，机场式的名字（🇺🇸 US-CDN-H3）
+# 换的是整个名字，没法靠模板变量拼出来，所以放在这里做一次改名。
+#
+# 放在产物生成之后而不是模板里，是因为节点名在三种产物里出现的形式不同：
+#   client-config.txt  —— URI 的 fragment，emoji 与空格必须百分号编码，
+#                          否则 Shadowrocket 等客户端会在空格处截断节点名
+#   mihomo-*.yaml      —— proxies 的 name 与 proxy-groups 的成员引用，用原文，
+#                          且两处必须一起改，改漏一处 mihomo 会拒绝加载整份配置
+# 统一在产物上做替换，只需维护一张表，扩展脚本追加的节点也一并覆盖。
+#
+# 表的格式是每行 `旧名=新名`，来自 NODE_NAME_MAP 环境变量，或 NODE_NAME_FILE
+# 指向的文件；旧名就是默认生成的完整节点名（含 ${HOSTNAME_TAG} 后缀）。
+apply_node_names() {
+  local map="${NODE_NAME_MAP:-}"
+  [[ -n "${NODE_NAME_FILE:-}" && -f "${NODE_NAME_FILE}" ]] && map=$(cat "${NODE_NAME_FILE}")
+  [[ -n "$map" ]] || return 0
+
+  local line old new enc f
+  while IFS= read -r line; do
+    # 跳过空行与注释；新名里可以有 =，所以只按第一个 = 切
+    [[ -z "${line// }" || "${line#\#}" != "$line" ]] && continue
+    old="${line%%=*}"; new="${line#*=}"
+    [[ -n "$old" && -n "$new" ]] || continue
+    enc=$(rawurlencode "$new")
+
+    # perl 不加 -CSD：替换串本身就是 UTF-8 字节，按字节替换才不会把 emoji
+    # 变成乱码（-CSD 会把它当 latin-1 解一遍再编回去）。
+    perl -pi -e "s/\Q${old}\E/${enc}/g" "$USER_HOME/client-config.txt"
+    for f in "$MIHOMO_FULL_FILE" "$MIHOMO_NODES_FILE"; do
+      perl -pi -e "s/\Q${old}\E/${new}/g" "$f"
+    done
+  done <<< "$map"
+}
+
+apply_node_names
+
 chown "$(stat -c '%u:%g' "$USER_HOME")" \
   "$USER_HOME/client-config.txt" \
   "$V2RAYN_TUN_FILE" \
