@@ -4,7 +4,7 @@
 
  **测试在Oracle 4ocpu+24 ubuntu 26.04 运行)**
  
-基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / ECH / Hysteria2 混淆 / 全部 7 条节点**，并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
+基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / Hysteria2 混淆 / 全部 7 条节点**（ECH 默认关闭，需 `CDN_ECH=y`），并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
 支持 V2rayN / Shadowrocket / Mihomo / onexray 客户端，支持 IPv4 与 IPv6。
 
@@ -22,7 +22,7 @@
 |---|---|
 | 节点集（v4.7.4） | 默认 7 条，全部由 Xray 单核心提供：4 条 QUIC/h3（含 Hysteria2 obfs 与新增的 h3-cdn）+ 3 条 TCP 兜底。不再需要独立 hysteria 二进制 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
-| ECH | 可选，加密 TLS 握手中的 SNI |
+| ECH | **默认关闭**，加密 TLS 握手中的 SNI；需先在 Cloudflare Edge Certificates 开启，再设 `CDN_ECH=y` |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
 | **流控全开** | BBR + fq、TFO、MTU 探测、句柄 1048576、Xray `sockopt` 与 `policy.bufferSize`、Nginx gRPC 长连接超时 |
 | **机型自适应** | 按内存自动分三档（≥16G / ≥4G / <4G）伸缩缓冲区与队列；ARM64 显式设置 `bufferSize`（默认仅 4 KB） |
