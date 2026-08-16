@@ -33,17 +33,26 @@ append_with_includes() {
 
 # v4.1.0：安全 / 混淆 / 优化功能统一默认开启。
 # 关闭方法：FEATURE_XPADDING=false FEATURE_CDN_ECH=false bash install.sh
+#
+# v4.7.11：这两行原本是无条件赋值（FEATURE_XPADDING=true），会**覆盖掉**用户
+# 传进来的环境变量——上面这行注释和 README 里写的关闭方法其实一直是失效的。
+# 改成 ${VAR:-默认} 后才真正可覆盖。
 append_profile() {
   cat <<'PROFILE'
 # ==================================================
-# 功能开关：默认全开（xpadding + ECH 可选）
+# 功能开关
 # ==================================================
 # FEATURE_XPADDING  XHTTP 填充混淆（xPaddingObfsMode），绕过 CDN 侧特征检测
-# FEATURE_CDN_ECH   加密 TLS 握手 SNI（是否实际启用由交互 / CDN_ECH 环境变量决定）
-# 两个都可用环境变量覆盖为 false 关闭，无需重装即可切换。
+#                   **默认开启**：它挡的是流量指纹识别，关掉不影响机密性
+#                   （那由 TLS + VLESS Encryption 保证），但节点更容易被识别。
+# FEATURE_CDN_ECH   是否**询问** ECH；实际是否启用由 CDN_ECH 决定，
+#                   而 CDN_ECH **默认关闭**——ECH 要求先在 Cloudflare 的
+#                   Edge Certificates 里开启，未满足该前置条件时启用它会
+#                   直接导致 CDN 节点握手失败，默认开启对多数人是个陷阱。
+# 两个都可用环境变量覆盖，无需改脚本。
 
-FEATURE_XPADDING=true
-FEATURE_CDN_ECH=true
+FEATURE_XPADDING=${FEATURE_XPADDING:-true}
+FEATURE_CDN_ECH=${FEATURE_CDN_ECH:-true}
 PROFILE
 }
 

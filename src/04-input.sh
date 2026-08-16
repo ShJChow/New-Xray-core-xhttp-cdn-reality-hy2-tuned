@@ -148,7 +148,10 @@ fi
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
   echo ""
   echo -e "${YELLOW}[+] CDN ECH（作用于 CDN-TLS）${NC}"
-  ask CDN_ECH "是否启用 CDN ECH [Y/n]: " "y"
+  # 默认 n（v4.7.11）：ECH 要求先在 Cloudflare Edge Certificates 里开启，
+  # 未满足该前置条件时启用它会让 CDN 节点直接握手失败。默认开启对没读到
+  # 前置条件第 6 条的人是个陷阱，改为默认关闭、需要的人显式开。
+  ask CDN_ECH "是否启用 CDN ECH [y/N]: " "n"
   if [[ "${CDN_ECH,,}" == "y" || "${CDN_ECH,,}" == "yes" ]]; then
     CDN_ECH_ENABLED=true
     CDN_ECH_QUERY="cloudflare-ech.com+https://223.5.5.5/dns-query"
