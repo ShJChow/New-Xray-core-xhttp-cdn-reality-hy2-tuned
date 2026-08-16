@@ -2,7 +2,7 @@
 
 **语言：** **简体中文** · [English](./README.en.md) · [فارسی](./README.fa.md)
 
- **测试在Oracle 4ocpu+24 ubuntu 26.04 运行)**
+ **测试在Oracle 4ocpu+24 ubuntu 26.04/Debian 13(建议) 运行)**
  
 基于 Xray-core 的 **XHTTP + CDN **一键部署方案，默认开启 **xpadding / Hysteria2 混淆 / 全部 7 条节点**（ECH 默认关闭，需 `CDN_ECH=y`），并在安装时自动应用**内核层流控调优**（BBR + fq、缓冲、句柄），附带常驻管理命令 `xh`。
 
