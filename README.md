@@ -109,7 +109,7 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 
 ## 版本更新
 
-v4.7.4 之后的七个修复，均已包含在当前 **v4.7.11**。这些改动**不影响节点列表与订阅格式**
+v4.7.4 之后的八个修复，均已包含在当前 **v4.7.12**。这些改动**不影响节点列表与订阅格式**
 （仍是上表 7 条），重跑安装脚本即可获得。
 
 | 版本 | 修复 |
@@ -118,9 +118,10 @@ v4.7.4 之后的七个修复，均已包含在当前 **v4.7.11**。这些改动*
 | v4.7.6 | **修经 CDN 的连接丢失真实客户端 IP**。`sockopt.trustedXForwardedFor` 的语义是「可信**头名**列表」而非可信对端 IP，原先填 `["127.0.0.1"]` 永远匹配不到任何头名，`X-Forwarded-For` 一律被判为伪造（线上 90 分钟内产生 8290 条 `ignored potentially forged` 错误，占日志绝大多数），所有经 CDN 的连接在日志与路由里都退回记成 127.0.0.1。改填 `["X-Real-IP"]`——该头由 nginx 无条件覆盖，客户端伪造不进来。 |
 | v4.7.7 | **修重装会静默关掉 h2-direct 节点**。端口占用探测用的 `ss -lnt` 少了 `-p`，不输出 `users:(("proc",pid=…))` 那一列，持有者恒为空串，于是「8445 上有监听」即被判为被外部进程占用——而重跑安装脚本时占着 8445 的恰恰是上一版自己的 xray。后果是每次重装都把 `FEATURE_H2_DIRECT` 落成 false，订阅从 7 条节点掉到 6 条。 |
 | v4.7.8 | **mihomo 订阅不再下发死节点**。mihomo 模板此前无条件渲染 h3-direct / h2-direct / Hysteria2 三条节点，不受 `FEATURE_*` 开关约束（URI 侧有对应机制，mihomo 侧一直没有）。任一节点被关闭时（证书缺失、端口被占、或显式设 `FEATURE_*=false`），v2rayN 订阅正确地少一条，mihomo 订阅却仍列着它，客户端拿到指向不存在入站的死节点，「直连择优」url-test 组还会每 60s 去测一遍。改为按 `FEATURE_*` 裁剪。 |
-| v4.7.9 | **修 Hysteria2 节点从来没通过流量**。hysteria 入站的用户写成 `settings.clients[].auth`，而 Xray 26.x 认的是 `clients[].password`——多余的键被静默忽略，配置照样通过 `xray run -test`，但解析后没有任何有效用户，每个客户端都在认证阶段拿到 `auth failed code 404`。难发现是因为 QUIC/TLS 握手是成功的、obfs 正常、端口也在听，`xh diag` 服务端自检全绿，表现是「节点像是通的、就是过不了流量」。同时新增节点自定义命名：`NODE_TAG` 换后缀（hostname 为 `localhost` 时不再直接拿来当后缀，回退到 `vps`），`NODE_NAME_MAP` 按 `旧名=新名` 整条改名，用于机场式命名。 |
+| v4.7.9 | ⚠️ **本条的修法是错的，已被 v4.7.12 取代——若停留在 v4.7.9~v4.7.11，Hysteria2 在 v2rayN/sing-box 下不可用，请升级。** **修 Hysteria2 节点从来没通过流量**。hysteria 入站的用户写成 `settings.clients[].auth`，而 Xray 26.x 认的是 `clients[].password`——多余的键被静默忽略，配置照样通过 `xray run -test`，但解析后没有任何有效用户，每个客户端都在认证阶段拿到 `auth failed code 404`。难发现是因为 QUIC/TLS 握手是成功的、obfs 正常、端口也在听，`xh diag` 服务端自检全绿，表现是「节点像是通的、就是过不了流量」。同时新增节点自定义命名：`NODE_TAG` 换后缀（hostname 为 `localhost` 时不再直接拿来当后缀，回退到 `vps`），`NODE_NAME_MAP` 按 `旧名=新名` 整条改名，用于机场式命名。 |
 | v4.7.10 | **拼错的环境变量不再被静默忽略**。本脚本全靠环境变量做非交互配置，而 bash 对不存在的变量没有任何反馈——写了 `CDN_DIRECT_PORT=2053`、`FEATURE_XRAY_AUTO_UPGRADE=true` 这种看着很合理但脚本里根本不存在的名字，安装照常成功、日志一切正常，用户以为配置生效了，排查时几乎不可能想到这一层。现在安装开始时会列出所有「长得像本项目参数但脚本没引用过」的变量并告警（不中断安装）。已知变量表不写死，直接在脚本自身里搜该名字有没有被引用，因此永远不会和实现漂移。 |
 | v4.7.11 | **ECH 改为默认关闭；`FEATURE_*` 环境变量终于真的能覆盖**。ECH 要求先在 Cloudflare 的 Edge Certificates 里开启，未满足这个前置条件就启用它会让 CDN 节点直接握手失败——对没读到「前置条件」第 6 条的人是个陷阱，因此默认改为不启用，需要的人显式设 `CDN_ECH=y`。xpadding 保持默认开启（它挡的是流量指纹识别，关掉不影响机密性，但节点更容易被识别）。同时修掉一个一直存在的问题：构建脚本注入的是无条件赋值 `FEATURE_XPADDING=true`，会**覆盖掉**用户传进来的环境变量，README 里写的 `FEATURE_XPADDING=false bash install.sh` 这个关闭方法其实从来没生效过；改成 `${VAR:-默认}` 后才真正可覆盖。 |
+| v4.7.12 | **修 v4.7.9 引入的回归：Hysteria2 在 v2rayN / sing-box 下不通**。v4.7.9 把入站用户从 `clients[].auth` 改成了 `clients[].password`，依据是「用 Xray 自己的 hysteria 出站实测只有这个写法能认证」——但那次实测的客户端把 auth 放在 `settings.auth`，而[官方文档](https://xtls.github.io/config/transports/hysteria.html)规定出站的 auth 在 `streamSettings.hysteriaSettings.auth`。两处都不标准的配置凑巧互相匹配，于是得出了错误结论，反而把标准客户端弄不通了：sing-box（v2rayN 的 Hysteria2 内核）从此一直报 `authentication failed, status code: 404`。正确写法是官方文档的 `settings.users[].auth`。已用三种内核逐一验证（均带阴性对照，确认错误密码时确实失败）：sing-box 236 Mbps、Xray 253 Mbps、mihomo 通。 |
 
 ## 前置条件
 

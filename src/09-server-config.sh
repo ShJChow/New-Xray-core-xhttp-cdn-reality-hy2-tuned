@@ -229,9 +229,9 @@ if [[ "$FEATURE_HY2" == true ]]; then
             "protocol": "hysteria",
             "settings": {
                 "version": 2,
-                "clients": [
+                "users": [
                     {
-                        "password": "${HY2_PASSWORD}",
+                        "auth": "${HY2_PASSWORD}",
                         "level": 0
                     }
                 ]
