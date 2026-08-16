@@ -158,8 +158,8 @@ find_node_line() {
 }
 
 # 节点名后缀，与主脚本保持一致
-HOSTNAME_TAG=$(hostname -s 2>/dev/null | tr -cd 'A-Za-z0-9-' | cut -c1-20)
-[[ -z "$HOSTNAME_TAG" ]] && HOSTNAME_TAG="vps"
+HOSTNAME_TAG=$(printf '%s' "${NODE_TAG:-$(hostname -s 2>/dev/null)}" | tr -cd 'A-Za-z0-9-' | cut -c1-20)
+[[ -z "$HOSTNAME_TAG" || "$HOSTNAME_TAG" == "localhost" ]] && HOSTNAME_TAG="vps"
 
 find_client_files() {
   if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
