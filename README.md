@@ -303,13 +303,13 @@ bash ~/install.sh
 
 ```bash
 NODE_TAG=vps \
-NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 US-CDN-TLS
-Vless-xhttp-h3-cdn-vps=🇺🇸 US-CDN-H3
-Vless-xhttp-h3-direct-vps=🇺🇸 US-H3-Direct
-Vless-xhttp-h2-tcp-direct-vps=🇺🇸 US-H2-Direct
-Hysteria2-obfs-vps=🇺🇸 US-Hysteria2
-Vless-reality-vision-vps=🇺🇸 US-Reality-Vision
-Vless-xhttp-reality-vps=🇺🇸 US-Reality-XHTTP' \
+NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
+Vless-xhttp-h3-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h3
+Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC8444
+Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP8445
+Hysteria2-obfs-vps=🇺🇸 Hysteria2-QUIC-TLS
+Vless-reality-vision-vps=🇺🇸 VLESS-TCP-REALITY-Vision
+Vless-xhttp-reality-vps=🇺🇸 VLESS-XHTTP-REALITY' \
 AUTO=1 ... bash install.sh
 ```
 
