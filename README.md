@@ -74,8 +74,8 @@ v4.7.0 新增 **`直连择优`**策略组（v4.7.3 前叫 `直连回落`，类�
 |---|---|---|---|
 | 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | 经 CDN，**TCP 443** | XHTTP + TLS，alpn h2 + http/1.1（v4.6.0 由 h3 改回 TCP，见 docs/10 §8；名字里的 UDP 是那次改动前的遗留，为不打断既有客户端的节点选择而保留） |
 | 2 | `Vless-xhttp-h3-cdn-<host>` | 经 CDN，**UDP 443** | XHTTP + TLS，alpn 仅 h3（v4.7.4 新增，节点 1 的 QUIC 孪生体，服务端零改动） |
-| 3 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3 |
-| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1（v4.7.0 新增，节点 3 的 TCP 孪生体），推荐手机使用 |
+| 3 | `Vless-xhttp-h3-direct-<host>` | 直连 VPS，**UDP 8444** | XHTTP + TLS，alpn h3，`mode=stream-up`（v4.7.13，比 auto 快约 50ms） |
+| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | 直连 VPS，**TCP 8445** | XHTTP + TLS，alpn h2 + http/1.1，`mode=stream-up`（v4.7.13，比 auto 快约 50ms）（v4.7.0 新增，节点 3 的 TCP 孪生体），推荐手机使用 |
 | 5 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 6 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
 | 7 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
@@ -109,7 +109,7 @@ Xray 内核低于 26.6.1 时，安装脚本会**自动升级内核**（Alpine �
 
 ## 版本更新
 
-v4.7.4 之后的八个修复，均已包含在当前 **v4.7.12**。这些改动**不影响节点列表与订阅格式**
+v4.7.4 之后的九个修复，均已包含在当前 **v4.7.13**。这些改动**不影响节点列表与订阅格式**
 （仍是上表 7 条），重跑安装脚本即可获得。
 
 | 版本 | 修复 |
@@ -122,6 +122,7 @@ v4.7.4 之后的八个修复，均已包含在当前 **v4.7.12**。这些改动*
 | v4.7.10 | **拼错的环境变量不再被静默忽略**。本脚本全靠环境变量做非交互配置，而 bash 对不存在的变量没有任何反馈——写了 `CDN_DIRECT_PORT=2053`、`FEATURE_XRAY_AUTO_UPGRADE=true` 这种看着很合理但脚本里根本不存在的名字，安装照常成功、日志一切正常，用户以为配置生效了，排查时几乎不可能想到这一层。现在安装开始时会列出所有「长得像本项目参数但脚本没引用过」的变量并告警（不中断安装）。已知变量表不写死，直接在脚本自身里搜该名字有没有被引用，因此永远不会和实现漂移。 |
 | v4.7.11 | **ECH 改为默认关闭；`FEATURE_*` 环境变量终于真的能覆盖**。ECH 要求先在 Cloudflare 的 Edge Certificates 里开启，未满足这个前置条件就启用它会让 CDN 节点直接握手失败——对没读到「前置条件」第 6 条的人是个陷阱，因此默认改为不启用，需要的人显式设 `CDN_ECH=y`。xpadding 保持默认开启（它挡的是流量指纹识别，关掉不影响机密性，但节点更容易被识别）。同时修掉一个一直存在的问题：构建脚本注入的是无条件赋值 `FEATURE_XPADDING=true`，会**覆盖掉**用户传进来的环境变量，README 里写的 `FEATURE_XPADDING=false bash install.sh` 这个关闭方法其实从来没生效过；改成 `${VAR:-默认}` 后才真正可覆盖。 |
 | v4.7.12 | **修 v4.7.9 引入的回归：Hysteria2 在 v2rayN / sing-box 下不通**。v4.7.9 把入站用户从 `clients[].auth` 改成了 `clients[].password`，依据是「用 Xray 自己的 hysteria 出站实测只有这个写法能认证」——但那次实测的客户端把 auth 放在 `settings.auth`，而[官方文档](https://xtls.github.io/config/transports/hysteria.html)规定出站的 auth 在 `streamSettings.hysteriaSettings.auth`。两处都不标准的配置凑巧互相匹配，于是得出了错误结论，反而把标准客户端弄不通了：sing-box（v2rayN 的 Hysteria2 内核）从此一直报 `authentication failed, status code: 404`。正确写法是官方文档的 `settings.users[].auth`。已用三种内核逐一验证（均带阴性对照，确认错误密码时确实失败）：sing-box 236 Mbps、Xray 253 Mbps、mihomo 通。 |
+| v4.7.13 | **握手延迟按节点类型分别配置；修 Reality 节点在 mihomo 下全部不可用**。① 两条直连 XHTTP 节点（h3-direct / h2-direct）改用 `mode=stream-up`：`auto` 在 `security=tls` 下保守地选 packet-up，把上行切成一串带最小间隔的 POST，首字节要多等约 50ms。实测首字节 68/69ms → **18ms**（等于不经节点的直连基线），吞吐不变。**CDN 节点必须保持 packet-up**——packet-up 存在的理由就是 CDN 不支持流式请求体，实测经 Cloudflare 改 stream-up 后 CDN-TLS 吞吐掉到 0、CDN-H3 直接超时。Reality 节点不用改，它的 `auto` 本来就选 stream-up。② Reality 加 `minClientVer: "1.8.0"`：Xray 26.x 的 Reality 默认最低客户端版本是 Xray-core v26.3.27（启动日志里那句 `other clients may be refused to connect`），mihomo 握手时直接报 `REALITY authentication failed`，两条 Reality 节点在 mihomo / Clash 系客户端下**全部不可用**。放宽后七条节点在 mihomo 下全通。 |
 
 ## 前置条件
 
