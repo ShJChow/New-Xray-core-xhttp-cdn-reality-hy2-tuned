@@ -366,8 +366,8 @@ generated full node name (including suffix) on the left and the display name on 
 NODE_TAG=vps \
 NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
 Vless-xhttp-h3-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h3
-Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC8444
-Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP8445
+Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC
+Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP
 Hysteria2-obfs-vps=🇺🇸 Hysteria2-QUIC-TLS
 Vless-reality-vision-vps=🇺🇸 VLESS-TCP-REALITY-Vision
 Vless-xhttp-reality-vps=🇺🇸 VLESS-XHTTP-REALITY' \
