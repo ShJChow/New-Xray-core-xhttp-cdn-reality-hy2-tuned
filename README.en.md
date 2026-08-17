@@ -8,6 +8,15 @@ A one-command deployment of **XHTTP with split upload/download over CDN**, built
 
 Works with V2rayN / Shadowrocket / Mihomo / onexray, over both IPv4 and IPv6.
 
+> ⚠️ **Read the [Disclaimer](#disclaimer) before deploying** — legal risk (especially
+> for users in mainland China) and an honest note on why nothing here is guaranteed
+> to stay undetected or keep working.
+>
+> ℹ️ **This translation lags behind the [Chinese README](./README.md)**, which is the
+> source of truth. The node list and version history below describe v4.0.0; the current
+> release ships 7 nodes. The two sections at the end (latency measurements, disclaimer)
+> are current.
+
 > **Background reading**: XHTTP, split upload/download, and why it resists censorship — <https://habr.com/en/articles/990208/>
 >
 > **Note**: this setup uses VLESS Encryption. Your client (V2rayN, Mihomo) must be new enough to support `vlessenc` and `xhttp`.
@@ -247,6 +256,131 @@ bash ~/install.sh
 ```
 
 Pushing a `v*` tag makes GitHub Actions build and publish a Release automatically.
+
+---
+
+## Measured handshake latency (v4.7.13)
+
+**Conditions**: measured from the VPS itself (Oracle 4 OCPU ARM, San Jose), target
+`https://www.cloudflare.com/cdn-cgi/trace`, median of 10 fresh connections per node,
+no connection reuse. Direct baseline (no node at all) = **20 ms**.
+
+| Node | First byte | Note |
+|---|---|---|
+| `Vless-reality-vision` | 18 ms | Matches the direct baseline |
+| `Vless-xhttp-reality` | 19 ms | Its `auto` already picks stream-up |
+| `Hysteria2-obfs` | 18 ms | |
+| `Vless-xhttp-h3-direct` | **18 ms** | Was 69 ms; v4.7.13 switched it to `stream-up` |
+| `Vless-xhttp-h2-tcp-direct` | **18 ms** | Was 68 ms; same change |
+| `Vless-xhttp-tls-UDP-cdn` | 73 ms | Inherent packet-up cost, see below |
+| `Vless-xhttp-h3-cdn` | 73 ms | Same |
+
+### The ~50 ms on the two CDN nodes is structural and cannot be optimised away
+
+Breaking the 73 ms down, each layer measured separately:
+
+| Component | Cost | Optimisable |
+|---|---|---|
+| Target site itself (direct baseline) | 20 ms | — |
+| **packet-up mode overhead** | **~48 ms** | ❌ structural |
+| Cloudflare edge processing | 5 ms | ❌ already small |
+| The Reality-fallback hop | 0.1–0.8 ms | ❌ negligible |
+
+Two decisive controls: **the same XHTTP config bypassing Cloudflare and hitting local
+nginx directly is 68 ms, versus 73 ms through Cloudflare** — so Cloudflare accounts for
+only 5 ms. And this box's Cloudflare edge is in the same facility (`colo=SJC`, 0.86 ms
+ping), so it is not a distance problem either.
+
+The remaining ~48 ms is the same packet-up penalty measured on the direct nodes, but the
+CDN nodes **cannot** switch to `stream-up` the way the direct ones did: measured through
+Cloudflare with stream-up, CDN-TLS throughput drops to 0 and CDN-H3 times out.
+Cloudflare does not support streaming request bodies — that is precisely why packet-up
+exists.
+
+The following were all tested and made no difference (interleaved sampling, 15–20 runs
+each, all landing within noise at 73–75 ms):
+
+- `scMinPostsIntervalMs` at 0 / 5 / 30
+- Larger `scMaxEachPostBytes` (slightly worse, 75 ms)
+- `xmux maxConcurrency` 16-32 → 64-128
+- Dropping xmux entirely (only p90 got worse)
+- Changing the Cloudflare origin port to bypass the Reality fallback (that hop is
+  0.1–0.8 ms)
+- Cache rules — the XHTTP path is already `cf-cache-status: DYNAMIC`
+
+**Conclusion**: do not try to optimise those 50 ms away; solve it with selection instead.
+The Mihomo subscription's `自动选择` (url-test) group routes by measured latency, so the
+18 ms direct nodes naturally win. The CDN nodes exist as the fallback for when direct
+access is blocked, and 50 ms is what they cost in exchange for presenting a Cloudflare IP
+instead of your VPS.
+
+> **These numbers do not transfer to your client.** They were measured on the VPS itself
+> and describe how much headroom is left on the server side. On a real client the maths
+> is different: the Cloudflare edge sits near **you**, and the edge-to-origin leg runs
+> over Cloudflare's backbone, which can beat the public internet. On a poor
+> intercontinental route a CDN node may well have *lower* total latency than a direct one.
+> Measure it on your own client.
+
+---
+
+## Disclaimer
+
+**Please read this section in full before deploying.**
+
+### Legal and compliance
+
+This project is an **open-source deployment script for network transports**. It provides
+automation only: it operates no nodes, runs no service, and never touches user traffic.
+Whether to deploy it, how to use it, and every consequence that follows are entirely the
+user's own responsibility.
+
+**Note for users in mainland China**: within mainland China, establishing or using an
+unauthorised channel for international networking without approval from the telecom
+authorities may violate the *Interim Provisions on the Administration of International
+Networking of Computer Information Networks* (Article 6) and its implementing measures,
+along with related regulations. Consequences can include orders to disconnect, warnings,
+fines, and confiscation of unlawful gains. Using it commercially — selling or sharing
+access for profit — is treated far more seriously, and there are decided cases charged as
+"illegal business operation" or "providing programs or tools for intruding into or
+unlawfully controlling computer information systems".
+
+The author does not encourage anyone to break the law in their own jurisdiction.
+**If you fall under such laws, assess the risk yourself and own your choice.** Neither
+this project nor its author bears any legal responsibility for what users do with it.
+
+**Strictly prohibited**: selling or distributing proxy access to the public, telecom and
+online fraud, cross-border gambling, money laundering, distributing unlawful content, or
+any other criminal activity.
+
+### Honest technical notes
+
+- **Nothing here guarantees you will not be detected, or that it will keep working.**
+  Reality, xpadding and Salamander obfuscation raise the cost of traffic analysis; they
+  do not make traffic unidentifiable. Censorship technology keeps moving, and a config
+  that works today can fail tomorrow. Distrust anything claiming to be block-proof.
+- **Getting an IP blocked is normal.** The direct nodes expose the VPS's bare IP; once it
+  is blocked, every direct node on that IP fails at once. That is inherent to this class
+  of setup, not a misconfiguration.
+- **UDP / QUIC is frequently throttled or blocked in mainland China.** Four of the seven
+  nodes depend on UDP (h3-cdn, h3-direct, Hysteria2, and the CDN's UDP 443). Some ISPs
+  apply QoS to UDP at peak hours: those nodes work at first, then slow down or stop,
+  while the TCP nodes stay fine. **That is not a server fault** —
+  `Vless-reality-vision` and `Vless-xhttp-h2-tcp-direct` are the TCP fallbacks kept
+  precisely for this.
+- **Cloudflare's real-world speed varies a lot by region.** Reaching Cloudflare's anycast
+  IPs from mainland China gives highly variable PoPs and route quality, potentially far
+  worse than the numbers above. Measure on your own client before choosing a node.
+- **Every performance figure in this repository is a single measurement** on one machine,
+  at one time, over one route. None of it is a performance promise for any other
+  environment.
+
+### No warranty
+
+This project is provided "as is" under the MIT licence, without warranty of any kind,
+express or implied, including but not limited to merchantability, fitness for a
+particular purpose, and non-infringement. The author is not liable for any direct or
+indirect loss arising from use or inability to use it, including but not limited to
+server suspension, data loss, account loss, or legal liability.
 
 ---
 
