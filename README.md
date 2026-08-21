@@ -221,32 +221,6 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/i
 bash ~/install.sh
 ```
 
-脚本可重复执行，用于更新域名、回落网站等参数。
-
-### 扩展：XHTTP over HTTP/3（3 条 h3 节点）
-
-```bash
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
-```
-
-移植自上游 `add-quic.sh`，追加 `Vless-xhttp-tls-h3` /
-`Vless-xhttp-split-h2up-h3down` / `Vless-xhttp-split-h3up-h2down` 三条。
-三条的 `sni`/`host` 都用 CDN 域名，nginx 的 `listen ... quic` 插进 **CDN 域名的
-server 块**并复用该块已有的 `location`——与 `add-quic.sh`（Hysteria2）插进
-Reality 块的做法不同，两者用不同的配置标记，可同时安装。
-
-## 扩展脚本
-
-主脚本部署完成后按需追加，会复用已有 `UUID / Path / VLESS Encryption` 并更新客户端配置与订阅。
-
-```bash
-# Hysteria2 直连（同扩展的 XHTTP+TLS+H3 节点已知不通，见下）
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
-```
-
-> v2.0.1 起该扩展**默认只产出 `Hysteria2-direct`**。`Vless-xhttp-tls-h3-direct` 需 `FEATURE_XHTTP_H3_NODE=true` 才输出。
-> **后者在 Shadowrocket 下实测不通**（与主脚本已默认停用的直连 h3 节点同因），
-> 见 [docs/8 勘误](./docs/8.拓展-QUIC添加.md)。想要 Hysteria2 的照常运行本扩展，忽略 h3 那条即可。
 
 ### 非交互一键（脚本化重装）
 
