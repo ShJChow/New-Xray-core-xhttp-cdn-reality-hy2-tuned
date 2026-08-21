@@ -8,10 +8,9 @@
 
 支持 V2rayN / Shadowrocket / Mihomo / onexray 客户端，支持 IPv4 与 IPv6。
 
-> ⚠️ **部署前请先阅读 [免责声明](#免责声明)**——含法律风险提示（中国大陆用户尤其注意）、
-> 以及关于「不保证不被识别、不保证长期可用」的技术说明。
+> ⚠️ **部署前请先阅读 [免责声明](#免责声明)**
 
-> **原理阅读**：XHTTP、上下行分离及其抗审查优势 — <https://habr.com/en/articles/990208/>
+> **原理阅读**：新版内核，同比传统内核具有运行AI agent的优势。
 >
 > **注意**：本方案使用 VLESS Encryption，客户端（V2rayN、Mihomo）需更新到支持 `vlessenc` / `xhttp` 的版本。
 >
