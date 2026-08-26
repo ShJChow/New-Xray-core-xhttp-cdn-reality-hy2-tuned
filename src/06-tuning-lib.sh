@@ -78,8 +78,17 @@ apply_system_tuning() {
   # ---------- 收发缓冲区（大带宽时延积链路 / 过 CDN 的关键项）----------
   try_sysctl net.core.rmem_max "$SOCK_MEM_MAX"
   try_sysctl net.core.wmem_max "$SOCK_MEM_MAX"
-  try_sysctl net.core.rmem_default 1048576
-  try_sysctl net.core.wmem_default 1048576
+  if [[ "$MEM_MB" -ge 4096 ]]; then
+    try_sysctl net.core.rmem_default 4194304
+    try_sysctl net.core.wmem_default 4194304
+    try_sysctl net.ipv4.udp_rmem_min 131072
+    try_sysctl net.ipv4.udp_wmem_min 131072
+  else
+    try_sysctl net.core.rmem_default 1048576
+    try_sysctl net.core.wmem_default 1048576
+    try_sysctl net.ipv4.udp_rmem_min 16384
+    try_sysctl net.ipv4.udp_wmem_min 16384
+  fi
   # 中间值是**初始**默认值，autotuning 会在 min~max 之间增长；调大它影响的是
   # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
   try_sysctl net.ipv4.tcp_rmem "4096 262144 ${TCP_MEM_MAX}"
@@ -92,8 +101,6 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
   # QUIC / HTTP3：本项目保留的 UDP+XHTTP+CDN 节点与 Hysteria2 扩展都会用到
   try_sysctl net.core.optmem_max 65536
-  try_sysctl net.ipv4.udp_rmem_min 8192
-  try_sysctl net.ipv4.udp_wmem_min 8192
   # udp_mem（v4.7.2）：全系统 UDP 内存池上限，单位是页。上面两项是**单个套接字**的
   # 保底值，管不到这个总量；触顶后内核直接丢包且不回任何错误，表现为 h3-direct 与
   # Hysteria2 在高并发下莫名丢包，而 TCP 节点一切正常——极难定位，因此显式设置。
@@ -113,6 +120,7 @@ apply_system_tuning() {
   # 因而不引入 CPU 占用。小内存档（<4G）不写，保持默认（netdev_budget_usecs 已限时）。
   if [[ -n "$NETDEV_BUDGET" ]]; then
     try_sysctl net.core.netdev_budget "$NETDEV_BUDGET"
+    try_sysctl net.core.netdev_budget_usecs 8000
   fi
   try_sysctl net.core.somaxconn 65535
   try_sysctl net.ipv4.tcp_max_syn_backlog "$NETDEV_BACKLOG"
@@ -129,12 +137,13 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_fastopen 3
   try_sysctl net.ipv4.tcp_mtu_probing 1
   try_sysctl net.ipv4.tcp_slow_start_after_idle 0
-  # 套接字里允许积压的未发送字节数。调小 = Xray 更早被唤醒补数据，本地排队更少，
-  # 降低队头阻塞与写入延迟（16KB 是通行取值）。这是**延迟**收益，不是吞吐收益：
-  # 拥塞窗口由 BBR 与 rmem/wmem 决定，与本项无关。
-  try_sysctl net.ipv4.tcp_notsent_lowat 16384
+  # 套接字里允许积压的未发送字节数。针对 150~200ms RTT 跨境链路，放宽到 256KB
+  # 既能防止本地 bufferbloat，又不会锁死跨境单流高速下载吞吐。
+  try_sysctl net.ipv4.tcp_notsent_lowat 262144
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
+  try_sysctl net.ipv4.tcp_ecn 2
+  try_sysctl net.ipv4.tcp_ecn_fallback 1
   # tcp_no_metrics_save = 1（v4.7.2）：不把连接结束时的 cwnd / ssthresh 缓存进路由表。
   # 默认行为（0）在同质网络里是优化，在代理机上是负担：对端遍布全球，线路质量差异
   # 极大，一条丢包严重的连接会把偏低的 ssthresh 写进缓存，之后**同网段**的新连接
