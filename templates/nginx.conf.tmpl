@@ -36,7 +36,15 @@ http {
     tcp_nodelay           on;
     tcp_nopush            on;
     client_max_body_size  0;
-    gzip                  on;
+    client_body_buffer_size 512k;
+    client_header_buffer_size 32k;
+    large_client_header_buffers 4 32k;
+    keepalive_timeout     300s 300s;
+    keepalive_requests    100000;
+    http2_max_concurrent_streams 1024;
+    http2_body_preread_size 128k;
+    http2_recv_buffer_size 512k;
+    gzip                  off;
 
     add_header X-Content-Type-Options nosniff;
 

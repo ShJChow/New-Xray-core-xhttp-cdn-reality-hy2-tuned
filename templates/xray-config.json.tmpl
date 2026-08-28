@@ -93,7 +93,15 @@
                 // 结果是每个请求打一条 [Error] ignored potentially forged。
                 // 取 X-Real-IP：nginx 用 grpc_set_header 无条件覆盖该头，客户端伪造不进来；
                 // 本入站又仅监听回环，只可能由 nginx 回源到达。
-                "sockopt": {"trustedXForwardedFor": ["X-Real-IP"]},
+                "sockopt": {
+                    "trustedXForwardedFor": ["X-Real-IP"],
+                    "tcpFastOpen": true,
+                    "tcpNoDelay": true,
+                    "tcpcongestion": "bbr",
+                    "tcpKeepAliveIdle": 30,
+                    "tcpKeepAliveInterval": 5,
+                    "tcpUserTimeout": 20000
+                },
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
