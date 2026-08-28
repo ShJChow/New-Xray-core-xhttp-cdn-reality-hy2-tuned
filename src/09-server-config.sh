@@ -85,10 +85,10 @@ if [[ "$AVAIL" != *bbr* ]]; then
   AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
 fi
 if [[ "$AVAIL" == *bbr* ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":300,"tcpKeepAliveInterval":30,"tcpUserTimeout":30000,"tcpNoDelay":true}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
 else
   warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":300,"tcpKeepAliveInterval":30,"tcpUserTimeout":30000,"tcpNoDelay":true}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
 fi
 
 # ==================================================

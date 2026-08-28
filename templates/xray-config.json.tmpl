@@ -4,12 +4,11 @@
     },
     ${XRAY_POLICY_JSON}
     "routing": {
-        "domainStrategy": "IPIfNonMatch",
+        "domainStrategy": "AsIs",
         "rules": [
             {
                 "type": "field",
                 "ip": [
-                    "geoip:cn",
                     "geoip:private"
                 ],
                 "outboundTag": "block"
@@ -112,7 +111,15 @@
     "outbounds": [
         {
             "protocol": "freedom",
-            "tag": "direct"
+            "tag": "direct",
+            "streamSettings": {
+                "sockopt": {
+                    "tcpNoDelay": true,
+                    "tcpcongestion": "bbr",
+                    "tcpKeepAliveIdle": 30,
+                    "tcpKeepAliveInterval": 5
+                }
+            }
         },
         {
             "protocol": "blackhole",
