@@ -2,14 +2,36 @@
     "log": {
         "loglevel": "info"
     },
+    "dns": {
+        "servers": [
+            "8.8.8.8",
+            "1.1.1.1",
+            "localhost"
+        ],
+        "queryStrategy": "UseIPv4"
+    },
     ${XRAY_POLICY_JSON}
     "routing": {
-        "domainStrategy": "AsIs",
+        "domainStrategy": "IPIfNonMatch",
         "rules": [
             {
                 "type": "field",
                 "ip": [
                     "geoip:private"
+                ],
+                "outboundTag": "block"
+            },
+            {
+                "type": "field",
+                "protocol": [
+                    "bittorrent"
+                ],
+                "outboundTag": "block"
+            },
+            {
+                "type": "field",
+                "domain": [
+                    "geosite:category-pt"
                 ],
                 "outboundTag": "block"
             }
@@ -120,6 +142,9 @@
         {
             "protocol": "freedom",
             "tag": "direct",
+            "settings": {
+                "domainStrategy": "UseIPv4"
+            },
             "streamSettings": {
                 "sockopt": {
                     "tcpNoDelay": true,
