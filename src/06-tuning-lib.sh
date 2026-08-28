@@ -44,11 +44,11 @@ apply_system_tuning() {
   MEM_PAGES=$(awk -v ps="$PAGE_SIZE" '/^MemTotal:/{printf "%d", $2*1024/ps}' /proc/meminfo 2>/dev/null || echo 262144)
 
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000
+    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=262144
   elif [[ "$MEM_MB" -ge 4096 ]]; then
-    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000
+    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
   else
-    TUNE_TIER="small";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=8388608;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=0; NETDEV_BUDGET=""
+    TUNE_TIER="small";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=16384; CONNTRACK_MAX=0; NETDEV_BUDGET=""; OPTMEM_MAX=65536
   fi
 
   info "机型: ${CPU_CORES} 核 / ${MEM_MB} MB / ${ARCH} → 调优档位 ${TUNE_TIER}"
@@ -61,7 +61,7 @@ apply_system_tuning() {
   sysctl -a > "${STATE_DIR}/sysctl-before.txt" 2>/dev/null || \
     warn "无法导出调优前 sysctl 快照（不影响后续步骤）"
 
-  # ---------- BBR 能力探测 ----------
+  # ---------- BBR 能力探测与队列调度 ----------
   AVAILABLE_CC=$(sysctl_get net.ipv4.tcp_available_congestion_control)
   if [[ "$AVAILABLE_CC" != *bbr* ]]; then
     modprobe tcp_bbr >/dev/null 2>&1 || true
@@ -93,22 +93,25 @@ apply_system_tuning() {
   # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
   try_sysctl net.ipv4.tcp_rmem "4096 262144 ${TCP_MEM_MAX}"
   try_sysctl net.ipv4.tcp_wmem "4096 262144 ${TCP_MEM_MAX}"
-  # 接收缓冲中留给协议开销的比例。负值表示按 1/2^|n| 计，-2 会让通告窗口更接近
-  # rmem 实际大小。新内核语义几经调整且 tcp_moderate_rcvbuf 已覆盖多数场景，
-  # 这里不断言收益；try_sysctl 在不支持的内核上只会记进 SKIPPED。
-  try_sysctl net.ipv4.tcp_adv_win_scale -2
+  # 接收缓冲中留给协议开销的比例。设为 1（保留 50% 内存作为通告窗口），让 64MB/32MB
+  # 缓冲能通告出 32MB/16MB 的接收窗口，突破跨境高延迟（200ms+）下的单流千兆吞吐瓶颈。
+  try_sysctl net.ipv4.tcp_adv_win_scale 1
+  # 自动合并小包发送，降低 PPS 与软中断 CPU 开销
+  try_sysctl net.ipv4.tcp_autocorking 1
+  # 内核 6.x/7.x SACK 压缩，在跨境丢包路径上聚合压缩 SACK ACK，抑制 ACK 风暴
+  try_sysctl net.ipv4.tcp_comp_sack_nr 44
+  try_sysctl net.ipv4.tcp_comp_sack_delay_ns 1000000
   # 按物理内存的 6% / 8% / 12% 推算（单位是页，已按 PAGESIZE 换算）
   try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
-  # QUIC / HTTP3：本项目保留的 UDP+XHTTP+CDN 节点与 Hysteria2 扩展都会用到
-  try_sysctl net.core.optmem_max 65536
+  # QUIC / HTTP3 / TLS 辅助缓冲扩容
+  try_sysctl net.core.optmem_max "${OPTMEM_MAX:-65536}"
   # udp_mem（v4.7.2）：全系统 UDP 内存池上限，单位是页。上面两项是**单个套接字**的
   # 保底值，管不到这个总量；触顶后内核直接丢包且不回任何错误，表现为 h3-direct 与
   # Hysteria2 在高并发下莫名丢包，而 TCP 节点一切正常——极难定位，因此显式设置。
-  # 本项目有 h3-direct(8444) 与 Hysteria2(8443) 两条纯 UDP 节点，吃这个池子。
-  # 比例取 2%/4%/8%，比 tcp_mem 的 6/8/12% 保守：UDP 无重传与拥塞控制，池子过大
-  # 只会让积压的坏包多占内存，并不会换来吞吐。
-  # 小内存机不设：8% 可能低于内核按物理内存算出的默认值，写下去反而是降级。
-  if [[ "$MEM_MB" -ge 1024 ]]; then
+  # 针对 16GB+ 大内存机型提供 4%~16% 弹性缓冲池，避免高突发 UDP 丢包。
+  if [[ "$MEM_MB" -ge 16384 ]]; then
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 16 / 100 ))"
+  elif [[ "$MEM_MB" -ge 1024 ]]; then
     try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 8 / 100 ))"
   fi
 
@@ -175,6 +178,60 @@ apply_system_tuning() {
   # ---------- 文件句柄 ----------
   try_sysctl fs.file-max 1048576
   try_sysctl fs.nr_open 1048576
+
+  # ---------- 路由与网络硬件队列增强（best-effort）----------
+  # 1. 优化默认路由初始拥塞窗口（initcwnd/initrwnd 32），加速 TLS 握手
+  local def_route clean_route
+  def_route=$(ip route show default 2>/dev/null | head -1)
+  if [[ -n "$def_route" ]]; then
+    clean_route=$(echo "$def_route" | sed 's/ initcwnd [0-9]*//g; s/ initrwnd [0-9]*//g')
+    ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
+  fi
+
+  # 2. RPS/RFS 多核软中断调优与网卡流控
+  if [[ "$CPU_CORES" -gt 1 ]]; then
+    local rps_mask flow_entries num_rx
+    rps_mask=$(printf '%x' $((2**CPU_CORES - 1)))
+    flow_entries=$((8192 * CPU_CORES))
+    try_sysctl net.core.rps_sock_flow_entries "$flow_entries"
+    for d in /sys/class/net/*; do
+      [[ -e "$d" ]] || continue
+      local dev
+      dev=$(basename "$d")
+      case "$dev" in
+        lo|docker*|veth*|br-*|virbr*|zt*|tailscale*|wg*|tun*|tap*) continue;;
+      esac
+      [[ -d "/sys/class/net/$dev/queues" ]] || continue
+      num_rx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'rx-*' | wc -l)
+      [[ "$num_rx" -le 0 ]] && num_rx=1
+      for rxq in /sys/class/net/$dev/queues/rx-*/rps_cpus; do
+        [[ -f "$rxq" ]] && echo "$rps_mask" > "$rxq" 2>/dev/null || true
+      done
+      for rxq_dir in /sys/class/net/$dev/queues/rx-*/; do
+        [[ -f "${rxq_dir}rps_flow_cnt" ]] && echo "$((flow_entries / num_rx))" > "${rxq_dir}rps_flow_cnt" 2>/dev/null || true
+      done
+
+      # 多队列网卡 / 单队列网卡 fq 流控优化
+      if command -v tc >/dev/null 2>&1 && [[ "$TUNING_BBR_OK" == "true" ]]; then
+        local num_tx
+        num_tx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'tx-*' | wc -l)
+        if [[ "$num_tx" -gt 1 ]]; then
+          tc qdisc replace dev "$dev" root handle 1: mq 2>/dev/null || true
+          for i in $(seq 1 "$num_tx"); do
+            tc qdisc replace dev "$dev" parent 1:$i fq limit 20480 flow_limit 4096 quantum 18028 initial_quantum 90140 2>/dev/null || true
+          done
+        else
+          tc qdisc replace dev "$dev" root fq limit 20480 flow_limit 4096 quantum 18028 initial_quantum 90140 2>/dev/null || true
+        fi
+      fi
+    done
+  fi
+
+  # 3. TCP MSS Clamp 防护（避免 Jumbo Frame 与公网 MTU 冲突导致的黑洞丢包）
+  if command -v iptables >/dev/null 2>&1; then
+    iptables -t mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu >/dev/null 2>&1 \
+      || iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+  fi
 
   # ---------- 落盘 ----------
   if [[ ${#SYSCTL_APPLIED[@]} -gt 0 ]]; then

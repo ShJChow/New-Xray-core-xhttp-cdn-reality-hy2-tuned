@@ -358,13 +358,16 @@ fi
 # ---- socket 缓冲区（高 BDP 链路吞吐的决定性参数） ----
 try net.core.rmem_max "$SOCK_MAX"
 try net.core.wmem_max "$SOCK_MAX"
-try net.core.rmem_default 1048576
-try net.core.wmem_default 1048576
+try net.core.rmem_default 4194304
+try net.core.wmem_default 4194304
 # tcp_rmem/wmem 中间值是初始值，autotuning 在 min~max 间动态增长
 try net.ipv4.tcp_rmem "4096 262144 ${TCP_MAX}"
 try net.ipv4.tcp_wmem "4096 262144 ${TCP_MAX}"
-# 接收缓冲中协议开销比例：-2 使通告窗口更接近 rmem 实际大小
-try net.ipv4.tcp_adv_win_scale -2
+# 接收缓冲中留给通告窗口比例：1 保留 50% 内存作为窗口，最高可通告 32MB 窗口
+try net.ipv4.tcp_adv_win_scale 1
+try net.ipv4.tcp_autocorking 1
+try net.ipv4.tcp_comp_sack_nr 44
+try net.ipv4.tcp_comp_sack_delay_ns 1000000
 # tcp_mem 单位是「页」，按运行时 PAGESIZE 换算。量纲断言防止 64KB 页偏大 16 倍（L4）
 MEM_BACK_MB=$(( MEM_PAGES * PAGE_SIZE / 1048576 ))
 if [[ "$MEM_MB" -le 0 || "$MEM_BACK_MB" -lt $((MEM_MB*95/100)) || "$MEM_BACK_MB" -gt $((MEM_MB*105/100)) ]]; then
@@ -373,9 +376,9 @@ else
   try net.ipv4.tcp_mem "$((MEM_PAGES*6/100)) $((MEM_PAGES*8/100)) $((MEM_PAGES*12/100))"
 fi
 # UDP 缓冲（QUIC / HTTP3 / Hysteria2 的关键项）
-try net.core.optmem_max 65536
-try net.ipv4.udp_rmem_min 8192
-try net.ipv4.udp_wmem_min 8192
+try net.core.optmem_max 262144
+try net.ipv4.udp_rmem_min 131072
+try net.ipv4.udp_wmem_min 131072
 
 # ---- 队列与并发 ----
 try net.core.netdev_max_backlog "$BACKLOG"
@@ -393,7 +396,7 @@ try net.ipv4.ip_local_port_range "1024 65535"
 # ---- 连接建立与保持 ----
 try net.ipv4.tcp_mtu_probing 1
 try net.ipv4.tcp_slow_start_after_idle 0    # XHTTP 长连接最关键单行
-try net.ipv4.tcp_notsent_lowat 16384         # 延迟收益，非吞吐
+try net.ipv4.tcp_notsent_lowat 262144        # 256KB 兼顾防 bufferbloat 与高 BDP 吞吐
 try net.ipv4.tcp_syncookies 1
 try net.ipv4.tcp_tw_reuse 1                  # 仅出站方向复用，安全
 try net.ipv4.tcp_retries2 8                  # 僵尸连接 ~1 分钟回收（默认 15 ≈ 15 分钟）
