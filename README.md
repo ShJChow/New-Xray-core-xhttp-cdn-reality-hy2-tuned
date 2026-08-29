@@ -39,7 +39,7 @@
 
 ## 节点列表
 
-v4.7.4 起默认输出**下表 7 条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
+v4.7.4 起默认输出**下表 8条**，全部由 Xray 单核心提供——Hysteria2 改用 Xray 原生
 inbound（v26.3.27+），不再需要独立的 hysteria 二进制。
 
 **节点顺序**：第 1、2 条经 CDN（分别走 TCP/h2 与 UDP/h3），第 3、4 条直连 XHTTP
