@@ -22,7 +22,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 节点集（v4.7.4） | 默认 7 条，全部由 Xray 单核心提供：4 条 QUIC/h3（含 Hysteria2 obfs 与新增的 h3-cdn）+ 3 条 TCP 兜底。不再需要独立 hysteria 二进制 |
+| 节点集 | 默认 8 条，全部由 Xray 单核心提供：4 条 QUIC/h3（含 Hysteria2 obfs 与新增的 h3-cdn）+ 3 条 TCP 兜底。不再需要独立 hysteria 二进制 |
 | xpadding | 默认开启，`xPaddingObfsMode` + 自定义 Header 与参数名，绕过 CDN 侧的 XHTTP 特征检测 |
 | ECH | **默认关闭**，加密 TLS 握手中的 SNI；需先在 Cloudflare Edge Certificates 开启，再设 `CDN_ECH=y` |
 | VLESS Encryption | 默认开启（ML-KEM-768），防止 CDN 中间人解密流量 |
