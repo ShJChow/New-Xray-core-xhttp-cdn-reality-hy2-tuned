@@ -105,6 +105,7 @@ V2rayN باید دامنهٔ CDN را به فهرست مستقیم/دور زدن
 | ۵ | `Hysteria2-obfs-<host>` | مستقیم به سرور، **UDP 8443** | Hysteria2 + مبهم‌سازی Salamander |
 | ۶ | `Vless-reality-vision-<host>` | مستقیم به سرور، TCP 443 | Reality + Vision؛ پشتیبان زمانی که UDP مسدود است |
 | ۷ | `Vless-xhttp-reality-<host>` | مستقیم به سرور، TCP 443 | XHTTP + Reality، بدون تفکیک ارسال و دریافت |
+| ۸ | `Vless-xhttp-reality-up-cdn-down-<host>` | ارسال Reality مستقیم 443، دریافت TLS CDN 443 | تفکیک ارسال و دریافت XHTTP (ارسال سریع از Reality، دریافت پرسرعت از CDN) |
 
 نودهای ۳ و ۵ از UDP خام به سرور استفاده می‌کنند و نود ۴ از TCP 8445، پس هر سه باید در
 **گروه امنیتی ارائه‌دهندهٔ ابری** باز شوند (UDP 8444، UDP 8443، TCP 8445). نود ۲ از CDN

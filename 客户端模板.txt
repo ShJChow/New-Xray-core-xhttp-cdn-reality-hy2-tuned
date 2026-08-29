@@ -1,24 +1,28 @@
 IP v4
 vless://YOUR_UUID_1@YOUR_VPS_IPV4:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=tcp&headerType=none#Vless-reality-vision-YOUR_HOST
 vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-reality-YOUR_HOST
+# 上行 Reality 直连 443，下行 TLS CDN 443（上下行分离）
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto&extra=%7B%22downloadSettings%22%3A%7B%22address%22%3A%22YOUR_CDN_DOMAIN%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C%22tlsSettings%22%3A%7B%22serverName%22%3A%22YOUR_CDN_DOMAIN%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D%2C%22xhttpSettings%22%3A%7B%22host%22%3A%22YOUR_CDN_DOMAIN%22%2C%22path%22%3A%22YOUR_PATH%22%2C%22mode%22%3A%22auto%22%7D%7D%7D#Vless-xhttp-reality-up-cdn-down-YOUR_HOST
 
 IP v6（把2001:db8::1换成你的IP v6地址）
 vless://YOUR_UUID_1@[2001:db8::1]:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=tcp&headerType=none#Vless-reality-vision-YOUR_HOST
 vless://YOUR_UUID_2@[2001:db8::1]:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=reality&sni=YOUR_REALITY_DOMAIN&fp=chrome&pbk=YOUR_PUBILC_KEY&sid=YOUR_SHORT_ID&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-reality-YOUR_HOST
 
-XHTTP over HTTP/3（UDP 443）
-# 经 CDN：由 Cloudflare 边缘终结 h3，回源仍是 TCP，服务端无需任何改动（需 CF 已开启 HTTP/3，默认开启）
-vless://YOUR_UUID_2@your_cdn_domain:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
+XHTTP over HTTP/3 与 HTTP/2
+# 1. 经 CDN (TCP 443)：alpn=h2,http/1.1
+vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
 
-# 直连 VPS 的 h3 节点（v4.0.0 起默认生成，FEATURE_H3_DIRECT=true）：
-# 由 Xray 自己监听 UDP 443，**不经过 nginx**——因此不需要 nginx 的 listen quic，
-# 也就绕开了历史上那次 nginx 启动失败（http3 依赖支持 QUIC 的 TLS 库）。
-# 需要 Xray >= 26.6.1，并在防火墙/安全组放行 UDP 443。
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=auto#Vless-xhttp-h3-direct-YOUR_HOST
+# 2. 经 CDN (UDP 443 QUIC)：alpn=h3
+vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-h3-cdn-YOUR_HOST
+
+# 3. 直连 VPS 的 h3/QUIC 节点（UDP 8444）：
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:8444?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=stream-up#Vless-xhttp-h3-direct-YOUR_HOST
+
+# 4. 直连 VPS 的 h2/TCP 节点（TCP 8445）：
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:8445?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=stream-up#Vless-xhttp-h2-tcp-direct-YOUR_HOST
 
 Hysteria2 + Salamander 混淆（UDP 8443）
-# v4.0.0 起由 Xray 原生 hysteria inbound 提供（v26.3.27+），不再需要独立的
-# hysteria 二进制。obfs 密码与认证密码是两个独立的值，两端必须一致。
+# 由 Xray 原生 hysteria inbound 提供。obfs 密码与认证密码两端必须一致。
 hysteria2://YOUR_HY2_PASSWORD@YOUR_VPS_IPV4:8443/?sni=YOUR_REALITY_DOMAIN&insecure=0&obfs=salamander&obfs-password=YOUR_OBFS_PASSWORD#Hysteria2-obfs-YOUR_HOST
 
 注意：

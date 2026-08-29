@@ -171,6 +171,51 @@ proxies:
     alpn:
       - h3
 
+  # 上下行分离节点：上行 Reality 直连极速响应，下行拉取 CDN 缓存大带宽
+  - name: Vless-xhttp-reality-up-cdn-down-YOUR_HOST
+    type: vless
+    server: YOUR_VPS_IP
+    port: 443
+    uuid: YOUR_UUID_2
+    udp: true
+    flow: ""
+    tls: true
+    encryption: YOUR_VLESSENC_ENCRYPTION
+    network: xhttp
+    alpn:
+      - h2
+    servername: YOUR_REALITY_DOMAIN
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: YOUR_PUBLIC_KEY
+      short-id: YOUR_SHORT_ID
+    xhttp-opts:
+      path: YOUR_PATH
+      mode: auto
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"
+      download-settings:
+        server: YOUR_CDN_DOMAIN
+        port: 443
+        network: xhttp
+        tls: true
+        alpn:
+          - h2
+          - http/1.1
+        servername: YOUR_CDN_DOMAIN
+        client-fingerprint: chrome
+        xhttp-opts:
+          host: YOUR_CDN_DOMAIN
+          path: YOUR_PATH
+          mode: auto
+          reuse-settings:
+            max-concurrency: "16-32"
+            c-max-reuse-times: "0"
+            h-max-reusable-secs: "1800-3000"
+
+
 proxy-groups:
   - name: 前置代理
     type: select
