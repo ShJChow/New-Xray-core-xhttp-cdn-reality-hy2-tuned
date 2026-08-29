@@ -278,30 +278,33 @@ LIMITSEOF
   # 数字前缀 10- 保证排在 override.conf 之前，用户想覆盖我们的值也依然有效。
   if [[ "$SERVICE_TYPE" == "systemd" ]]; then
     local dropin="10-xray-xhttp.conf" migrated=0 kept=0
-    for unit in xray nginx; do
+    for unit in xray nginx hysteria-server sing-box; do
       local dir="/etc/systemd/system/${unit}.service.d"
-      install -d -m 755 "$dir" 2>/dev/null || continue
-      cat > "${dir}/${dropin}" <<'DROPINEOF' || warn "写入 ${unit} drop-in 失败"
+      # 若服务未安装或目录不存在，仅在存在/可创建时操作
+      if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 || [[ -d "$dir" ]]; then
+        install -d -m 755 "$dir" 2>/dev/null || continue
+        cat > "${dir}/${dropin}" <<'DROPINEOF' || warn "写入 ${unit} drop-in 失败"
 # xray-xhttp 句柄上限，由 xh tuning on 生成 / xh tuning off 移除。
 # 本项目只写这一个文件，同目录下你自己的 override.conf 不会被改动。
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=infinity
 DROPINEOF
-      # 旧版留下的 override.conf：内容与历史生成物逐字一致才删（说明用户没动过），
-      # 否则一律保留——那是用户的加固，宁可留下一份内容重复的文件，也不能删掉它。
-      local legacy="${dir}/override.conf"
-      if [[ -f "$legacy" ]]; then
-        if [[ "$(grep -vE '^\s*(#|$)' "$legacy" | tr -d '[:space:]')" \
-              == "[Service]LimitNOFILE=1048576LimitNPROC=infinity" ]]; then
-          rm -f "$legacy" && migrated=1
-        else
-          kept=1
+        # 旧版留下的 override.conf：内容与历史生成物逐字一致才删（说明用户没动过），
+        # 否则一律保留——那是用户的加固，宁可留下一份内容重复的文件，也不能删掉它。
+        local legacy="${dir}/override.conf"
+        if [[ -f "$legacy" ]]; then
+          if [[ "$(grep -vE '^\s*(#|$)' "$legacy" | tr -d '[:space:]')" \
+                == "[Service]LimitNOFILE=1048576LimitNPROC=infinity" ]]; then
+            rm -f "$legacy" && migrated=1
+          else
+            kept=1
+          fi
         fi
       fi
     done
     systemctl daemon-reload >/dev/null 2>&1 || warn "systemctl daemon-reload 失败"
-    info "已为 xray / nginx 写入 systemd drop-in（LimitNOFILE=1048576 → ${dropin}）"
+    info "已为代理与网关服务 (xray/nginx/sing-box/hysteria) 写入 systemd drop-in（LimitNOFILE=1048576 → ${dropin}）"
     [[ "$migrated" -eq 1 ]] && info "已清理旧版留下的 override.conf（内容与本项目生成物一致）"
     [[ "$kept" -eq 1 ]] && \
       warn "检测到你自己修改过的 override.conf，已原样保留；它排在本项目文件之后，同名字段以你的为准"
@@ -327,4 +330,68 @@ DROPINEOF
   printf '  %-28s %-18s -> %s\n' "ulimit -n (当前 shell)"          "${BEFORE_NOFILE}"     "重新登录后生效: 1048576"
   echo ""
   info "BBR: ${TUNING_BBR_OK}；回滚请执行 ${MANAGE_CMD} tuning off"
+}
+
+show_client_tuning() {
+  echo -e "${CYAN}======================================================${NC}"
+  echo -e "${CYAN}   客户端 (macOS / Linux) 网络调优与 sing-box 加速指南   ${NC}"
+  echo -e "${CYAN}======================================================${NC}"
+  echo ""
+  echo -e "${GREEN}[1] macOS 客户端 TCP 缓冲区与 TFO 一键调优 (终端即时生效):${NC}"
+  cat <<'EOF'
+sudo sysctl -w kern.ipc.maxsockbuf=16777216
+sudo sysctl -w net.inet.tcp.recvspace=2097152
+sudo sysctl -w net.inet.tcp.sendspace=2097152
+sudo sysctl -w net.inet.tcp.autorcvbuf=1
+sudo sysctl -w net.inet.tcp.autorcvbufmax=16777216
+sudo sysctl -w net.inet.tcp.autosndbuf=1
+sudo sysctl -w net.inet.tcp.autosndbufmax=16777216
+sudo sysctl -w net.inet.tcp.fastopen=3
+sudo sysctl -w net.inet.tcp.rfc1323=1
+sudo sysctl -w net.inet.tcp.win_scale_factor=8
+sudo sysctl -w net.inet.tcp.mptcp.enable=1
+EOF
+  echo ""
+  echo -e "${GREEN}[2] macOS 客户端开机永久生效 (LaunchDaemon 自动守护):${NC}"
+  cat <<'EOF'
+sudo tee /Library/LaunchDaemons/com.user.sysctl.plist << 'PLISTEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.sysctl</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/sysctl</string>
+        <string>-w</string>
+        <string>kern.ipc.maxsockbuf=16777216</string>
+        <string>net.inet.tcp.recvspace=2097152</string>
+        <string>net.inet.tcp.sendspace=2097152</string>
+        <string>net.inet.tcp.autorcvbuf=1</string>
+        <string>net.inet.tcp.autorcvbufmax=16777216</string>
+        <string>net.inet.tcp.autosndbuf=1</string>
+        <string>net.inet.tcp.autosndbufmax=16777216</string>
+        <string>net.inet.tcp.fastopen=3</string>
+        <string>net.inet.tcp.rfc1323=1</string>
+        <string>net.inet.tcp.win_scale_factor=8</string>
+        <string>net.inet.tcp.mptcp.enable=1</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+PLISTEOF
+sudo chown root:wheel /Library/LaunchDaemons/com.user.sysctl.plist
+sudo chmod 644 /Library/LaunchDaemons/com.user.sysctl.plist
+sudo launchctl load -w /Library/LaunchDaemons/com.user.sysctl.plist 2>/dev/null || true
+EOF
+  echo ""
+  echo -e "${GREEN}[3] sing-box 客户端 5 节点核心加速关键配置:${NC}"
+  echo "  - FakeIP 零延迟解析:   fakeip.enabled: true, independent_cache: true"
+  echo "  - Hysteria2 带宽校准:  up_mbps: 50, down_mbps: 500"
+  echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
+  echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"
+  echo "  - 智能秒级故障转移:    urltest 测速周期 3m, connect_timeout: 3s"
+  echo ""
 }

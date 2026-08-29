@@ -587,7 +587,7 @@ cmd_tuning() {
       # 旧实现无条件 rm override.conf，会连用户的 Restart=always / OOMScoreAdjust
       # 一起删掉，且不留任何提示。
       local d kept_user=0
-      for d in /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d; do
+      for d in /etc/systemd/system/xray.service.d /etc/systemd/system/nginx.service.d /etc/systemd/system/hysteria-server.service.d /etc/systemd/system/sing-box.service.d; do
         rm -f "${d}/10-xray-xhttp.conf"
         if [[ -f "${d}/override.conf" ]]; then
           if [[ "$(grep -vE '^\s*(#|$)' "${d}/override.conf" | tr -d '[:space:]')" \
@@ -606,7 +606,10 @@ cmd_tuning() {
       info "已移除本项目写入的全部调优配置"
       warn "已生效的运行时内核参数需重启系统才能完全恢复默认值"
       ;;
-    *) fail "用法: ${MANAGE_CMD} tuning [show|on|off]" ;;
+    client|mac|macos|sb|singbox)
+      show_client_tuning
+      ;;
+    *) fail "用法: ${MANAGE_CMD} tuning [show|on|off|client|mac]" ;;
   esac
 }
 
@@ -779,7 +782,7 @@ cmd_menu() {
       4) cmd_restart ;;
       5) cmd_log xray ;;
       6) cmd_update ;;
-      7) read -rp "  show / on / off: " a; cmd_tuning "${a:-show}" ;;
+      7) read -rp "  show / on / off / client: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
       10) cmd_diag ;;
@@ -804,7 +807,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|on|off]  查看 / 开启 / 回滚系统层调优（安装时默认自动开启）
+  xh tuning [show|on|off|client|mac]  系统流控调优 / 查看 / 客户端(macOS)与sing-box加速
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）
