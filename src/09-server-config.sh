@@ -70,11 +70,12 @@ EOF
 # policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），同样配置
 # ARM 机器吞吐被压死。按内存分档显式写入，三档 512 / 256 / 64 KB。
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=512
-elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=256
-else XRAY_BUFFER_KB=64
+if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=1024
+elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=512
+else XRAY_BUFFER_KB=128
 fi
-XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":300,\"uplinkOnly\":2,\"downlinkOnly\":5,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+
 
 # Reality 入站 sockopt：tcpcongestion 只在 BBR 可用时写，否则 xray -test 直接
 # 失败（L3：字段名 tcpcongestion 全小写，见官方 sockopt 文档）。TFO/keepalive/

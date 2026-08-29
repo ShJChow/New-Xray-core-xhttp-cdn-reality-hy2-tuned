@@ -4,6 +4,8 @@ mode: rule
 log-level: info
 ipv6: true
 unified-delay: true
+tcp-concurrent: true
+
 
 # TUN 模式下节点自身流量的豁免（v1.2.3）：route-exclude-address 让发往 VPS 的
 # 包根本不进 TUN，是解决"开 TUN 后两条 UDP/h3 节点不通"最根本的一道。
