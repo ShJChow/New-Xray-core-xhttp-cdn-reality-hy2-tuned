@@ -81,6 +81,7 @@ v4.7.0 新增 **`直连择优`**策略组（v4.7.3 前叫 `直连回落`，类�
 | 5 | `Hysteria2-obfs-<host>` | 直连 VPS，**UDP 8443** | Hysteria2 + Salamander 混淆 |
 | 6 | `Vless-reality-vision-<host>` | 直连 VPS TCP 443 | Reality + Vision，UDP 被封时的兜底 |
 | 7 | `Vless-xhttp-reality-<host>` | 直连 VPS TCP 443 | XHTTP + Reality，上下行不分离 |
+| 8 | `Vless-xhttp-reality-up-cdn-down-<host>` | 上行 Reality 直连 443，下行 TLS CDN 443 | XHTTP 上下行分离（上行 Reality 直连极速响应，下行 CDN 大带宽拉取） |
 
 节点 3/5 走裸 UDP 直连、节点 4 走 TCP 8445，都需要在**云厂商安全组**放行
 （UDP 8444、UDP 8443、TCP 8445）。节点 2 经 CDN，走的是 Cloudflare 的 UDP 443，

@@ -187,3 +187,47 @@ proxies:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  - name: Vless-xhttp-reality-up-cdn-down-${HOSTNAME_TAG}
+    type: vless
+    server: ${VPS_IP}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    encryption: ${VLESSENC_ENCRYPTION}
+    network: xhttp
+    alpn:
+      - h2
+    servername: ${REALITY_DOMAIN}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: ${PUBLIC_KEY}
+      short-id: ${SHORT_ID}
+    xhttp-opts:
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+      download-settings:
+        server: ${CDN_DOMAIN}
+        port: 443
+        network: xhttp
+        tls: true
+        alpn:
+          - h2
+          - http/1.1
+        servername: ${CDN_DOMAIN}
+        client-fingerprint: chrome
+        xhttp-opts:
+          host: ${CDN_DOMAIN}
+          path: ${XHTTP_PATH}
+          mode: auto${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
+          reuse-settings:
+            max-concurrency: "16-32"
+            c-max-reuse-times: "0"
+            h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+

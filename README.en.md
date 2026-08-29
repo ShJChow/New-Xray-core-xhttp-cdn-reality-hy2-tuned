@@ -105,6 +105,7 @@ airport-style names instead, see [Custom node names](#custom-node-names).
 | 5 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
 | 6 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
 | 7 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
+| 8 | `Vless-xhttp-reality-up-cdn-down-<host>` | Upload Reality direct 443, Download TLS CDN 443 | XHTTP Split-Routing (Uplink via Reality direct, Downlink via CDN) |
 
 Nodes 3 and 5 are bare UDP to the VPS and node 4 is TCP 8445, so all three need to be
 opened in your **cloud provider's security group** (UDP 8444, UDP 8443, TCP 8445). Node 2

@@ -77,6 +77,17 @@ EOF
 )
 fi
 
+DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
+if [[ "$FEATURE_XPADDING" == true ]]; then
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
+  XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
+else
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%7D"
+  DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
+  XPAD_SPLIT_EXTRA_ENC="%7B${DOWNLOAD_SETTINGS_ENC}%7D"
+fi
+
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
   MIHOMO_ECH_PROXY_BLOCK=$(cat <<EOF
 
@@ -140,7 +151,7 @@ else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: xhttp-tls-UDP-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2"
+info "节点集: xhttp-tls-UDP-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2 + Reality上行-CDN下行"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

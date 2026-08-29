@@ -5,3 +5,5 @@ ${H2_DIRECT_NODE_LINE}
 ${HY2_NODE_LINE}
 vless://${UUID1}@${VPS_IP_URI}:443?encryption=none&flow=${VISION_FLOW}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#Vless-reality-vision-${HOSTNAME_TAG}
 vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#Vless-xhttp-reality-${HOSTNAME_TAG}
+vless://${UUID2}@${VPS_IP_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#Vless-xhttp-reality-up-cdn-down-${HOSTNAME_TAG}
+
