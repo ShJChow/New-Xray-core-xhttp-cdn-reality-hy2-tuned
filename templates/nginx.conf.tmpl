@@ -46,7 +46,20 @@ http {
     http2_recv_buffer_size 512k;
     gzip                  off;
 
-    add_header X-Content-Type-Options nosniff;
+    # 基础连接超时防慢速连接攻击 (Anti-Slowloris)
+    client_body_timeout   10s;
+    client_header_timeout 10s;
+    send_timeout          10s;
+
+    # 订阅防刷与爆破频次限制 (基于真实客户端 IP)
+    limit_req_zone \$real_client_ip zone=sub_limit:10m rate=5r/s;
+
+    # 全局安全响应头注入 (Security Headers)
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     ssl_session_cache          shared:SSL:16m;
     ssl_session_timeout        1h;
@@ -78,6 +91,13 @@ http {
         keepalive_timeout  3600s;
     }
 
+    # 默认 SSL 丢弃服务：未匹配 SNI / 直接 IP 探测在 TLS 握手阶段直接断开，防止证书/域名泄露
+    server {
+        listen       8003 ssl default_server;
+        server_name  _;
+        ssl_reject_handshake on;
+    }
+
     server {
         listen       8003 ssl;
         http2        on;
@@ -86,10 +106,24 @@ http {
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
 
+        # 禁止访问隐藏文件及敏感配置文件
+        location ~ /\.(?!well-known) {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+
+        location ~* \.(bak|conf|config|sql|fla|psd|ini|log|sh|env|git|svn)$ {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+
         location ^~ /sub/ {
             root /usr/local/nginx/html;
             try_files \$uri =404;
             autoindex off;
+            limit_req zone=sub_limit burst=10 nodelay;
             types {
                 text/plain txt;
                 application/yaml yaml yml;
@@ -110,6 +144,19 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
+
+        # 禁止访问隐藏文件及敏感配置文件
+        location ~ /\.(?!well-known) {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+
+        location ~* \.(bak|conf|config|sql|fla|psd|ini|log|sh|env|git|svn)$ {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
 
         location / {
 $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST")
