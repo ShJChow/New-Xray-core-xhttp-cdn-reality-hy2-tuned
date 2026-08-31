@@ -2,7 +2,7 @@
 
 ## 上游来源
 
-本项目 `xray-xhttp` 是 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的**衍生作品**。
+本项目 `Xray-core-xhttp-cdn-tuned` 是 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的**衍生作品**。
 
 上游以 MIT 许可发布，版权归 Yulinanami 所有。本仓库沿用其许可证（见 [LICENSE](./LICENSE)），并在 LICENSE 中同时保留上游版权行。
 
@@ -16,12 +16,12 @@
 
 **本项目新增或改写的部分**：
 
-- `src/06-net-tuning.sh`：内核 / 句柄流控调优与能力探测
-- `src/13-manage-cli.sh`：管理命令 `xh`（状态、订阅、日志、内核更新与回滚、调优开关、保活、卸载）
+- `src/06-tuning-lib.sh`：全系统内核、多平台客户端（Windows/macOS/Linux/Sing-box）千兆流控调优
+- `src/13-manage-cli.sh`：常驻管理命令 `xh`（状态、订阅、日志、内核更新与回滚、调优开关、保活、冲突自愈、卸载）
 - `src/04-input.sh`：非交互一键部署（环境变量 + `AUTO=1`）
 - `src/09-server-config.sh`：节点状态文件 `/etc/xhttp-cdn/node.env`
-- `templates/xray-config.json.tmpl`：`sockopt` 注入
-- `templates/nginx.conf.tmpl`：句柄、连接数与 gRPC 长连接超时
+- `templates/xray-config.json.tmpl`：`sockopt` 注入与 Vision / XHTTP 深度调优
+- `templates/nginx.conf.tmpl`：安全头加固、Cloudflare CIDR 信任、无缓冲流式透传与 gRPC 长连接超时
 - `docs/10.流控调优.md`、`docs/11.管理命令.md`、`README.md`
 
 ## 借鉴但未复制代码的项目
