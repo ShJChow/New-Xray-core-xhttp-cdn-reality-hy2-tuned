@@ -27,7 +27,7 @@ fi
 
 PROJECT_NAME="xray-xhttp"
 PROJECT_VERSION="4.7.14"
-PROJECT_REPO="ShJChow/xhttp-cdn-tuned"
+PROJECT_REPO="ShJChow/Xray-core-xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
 STATE_DIR="/etc/xhttp-cdn"

@@ -110,7 +110,7 @@ chmod 600 /etc/ssl/private/*.key
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -127,7 +127,7 @@ bash ~/install.sh
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 AUTO=1 REALITY_DOMAIN=reality.example.com CDN_DOMAIN=cdn.example.com IP_CHOICE=1 FALLBACK_MODE=proxy REALITY_FALLBACK_ORIGIN=https://www.sjsu.edu CDN_FALLBACK_ORIGIN=https://www.harvard.edu CDN_ECH=n bash ~/install.sh
 ```
 

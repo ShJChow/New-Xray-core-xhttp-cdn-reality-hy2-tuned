@@ -281,7 +281,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -291,7 +291,7 @@ bash ~/install.sh
 ### افزونه: XHTTP روی HTTP/3 (سه نود h3)
 
 ```bash
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
 ```
 
 این افزونه که از `add-quic.sh` بالادستی منتقل شده، سه نود `Vless-xhttp-tls-h3`،
@@ -308,7 +308,7 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/a
 
 ```bash
 # Hysteria2 مستقیم (نود XHTTP+TLS+H3 در همین افزونه خراب است، پایین‌تر ببینید)
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
 
 > از v2.0.1 این افزونه **پیش‌فرض فقط `Hysteria2-direct` را تولید می‌کند**.
@@ -321,7 +321,7 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/a
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 AUTO=1 \
 REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \

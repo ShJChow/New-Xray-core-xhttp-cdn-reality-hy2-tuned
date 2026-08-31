@@ -274,7 +274,7 @@ Debian / Ubuntu:
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -283,7 +283,7 @@ The script is re-runnable — use it to change domains, fallback sites and other
 ### Extension: XHTTP over HTTP/3 (3 h3 nodes)
 
 ```bash
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
 ```
 
 Ported from the upstream `add-quic.sh`, this appends `Vless-xhttp-tls-h3`,
@@ -300,7 +300,7 @@ Add these after the main deployment as needed. They reuse the existing
 
 ```bash
 # Direct Hysteria2 (the XHTTP+TLS+H3 node in the same extension is known to be broken, see below)
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
 
 > Since v2.0.1 this extension **only emits `Hysteria2-direct` by default**.
@@ -313,7 +313,7 @@ curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/a
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
 AUTO=1 \
 REALITY_DOMAIN=reality.example.com \
 CDN_DOMAIN=cdn.example.com \
