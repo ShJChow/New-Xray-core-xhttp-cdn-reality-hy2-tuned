@@ -109,7 +109,7 @@ OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
 # （XTLS/Xray-core#4391，closed as not planned；#5849 同类），一旦退回，
 # 它就与 Reality 的 TCP 443 抢同一个端口，后 bind 的那个失败 —— 表现为「Reality 不通」。
 # 用独立端口后，即使 h3 退回 TCP 也只影响它自己，不会波及主力节点。
-H3_PORT="${H3_PORT:-8444}"
+H3_PORT="${H3_PORT:-8446}"
 HY2_PORT="${HY2_PORT:-8443}"
 # H2_PORT（v4.7.0）：h3-direct 的 TCP 孪生体，见 01-env.sh 的 FEATURE_H2_DIRECT。
 # 它是**真 TCP**，和 Reality 的 TCP 443 属于同一协议族，必须独立端口。
@@ -117,8 +117,8 @@ H2_PORT="${H2_PORT:-8445}"
 
 # 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
 if [[ "$H3_PORT" == "443" ]]; then
-  warn "H3_PORT=443 会与 Reality 抢占 TCP 443（见 Xray#4391），已改用 8444"
-  H3_PORT=8444
+  warn "H3_PORT=443 会与 Reality 抢占 TCP 443（见 Xray#4391），已改用 8446"
+  H3_PORT=8446
 fi
 if [[ "$H2_PORT" == "443" ]]; then
   warn "H2_PORT=443 会与 Reality 抢占 TCP 443，已改用 8445"

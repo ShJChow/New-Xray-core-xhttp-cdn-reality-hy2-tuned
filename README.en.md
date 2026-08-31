@@ -100,7 +100,7 @@ airport-style names instead, see [Custom node names](#custom-node-names).
 |---|---|---|---|
 | 1 | `Vless-xhttp-tls-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (v4.6.0 switched this back from h3 to TCP; the `UDP` in the name is a leftover from before that change, kept so existing clients do not lose their node selection) |
 | 2 | `Vless-xhttp-h3-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 only (added in v4.7.4 as node 1's QUIC twin; no server-side change) |
-| 3 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8444** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
+| 3 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8446** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
 | 4 | `Vless-xhttp-h2-tcp-direct-<host>` | Direct to VPS, **TCP 8445** | XHTTP + TLS, alpn h2 + http/1.1, `mode=stream-up` (v4.7.13, ~50 ms faster than auto); added in v4.7.0 as node 3's TCP twin. Recommended on mobile |
 | 5 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
 | 6 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
@@ -108,7 +108,7 @@ airport-style names instead, see [Custom node names](#custom-node-names).
 | 8 | `Vless-xhttp-reality-up-cdn-down-<host>` | Upload Reality direct 443, Download TLS CDN 443 | XHTTP Split-Routing (Uplink via Reality direct, Downlink via CDN) |
 
 Nodes 3 and 5 are bare UDP to the VPS and node 4 is TCP 8445, so all three need to be
-opened in your **cloud provider's security group** (UDP 8444, UDP 8443, TCP 8445). Node 2
+opened in your **cloud provider's security group** (UDP 8446, UDP 8443, TCP 8445). Node 2
 goes through the CDN over Cloudflare's UDP 443 and needs **no** port opened at all — that
 layer sits outside the machine, where the script can neither see nor change anything. If
 the Xray core is older than 26.6.1, nodes 2 and 4 are disabled automatically. Node 4's port
@@ -118,7 +118,7 @@ can be set with `H2_PORT=<port>`, or turned off entirely with `FEATURE_H2_DIRECT
 > v4.2.0): XHTTP over h3 has two upstream issues that are unfixed and closed as not
 > planned — [#4391](https://github.com/XTLS/Xray-core/issues/4391) (`alpn=h3` silently
 > ignored, falling back to TCP) and [#5849](https://github.com/XTLS/Xray-core/issues/5849)
-> (h3 not working for a long stretch). The port is now a separate **8444**, so falling
+> (h3 not working for a long stretch). The port is now a separate **8446**, so falling
 > back to TCP no longer contends with Reality on 443; the worst case is that this node
 > alone fails to connect. Turn it off with `FEATURE_H3_DIRECT=false` if you do not need it.
 
@@ -339,10 +339,10 @@ Available environment variables:
 | `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding fields | `Referer` / `x_padding` |
 | `CDN_ECH` | `y` enables ECH (must be enabled in Cloudflare Edge Certificates first, or the CDN nodes fail the handshake) | `n` |
 | `VISION_UDP443` | `1` makes node 1 use `xtls-rprx-vision-udp443` (client support required) | `0` |
-| `FEATURE_H3_DIRECT` | `false` disables the direct h3 node (UDP 8444; known upstream issues, on by default) | `true` |
+| `FEATURE_H3_DIRECT` | `false` disables the direct h3 node (UDP 8446; known upstream issues, on by default) | `true` |
 | `FEATURE_HY2` | `false` disables the Hysteria2-obfs node (UDP 8443) | `true` |
 | `FEATURE_AUTO_TUNING` | `false` skips the automatic kernel tuning at install time (`xh tuning off` rolls it back at any point) | `true` |
-| `H3_PORT` / `HY2_PORT` | Ports for the two direct UDP nodes (`H3_PORT` may not be 443; it is forced back to 8444) | `8444` / `8443` |
+| `H3_PORT` / `HY2_PORT` | Ports for the two direct UDP nodes (`H3_PORT` may not be 443; it is forced back to 8446) | `8446` / `8443` |
 | `KEEP_LEGACY_UDP` | `true` keeps the old standalone hysteria / quic-h3 extensions (the two new UDP nodes are then disabled) | `false` |
 | `FEATURE_XHTTP_H3_NODE` | Switch for the Hysteria2 extension: `true` restores the `Vless-xhttp-tls-h3-direct` node and its nginx quic listener | `false` |
 | `FEATURE_KEEPALIVE` | `false` skips the keepalive cron | `true` |

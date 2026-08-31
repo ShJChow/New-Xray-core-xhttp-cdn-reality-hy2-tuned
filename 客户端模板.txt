@@ -15,8 +15,8 @@ vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&secu
 # 2. 经 CDN (UDP 443 QUIC)：alpn=h3
 vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-h3-cdn-YOUR_HOST
 
-# 3. 直连 VPS 的 h3/QUIC 节点（UDP 8444）：
-vless://YOUR_UUID_2@YOUR_VPS_IPV4:8444?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=stream-up#Vless-xhttp-h3-direct-YOUR_HOST
+# 3. 直连 VPS 的 h3/QUIC 节点（UDP 8446）：
+vless://YOUR_UUID_2@YOUR_VPS_IPV4:8446?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=stream-up#Vless-xhttp-h3-direct-YOUR_HOST
 
 # 4. 直连 VPS 的 h2/TCP 节点（TCP 8445）：
 vless://YOUR_UUID_2@YOUR_VPS_IPV4:8445?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_REALITY_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=YOUR_PATH&mode=stream-up#Vless-xhttp-h2-tcp-direct-YOUR_HOST

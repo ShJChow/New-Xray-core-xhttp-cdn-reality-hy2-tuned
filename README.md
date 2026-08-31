@@ -232,7 +232,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-TLS-CF-h2` | XHTTP (TCP) | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
 | **2** | `VLESS-XHTTP-TLS-CF-h3` | XHTTP (QUIC) | 经 CDN 443 | 经 CDN 的 QUIC 备用链路 |
-| **3** | `VLESS-XHTTP-TLS-QUIC` | XHTTP (QUIC) | 直连 UDP 8444 | 直连 QUIC，`mode=stream-up` |
+| **3** | `VLESS-XHTTP-TLS-QUIC` | XHTTP (QUIC) | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
 | **4** | `VLESS-XHTTP-TLS-TCP` | XHTTP (TCP) | 直连 TCP 8445 | 直连 TCP，手机端低功耗首选 |
 | **5** | `Hysteria2-QUIC-TLS` | Hysteria 2 | 直连 UDP 8443 | **Brutal 拥塞引擎**，弱网丢包杀手 |
 | **6** | `VLESS-TCP-REALITY-Vision` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
@@ -251,7 +251,7 @@ flowchart TD
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。
 - **解决**：在云服务商控制台的安全组规则中，放行入站端口：
   - **UDP 8443** (Hysteria 2)
-  - **UDP 8444** (XHTTP QUIC)
+  - **UDP 8446** (XHTTP QUIC)
   - **TCP 8445** (XHTTP TCP)
   - **TCP 443** 与 **TCP 80**
 

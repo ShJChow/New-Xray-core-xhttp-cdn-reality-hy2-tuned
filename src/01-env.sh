@@ -69,7 +69,7 @@ AUTO=${AUTO:-0}
 # 版本不足时这两个开关会被自动置 false，只保留 3 条能用的节点（L1 best-effort）。
 # FEATURE_H3_DIRECT 默认**开启**（v4.2.0）：5 节点全出。
 # XHTTP over h3 在上游有两个未修复的问题（#4391 alpn=h3 被静默忽略、#5849 长期不工作，
-# 均 closed as not planned）。v4.0.3 已把端口独立为 8444，最坏情况是 h3 退回 TCP 后
+# 均 closed as not planned）。v4.0.3 已把端口独立为 8446，最坏情况是 h3 退回 TCP 后
 # 它自己不通，不再与 Reality 抢占 443。不需要时可设 FEATURE_H3_DIRECT=false 关闭。
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
