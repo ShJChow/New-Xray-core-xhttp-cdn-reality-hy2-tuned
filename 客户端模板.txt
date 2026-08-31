@@ -10,7 +10,7 @@ vless://YOUR_UUID_2@[2001:db8::1]:443?encryption=YOUR_VLESSENC_ENCRYPTION&securi
 
 XHTTP over HTTP/3 与 HTTP/2
 # 1. 经 CDN (TCP 443)：alpn=h2,http/1.1
-vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-UDP-cdn-YOUR_HOST
+vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-tls-cdn-YOUR_HOST
 
 # 2. 经 CDN (UDP 443 QUIC)：alpn=h3
 vless://YOUR_UUID_2@YOUR_CDN_DOMAIN:443?encryption=YOUR_VLESSENC_ENCRYPTION&security=tls&sni=YOUR_CDN_DOMAIN&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=YOUR_CDN_DOMAIN&path=YOUR_PATH&mode=auto#Vless-xhttp-h3-cdn-YOUR_HOST

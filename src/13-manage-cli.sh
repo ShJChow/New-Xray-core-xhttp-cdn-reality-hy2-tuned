@@ -279,7 +279,7 @@ cmd_conflict() {
 # UDP / HTTP3 节点连不上时的自检。
 #
 # v4.0.0 起本项目有三类 UDP 节点，排查路径互不相同：
-#   1. Vless-xhttp-tls-UDP-cdn —— 经 CDN。**不经过本机任何 QUIC 配置**：
+#   1. Vless-xhttp-tls-cdn —— 经 CDN。**不经过本机任何 QUIC 配置**：
 #      Cloudflare 边缘用 HTTP/3 面对客户端，回源到本机仍是 TCP。
 #      它不通 = 常规 XHTTP 链路的问题，与本机 UDP 无关。
 #   2. Vless-xhttp-h3-direct / Hysteria2-obfs —— 由 **Xray 自己 bind UDP**，
@@ -437,7 +437,7 @@ cmd_diag() {
   echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
   echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
-  echo -e "${YELLOW}  节点 Vless-xhttp-tls-UDP-cdn 不依赖本机任何 QUIC 配置${NC}"
+  echo -e "${YELLOW}  节点 Vless-xhttp-tls-cdn 不依赖本机任何 QUIC 配置${NC}"
   echo "  它只依赖：① Cloudflare 区域已开启 HTTP/3  ② 你的客户端网络允许 UDP 443 出站。"
   echo ""
   echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："

@@ -31,7 +31,7 @@ BASE_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_XHTTP_REALITY")
 # 读不到就不能继续（与 common-nodes 里它是可选项不同，见 L33）。
 CDN_LINE=$(find_node_line "$V2RAYN_FILE" "$NODE_RE_CDN_BOTH")
 [[ -n "$CDN_LINE" ]] || error "未找到经 CDN 的 xhttp+TLS 节点，无法读取 CDN 域名。
-    请确认主脚本已生成 Vless-xhttp-tls-UDP-cdn 节点后再运行本扩展"
+    请确认主脚本已生成 Vless-xhttp-tls-cdn 节点后再运行本扩展"
 
 BASE_SERVER=$(strip_ipv6_brackets "$(extract_uri_server "$BASE_LINE")")
 UUID2=$(extract_uri_user "$BASE_LINE")

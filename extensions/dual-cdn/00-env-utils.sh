@@ -132,7 +132,7 @@ normalize_proxy_origin() {
 NODE_RE_XHTTP_REALITY='#(Vless-xhttp-reality-|xhttp%2BReality%20)'
 # v1.2.0 起 h2 的双向 CDN 节点已删除，CDN 参数改从 UDP 版节点读取。
 # 旧装机两条都在时，grep|head -n1 按文件顺序仍优先命中 h2 那条。
-NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|Vless-xhttp-tls-UDP-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
+NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|Vless-xhttp-tls-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
 NODE_RE_REALITY_VISION='#(Vless-reality-vision-|reality%2Bvision)'
 
 # find_node_line FILE REGEX

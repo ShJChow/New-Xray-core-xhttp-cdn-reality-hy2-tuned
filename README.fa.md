@@ -98,7 +98,7 @@ V2rayN باید دامنهٔ CDN را به فهرست مستقیم/دور زدن
 
 | # | نام نود | مسیر | لایهٔ انتقال |
 |---|---|---|---|
-| ۱ | `Vless-xhttp-tls-UDP-cdn-<host>` | از CDN، **TCP 443** | XHTTP + TLS، alpn h2 + http/1.1 (در v4.6.0 از h3 به TCP بازگردانده شد؛ کلمهٔ `UDP` در نام بازماندهٔ پیش از آن تغییر است و نگه داشته شده تا انتخاب نود در کلاینت‌های موجود از بین نرود) |
+| ۱ | `Vless-xhttp-tls-cdn-<host>` | از CDN، **TCP 443** | XHTTP + TLS، alpn h2 + http/1.1 (در v4.6.0 از h3 به TCP بازگردانده شد؛ کلمهٔ `UDP` در نام بازماندهٔ پیش از آن تغییر است و نگه داشته شده تا انتخاب نود در کلاینت‌های موجود از بین نرود) |
 | ۲ | `Vless-xhttp-h3-cdn-<host>` | از CDN، **UDP 443** | XHTTP + TLS، تنها alpn h3 (در v4.7.4 به‌عنوان همتای QUIC نود ۱ اضافه شد؛ بدون هیچ تغییری در سمت سرور) |
 | ۳ | `Vless-xhttp-h3-direct-<host>` | مستقیم به سرور، **UDP 8444** | XHTTP + TLS، alpn h3، با `mode=stream-up` (از v4.7.13، حدود ۵۰ میلی‌ثانیه سریع‌تر از auto) |
 | ۴ | `Vless-xhttp-h2-tcp-direct-<host>` | مستقیم به سرور، **TCP 8445** | XHTTP + TLS، alpn h2 + http/1.1، با `mode=stream-up` (از v4.7.13، حدود ۵۰ میلی‌ثانیه سریع‌تر از auto)؛ در v4.7.0 به‌عنوان همتای TCP نود ۳ اضافه شد. برای موبایل پیشنهاد می‌شود |
@@ -157,7 +157,7 @@ Xray واگذار می‌گردند.
 | `Hysteria2-obfs` | 18 ms | |
 | `Vless-xhttp-h3-direct` | **18 ms** | پیش‌تر 69 ms بود؛ در v4.7.13 به `stream-up` تغییر کرد |
 | `Vless-xhttp-h2-tcp-direct` | **18 ms** | پیش‌تر 68 ms بود؛ همان تغییر |
-| `Vless-xhttp-tls-UDP-cdn` | 73 ms | هزینهٔ ذاتی packet-up، پایین‌تر ببینید |
+| `Vless-xhttp-tls-cdn` | 73 ms | هزینهٔ ذاتی packet-up، پایین‌تر ببینید |
 | `Vless-xhttp-h3-cdn` | 73 ms | همان |
 
 ### آن ۵۰ میلی‌ثانیهٔ دو نود CDN ساختاری است و قابل بهینه‌سازی نیست
@@ -373,7 +373,7 @@ bash ~/install.sh
 
 ```bash
 NODE_TAG=vps \
-NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
+NODE_NAME_MAP='Vless-xhttp-tls-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
 Vless-xhttp-h3-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h3
 Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC
 Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP

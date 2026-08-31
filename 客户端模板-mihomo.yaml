@@ -107,7 +107,7 @@ proxies:
 
   # 经 CDN 的 h3 节点。servername/host 必须是 CDN 域名——TLS 握手按 SNI 选服务端
   # server 块，写成 Reality 域名会落到回落网站上，节点必然不通。
-  - name: Vless-xhttp-tls-UDP-cdn-YOUR_HOST
+  - name: Vless-xhttp-tls-cdn-YOUR_HOST
     type: vless
     server: YOUR_CDN_DOMAIN
     port: 443

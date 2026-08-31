@@ -14,7 +14,7 @@ proxies:
   #    h3 的收益仅存在于 UDP 通畅的网络，代价是 UDP 被限速时无解。
   #    故改为 h2 + http/1.1（Chrome 真实 ALPN 组合，指纹也更自然）。
   #    仍需要 QUIC 时用 Vless-xhttp-h3-direct（直连 UDP ${H3_PORT}，不经 CDN）。
-  - name: Vless-xhttp-tls-UDP-cdn-${HOSTNAME_TAG}
+  - name: Vless-xhttp-tls-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}
     port: 443

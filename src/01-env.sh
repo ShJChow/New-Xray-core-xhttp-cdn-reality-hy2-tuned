@@ -53,7 +53,7 @@ AUTO=${AUTO:-0}
 # ==================================================
 # v4.0.0 节点集：5 条，全部由 Xray 单核心提供
 # ==================================================
-#   1. Vless-xhttp-tls-UDP-cdn   经 CDN，h3/QUIC —— 实测最快
+#   1. Vless-xhttp-tls-cdn   经 CDN，h3/QUIC —— 实测最快
 #   2. Vless-xhttp-h3-direct     直连 UDP 443，h3/QUIC
 #   3. Hysteria2-obfs            直连 UDP 8443，Salamander 混淆
 #   4. Vless-reality-vision      直连 TCP 443，Vision

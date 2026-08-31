@@ -4,11 +4,11 @@
 
 # 本扩展的 h3 节点挂在 CDN 域名的 server 块、复用主脚本已有的 location，
 # 所以它的 TCP 面就是主脚本的 CDN 节点本身（同域名、同 path、TCP 443 + h2）。
-QUIC_TWIN_DESC="对应的 TCP 节点是主脚本的 Vless-xhttp-tls-UDP-cdn（同 CDN 域名、同 path，TCP 443 + alpn h2），UDP 不通时改用它。"
+QUIC_TWIN_DESC="对应的 TCP 节点是主脚本的 Vless-xhttp-tls-cdn（同 CDN 域名、同 path，TCP 443 + alpn h2），UDP 不通时改用它。"
 
 # 节点名用本项目的纯 ASCII 约定（上游用中文名）。
 # 已核对不与任何 NODE_RE_* 冲突（L10）：
-#   NODE_RE_CDN_BOTH   匹配 Vless-xhttp-tls-cdn- / Vless-xhttp-tls-UDP-cdn-
+#   NODE_RE_CDN_BOTH   匹配 Vless-xhttp-tls-cdn- / Vless-xhttp-tls-cdn-
 # 下面三个都不落进这些前缀；与 common-nodes 的 Vless-xhttp-tls-h3-direct-
 # 也不同（删除 sed 按 `#名字$` 锚定行尾，两者可区分）。
 # v4.0.0：NODE_RE_SPLIT_* 已随两条上下行分离节点一并删除；主脚本新增的

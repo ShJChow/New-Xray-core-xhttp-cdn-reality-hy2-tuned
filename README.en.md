@@ -98,7 +98,7 @@ airport-style names instead, see [Custom node names](#custom-node-names).
 
 | # | Node name | Path | Transport |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-UDP-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (v4.6.0 switched this back from h3 to TCP; the `UDP` in the name is a leftover from before that change, kept so existing clients do not lose their node selection) |
+| 1 | `Vless-xhttp-tls-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (v4.6.0 switched this back from h3 to TCP; the `UDP` in the name is a leftover from before that change, kept so existing clients do not lose their node selection) |
 | 2 | `Vless-xhttp-h3-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 only (added in v4.7.4 as node 1's QUIC twin; no server-side change) |
 | 3 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8444** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
 | 4 | `Vless-xhttp-h2-tcp-direct-<host>` | Direct to VPS, **TCP 8445** | XHTTP + TLS, alpn h2 + http/1.1, `mode=stream-up` (v4.7.13, ~50 ms faster than auto); added in v4.7.0 as node 3's TCP twin. Recommended on mobile |
@@ -156,7 +156,7 @@ no connection reuse. Direct baseline (no node at all) = **20 ms**.
 | `Hysteria2-obfs` | 18 ms | |
 | `Vless-xhttp-h3-direct` | **18 ms** | Was 69 ms; v4.7.13 switched it to `stream-up` |
 | `Vless-xhttp-h2-tcp-direct` | **18 ms** | Was 68 ms; same change |
-| `Vless-xhttp-tls-UDP-cdn` | 73 ms | Inherent packet-up cost, see below |
+| `Vless-xhttp-tls-cdn` | 73 ms | Inherent packet-up cost, see below |
 | `Vless-xhttp-h3-cdn` | 73 ms | Same |
 
 ### The ~50 ms on the two CDN nodes is structural and cannot be optimised away
@@ -365,7 +365,7 @@ generated full node name (including suffix) on the left and the display name on 
 
 ```bash
 NODE_TAG=vps \
-NODE_NAME_MAP='Vless-xhttp-tls-UDP-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
+NODE_NAME_MAP='Vless-xhttp-tls-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
 Vless-xhttp-h3-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h3
 Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC
 Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP

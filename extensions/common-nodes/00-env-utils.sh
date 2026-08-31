@@ -122,10 +122,10 @@ format_uri_host() {
 NODE_RE_XHTTP_REALITY='#(Vless-xhttp-reality-|xhttp%2BReality%20)'
 # v1.2.0 起 h2 的双向 CDN 节点已删除，CDN 参数改从 UDP 版节点读取。
 # 旧装机两条都在时，grep|head -n1 按文件顺序仍优先命中 h2 那条。
-NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|Vless-xhttp-tls-UDP-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
+NODE_RE_CDN_BOTH='#(Vless-xhttp-tls-cdn-|Vless-xhttp-tls-cdn-|xhttp%2Btls%20%E5%8F%8C%E5%90%91CDN)'
 NODE_RE_REALITY_VISION='#(Vless-reality-vision-|reality%2Bvision)'
 # v4.0.0 删除两条上下行分离节点，对应的 NODE_RE_SPLIT_* 一并移除（全仓无消费者）。
-# NODE_RE_CDN_BOTH 保留：它匹配的 Vless-xhttp-tls-UDP-cdn 仍是默认节点，
+# NODE_RE_CDN_BOTH 保留：它匹配的 Vless-xhttp-tls-cdn 仍是默认节点，
 # 且被 4 处扩展的 01-read-existing.sh 硬依赖。
 
 # find_node_line FILE REGEX
