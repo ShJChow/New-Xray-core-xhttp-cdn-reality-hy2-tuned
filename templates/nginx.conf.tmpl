@@ -151,7 +151,7 @@ http {
             autoindex off;
             limit_req zone=sub_limit burst=10 nodelay;
             types {
-                text/plain txt;
+                text/plain txt ps1 sh;
                 application/yaml yaml yml;
             }
             default_type text/plain;

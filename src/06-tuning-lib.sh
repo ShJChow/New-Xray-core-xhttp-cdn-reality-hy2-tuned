@@ -332,27 +332,75 @@ DROPINEOF
   info "BBR: ${TUNING_BBR_OK}；回滚请执行 ${MANAGE_CMD} tuning off"
 }
 
-show_client_tuning() {
+show_win_tuning() {
   echo -e "${CYAN}======================================================${NC}"
-  echo -e "${CYAN}   客户端 (macOS / Linux) 网络调优与 sing-box 加速指南   ${NC}"
+  echo -e "${CYAN}   Windows 10 / 11 客户端千兆 TCP 栈与网络解限指南     ${NC}"
   echo -e "${CYAN}======================================================${NC}"
   echo ""
-  echo -e "${GREEN}[1] macOS 客户端 TCP 缓冲区与 TFO 一键调优 (终端即时生效):${NC}"
+  echo -e "${YELLOW}[+] 请以管理员身份打开 PowerShell 执行以下命令:${NC}"
   cat <<'EOF'
-sudo sysctl -w kern.ipc.maxsockbuf=16777216
-sudo sysctl -w net.inet.tcp.recvspace=2097152
-sudo sysctl -w net.inet.tcp.sendspace=2097152
+# 1. 开启 TCP 窗口自动调优（释放 16MB~64MB 接收窗口，跑满千兆 BDP）
+netsh int tcp set global autotuninglevel=normal
+
+# 2. 启用网卡多核接收侧缩放（RSS：防止千兆速率下单 CPU 核心被软中断占满）
+netsh int tcp set global rss=enabled
+
+# 3. 启用硬件接收分段合并（RSC：大幅降低 CPU 占用）
+netsh int tcp set global rsc=enabled
+
+# 4. 启用显式拥塞通知（ECN）与 TCP 快速打开（Fast Open 节省 1 次握手 RTT）
+netsh int tcp set global ecncapability=enabled
+netsh int tcp set global fastopen=enabled
+netsh int tcp set global fastopenfallback=enabled
+
+# 5. 允许 TCP 时间戳（防回绕序号 PAWS 与准确 RTT 采样）
+netsh int tcp set global timestamps=allowed
+
+# 6. 设置拥塞控制算法为 BBR2 / CUBIC
+try {
+    netsh int tcp set supplemental template=internet congestionprovider=bbr2
+} catch {
+    netsh int tcp set supplemental template=internet congestionprovider=cubic
+}
+
+# 7. 解除 Windows 系统级多媒体网络节流限制（NetworkThrottlingIndex = 0xffffffff）
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Type DWord -Value 0xffffffff
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Type DWord -Value 0
+
+# 8. 禁用 Nagle 算法（降低小包延迟，提升游戏与交互响应）
+Get-ChildItem -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" | ForEach-Object {
+    Set-ItemProperty -Path $_.PSPath -Name "TcpAckFrequency" -Type DWord -Value 1 -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path $_.PSPath -Name "TCPNoDelay" -Type DWord -Value 1 -ErrorAction SilentlyContinue
+}
+EOF
+  echo ""
+  echo -e "${GREEN}[+] 客户端软件建议:${NC}"
+  echo "  - 优先选择支持 Wintun 驱动的客户端（如 Clash Verge Rev / Sing-box / Mihomo Party / v2rayN）"
+  echo "  - TUN 协议栈建议选 Mixed 或 System（避开 gVisor 用户态单核瓶颈）"
+  echo ""
+}
+
+show_mac_tuning() {
+  echo -e "${CYAN}======================================================${NC}"
+  echo -e "${CYAN}   macOS 客户端千兆 TCP 缓冲区与 TFO 调优指南         ${NC}"
+  echo -e "${CYAN}======================================================${NC}"
+  echo ""
+  echo -e "${GREEN}[1] 终端即时生效命令:${NC}"
+  cat <<'EOF'
+sudo sysctl -w kern.ipc.maxsockbuf=33554432
+sudo sysctl -w net.inet.tcp.recvspace=4194304
+sudo sysctl -w net.inet.tcp.sendspace=4194304
 sudo sysctl -w net.inet.tcp.autorcvbuf=1
-sudo sysctl -w net.inet.tcp.autorcvbufmax=16777216
+sudo sysctl -w net.inet.tcp.autorcvbufmax=33554432
 sudo sysctl -w net.inet.tcp.autosndbuf=1
-sudo sysctl -w net.inet.tcp.autosndbufmax=16777216
+sudo sysctl -w net.inet.tcp.autosndbufmax=33554432
 sudo sysctl -w net.inet.tcp.fastopen=3
 sudo sysctl -w net.inet.tcp.rfc1323=1
 sudo sysctl -w net.inet.tcp.win_scale_factor=8
 sudo sysctl -w net.inet.tcp.mptcp.enable=1
 EOF
   echo ""
-  echo -e "${GREEN}[2] macOS 客户端开机永久生效 (LaunchDaemon 自动守护):${NC}"
+  echo -e "${GREEN}[2] 开机自动守护 (LaunchDaemon):${NC}"
   cat <<'EOF'
 sudo tee /Library/LaunchDaemons/com.user.sysctl.plist << 'PLISTEOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -365,13 +413,13 @@ sudo tee /Library/LaunchDaemons/com.user.sysctl.plist << 'PLISTEOF'
     <array>
         <string>/usr/sbin/sysctl</string>
         <string>-w</string>
-        <string>kern.ipc.maxsockbuf=16777216</string>
-        <string>net.inet.tcp.recvspace=2097152</string>
-        <string>net.inet.tcp.sendspace=2097152</string>
+        <string>kern.ipc.maxsockbuf=33554432</string>
+        <string>net.inet.tcp.recvspace=4194304</string>
+        <string>net.inet.tcp.sendspace=4194304</string>
         <string>net.inet.tcp.autorcvbuf=1</string>
-        <string>net.inet.tcp.autorcvbufmax=16777216</string>
+        <string>net.inet.tcp.autorcvbufmax=33554432</string>
         <string>net.inet.tcp.autosndbuf=1</string>
-        <string>net.inet.tcp.autosndbufmax=16777216</string>
+        <string>net.inet.tcp.autosndbufmax=33554432</string>
         <string>net.inet.tcp.fastopen=3</string>
         <string>net.inet.tcp.rfc1323=1</string>
         <string>net.inet.tcp.win_scale_factor=8</string>
@@ -387,11 +435,60 @@ sudo chmod 644 /Library/LaunchDaemons/com.user.sysctl.plist
 sudo launchctl load -w /Library/LaunchDaemons/com.user.sysctl.plist 2>/dev/null || true
 EOF
   echo ""
-  echo -e "${GREEN}[3] sing-box 客户端 5 节点核心加速关键配置:${NC}"
+}
+
+show_linux_tuning() {
+  echo -e "${CYAN}======================================================${NC}"
+  echo -e "${CYAN}   Linux 客户端千兆 TCP 缓冲区与 BDP 调优指南         ${NC}"
+  echo -e "${CYAN}======================================================${NC}"
+  cat <<'EOF'
+sudo sysctl -w net.core.rmem_max=67108864
+sudo sysctl -w net.core.wmem_max=67108864
+sudo sysctl -w net.ipv4.tcp_rmem="4096 262144 67108864"
+sudo sysctl -w net.ipv4.tcp_wmem="4096 262144 67108864"
+sudo sysctl -w net.ipv4.tcp_adv_win_scale=1
+sudo sysctl -w net.ipv4.tcp_fastopen=3
+sudo sysctl -w net.core.default_qdisc=fq
+sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
+EOF
+  echo ""
+}
+
+show_sb_tuning() {
+  echo -e "${CYAN}======================================================${NC}"
+  echo -e "${CYAN}   sing-box 客户端 5 节点核心加速关键配置 (1000M 版)    ${NC}"
+  echo -e "${CYAN}======================================================${NC}"
   echo "  - FakeIP 零延迟解析:   fakeip.enabled: true, independent_cache: true"
-  echo "  - Hysteria2 带宽校准:  up_mbps: 50, down_mbps: 500"
+  echo "  - Hysteria2 带宽校准:  up_mbps: 100, down_mbps: 1000"
   echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
   echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"
+  echo "  - TUN 网卡巨帧加速:    mtu: 9000, stack: mixed, endpoint_independent_nat: true"
   echo "  - 智能秒级故障转移:    urltest 测速周期 3m, connect_timeout: 3s"
   echo ""
+  echo -e "${YELLOW}[+] 完整配置已保存在: /root/sbbox/sbox_client.json${NC}"
+  echo ""
+}
+
+show_client_tuning() {
+  local target="${1:-all}"
+  case "$target" in
+    win|windows)
+      show_win_tuning
+      ;;
+    mac|macos)
+      show_mac_tuning
+      ;;
+    linux)
+      show_linux_tuning
+      ;;
+    sb|singbox)
+      show_sb_tuning
+      ;;
+    *)
+      show_win_tuning
+      show_mac_tuning
+      show_linux_tuning
+      show_sb_tuning
+      ;;
+  esac
 }

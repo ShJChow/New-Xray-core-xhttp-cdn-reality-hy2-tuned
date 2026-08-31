@@ -606,10 +606,13 @@ cmd_tuning() {
       info "已移除本项目写入的全部调优配置"
       warn "已生效的运行时内核参数需重启系统才能完全恢复默认值"
       ;;
-    client|mac|macos|sb|singbox)
-      show_client_tuning
+    client)
+      show_client_tuning "${2:-all}"
       ;;
-    *) fail "用法: ${MANAGE_CMD} tuning [show|on|off|client|mac]" ;;
+    win|windows|mac|macos|linux|sb|singbox)
+      show_client_tuning "$1"
+      ;;
+    *) fail "用法: ${MANAGE_CMD} tuning [show|on|off|client|win|mac|linux|sb]" ;;
   esac
 }
 
@@ -807,7 +810,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
-  xh tuning [show|on|off|client|mac]  系统流控调优 / 查看 / 客户端(macOS)与sing-box加速
+  xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）
