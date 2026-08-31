@@ -193,6 +193,10 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
             # 下行吞吐：grpc_buffer_size 默认 4k，Xray 的下行数据要被切成 4k 一片
             # 经 HTTP/2 转发，系统调用数与 h2 帧开销成倍上升，是 CDN 节点慢的主因。
             grpc_buffer_size 512k;
+            # 禁用反向代理缓冲与请求缓冲，保持端到端流式透传
+            proxy_buffering         off;
+            proxy_request_buffering off;
+            add_header X-Accel-Buffering "no" always;
             # XHTTP 是长连接：Nginx 默认 60s 读写超时会直接切断上下行，必须放大
             grpc_socket_keepalive on;
             grpc_read_timeout     1h;
