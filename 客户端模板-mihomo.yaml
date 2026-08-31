@@ -72,8 +72,6 @@ proxies:
     flow: xtls-rprx-vision
     encryption: "none"
     network: tcp
-    alpn:
-      - h2
     servername: YOUR_REALITY_DOMAIN
     client-fingerprint: chrome
     reality-opts:
@@ -180,7 +178,6 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    tfo: true
     encryption: YOUR_VLESSENC_ENCRYPTION
     network: xhttp
     alpn:
