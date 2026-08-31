@@ -53,11 +53,11 @@ EOF
   # 上下行分离节点的 download-settings 比 xhttp-opts 深一级，缩进各 +2
   MIHOMO_XPADDING_DOWNLOAD_BLOCK=$(cat <<EOF
 
-        x-padding-obfs-mode: true
-        x-padding-key: "${XHTTP_PADDING_KEY}"
-        x-padding-header: "${XHTTP_PADDING_HEADER}"
-        x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
-        x-padding-method: "${XHTTP_PADDING_METHOD}"
+          x-padding-obfs-mode: true
+          x-padding-key: "${XHTTP_PADDING_KEY}"
+          x-padding-header: "${XHTTP_PADDING_HEADER}"
+          x-padding-placement: "${XHTTP_PADDING_PLACEMENT}"
+          x-padding-method: "${XHTTP_PADDING_METHOD}"
 EOF
 )
   MIHOMO_SC_MIN_POSTS_BLOCK=$(cat <<EOF
@@ -72,12 +72,25 @@ EOF
 )
   MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=$(cat <<EOF
 
-          h-keep-alive-period: 0
+            h-keep-alive-period: 0
 EOF
 )
+else
+  XPAD_FIELDS_ENC=""
+  XMUX_ENC=""
+  XPAD_EXTRA_ENC=""
+  MIHOMO_XPADDING_XHTTP_BLOCK=""
+  MIHOMO_XPADDING_DOWNLOAD_BLOCK=""
+  MIHOMO_SC_MIN_POSTS_BLOCK=""
+  MIHOMO_REUSE_KEEPALIVE_XHTTP=""
+  MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=""
 fi
 
-DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
+if [[ "$CDN_ECH_ENABLED" == true ]]; then
+  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%2C%22ech%22%3A%22${CDN_ECH_QUERY_ENC}%22%7D"
+else
+  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
+fi
 if [[ "$FEATURE_XPADDING" == true ]]; then
   DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
@@ -103,6 +116,9 @@ EOF
           query-server-name: cloudflare-ech.com
 EOF
 )
+else
+  MIHOMO_ECH_PROXY_BLOCK=""
+  MIHOMO_ECH_DOWNLOAD_BLOCK=""
 fi
 
 # v4.0.0 节点集：3 条 QUIC/h3 + 2 条 TCP 兜底，全部由 Xray 单核心提供。
