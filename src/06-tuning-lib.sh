@@ -289,6 +289,7 @@ LIMITSEOF
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=infinity
+Environment="GOGC=200"
 DROPINEOF
         # 旧版留下的 override.conf：内容与历史生成物逐字一致才删（说明用户没动过），
         # 否则一律保留——那是用户的加固，宁可留下一份内容重复的文件，也不能删掉它。
