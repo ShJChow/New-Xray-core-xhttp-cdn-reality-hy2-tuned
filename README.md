@@ -158,7 +158,7 @@ CDN_DOMAIN="cdn.example.com" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
 
-#### 方案 C：自定义端口与安全增强模板（密码自动生成 SHA256 高熵随机值）
+#### 方案 C：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
 ```bash
 sudo -i
 
@@ -168,8 +168,6 @@ CDN_DOMAIN="cdn.example.com" \
 H3_PORT=8446 \
 H2_PORT=8445 \
 HY2_PORT=8443 \
-HY2_PASSWORD="$(openssl rand -hex 32)" \
-OBFS_PASSWORD="$(openssl rand -hex 32)" \
 XHTTP_PATH="/$(openssl rand -hex 4)" \
 NODE_TAG="node-01" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"

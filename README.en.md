@@ -346,7 +346,7 @@ CDN_DOMAIN="cdn.example.com" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
 
-#### Option C: Custom Ports & Enhanced Security (Auto SHA256 Password Generation)
+#### Option C: Custom Ports & Path Template (Passwords auto-generated as 64-char SHA256 hex)
 ```bash
 sudo -i
 
@@ -356,8 +356,6 @@ CDN_DOMAIN="cdn.example.com" \
 H3_PORT=8446 \
 H2_PORT=8445 \
 HY2_PORT=8443 \
-HY2_PASSWORD="$(openssl rand -hex 32)" \
-OBFS_PASSWORD="$(openssl rand -hex 32)" \
 XHTTP_PATH="/$(openssl rand -hex 4)" \
 NODE_TAG="node-01" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
