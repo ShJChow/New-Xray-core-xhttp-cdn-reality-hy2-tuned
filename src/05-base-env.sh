@@ -124,10 +124,10 @@ rawurlencode() {
   printf '%s' "$encoded"
 }
 
-# 密码用 hex：URL 安全，且避开 YAML 里需要引号的字符。
+# 密码用 hex (32 字节 / 64 字符 SHA256 等效高熵值)：URL 安全，且避开 YAML 里需要引号的字符。
 # 允许用环境变量覆盖，便于重装时保持客户端配置不变。
-HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 16)}"
-OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 16)}"
+HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 32)}"
+OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 32)}"
 
 # H3_PORT **不能用 443**（v4.0.3 修复）：
 # v4.0.0 曾按「一个 UDP 一个 TCP，协议不同不冲突」把它设成 443，那是**未经验证的假设**。

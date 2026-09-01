@@ -123,7 +123,7 @@ fi   # FEATURE_XHTTP_H3_NODE
 [[ "$HY2_PORT" =~ ^[0-9]+$ ]] || error "hysteria2 端口必须是数字"
 ((HY2_PORT >= 1 && HY2_PORT <= 65535)) || error "hysteria2 端口必须在 1-65535 之间"
 
-DEFAULT_HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 16)}"
+DEFAULT_HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 32)}"
 read -rp "请输入 hysteria2 密码 [默认 ${DEFAULT_HY2_PASSWORD}]: " HY2_PASSWORD
 HY2_PASSWORD=${HY2_PASSWORD:-$DEFAULT_HY2_PASSWORD}
 [[ "$HY2_PASSWORD" =~ ^[A-Za-z0-9._~-]+$ ]] || error "hysteria2 密码仅支持字母、数字与 . _ ~ -"

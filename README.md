@@ -158,7 +158,7 @@ CDN_DOMAIN="cdn.example.com" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
 
-#### 方案 C：自定义端口与安全增强模板
+#### 方案 C：自定义端口与安全增强模板（密码自动生成 SHA256 高熵随机值）
 ```bash
 sudo -i
 
@@ -168,9 +168,9 @@ CDN_DOMAIN="cdn.example.com" \
 H3_PORT=8446 \
 H2_PORT=8445 \
 HY2_PORT=8443 \
-HY2_PASSWORD="your_custom_hy2_password" \
-OBFS_PASSWORD="your_custom_salamander_password" \
-XHTTP_PATH="/mysecretpath" \
+HY2_PASSWORD="$(openssl rand -hex 32)" \
+OBFS_PASSWORD="$(openssl rand -hex 32)" \
+XHTTP_PATH="/$(openssl rand -hex 4)" \
 NODE_TAG="node-01" \
 bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
@@ -199,8 +199,8 @@ bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/relea
 | `H2_PORT` | 端口定义 | `8445` | HTTP/2 直连 TCP 端口（需云防火墙开放）。 |
 | `HY2_PORT` | 端口定义 | `8443` | Hysteria2 直连 UDP 端口（需云防火墙开放）。 |
 | `XHTTP_PATH` | 路由路径 | 随机生成 | XHTTP 请求匹配路径（如 `/4ac061df`）。 |
-| `HY2_PASSWORD` | 认证密码 | 随机生成 | Hysteria2 节点连接密码。 |
-| `OBFS_PASSWORD` | 混淆密码 | 随机生成 | Salamander 混淆密码。 |
+| `HY2_PASSWORD` | 认证密码 | 自动生成 (SHA256 hex) | Hysteria2 节点连接密码（未指定时自动生成 32 字节 / 64 字符 SHA256 高熵密钥）。 |
+| `OBFS_PASSWORD` | 混淆密码 | 自动生成 (SHA256 hex) | Salamander 混淆密码（未指定时自动生成 32 字节 / 64 字符 SHA256 高熵密钥）。 |
 
 ---
 
