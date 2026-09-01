@@ -66,7 +66,8 @@
                     "target": "8003",
                     "xver": 0,
                     "serverNames": [
-                        "${REALITY_DOMAIN}"
+                        "${REALITY_DOMAIN}",
+                        "${CDN_DOMAIN}"
                     ],
                     "privateKey": "${PRIVATE_KEY}",
                     "shortIds": [
@@ -78,7 +79,7 @@
                     // （启动日志里那句 "other clients may be refused to connect" 就是它）。
                     // 放宽到 1.8.0 后 Xray / mihomo / sing-box 三种内核均可连接。
                     "minClientVer": "1.8.0"
-                }${XRAY_SOCKOPT_JSON}
+                }${REALITY_SOCKOPT_JSON}
             },
             "sniffing": {
                 "enabled": true,

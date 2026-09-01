@@ -77,19 +77,14 @@ fi
 XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":300,\"uplinkOnly\":2,\"downlinkOnly\":5,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
 
 
-# Reality 入站 sockopt：tcpcongestion 只在 BBR 可用时写，否则 xray -test 直接
-# 失败（L3：字段名 tcpcongestion 全小写，见官方 sockopt 文档）。TFO/keepalive/
-# tcpUserTimeout 与拥塞算法无关，总是写。
-AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
-if [[ "$AVAIL" != *bbr* ]]; then
-  modprobe tcp_bbr >/dev/null 2>&1 || true
-  AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
-fi
+# Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
 if [[ "$AVAIL" == *bbr* ]]; then
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
 else
   warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
 fi
 
 # ==================================================
