@@ -47,6 +47,32 @@ info "安装 Xray..."
 install_xray
 export PATH="/usr/local/bin:$PATH"
 
+ensure_firewall_ports() {
+  local port
+  if command -v iptables >/dev/null 2>&1; then
+    for port in 80 443 8443 8445 8446; do
+      iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || true
+      iptables -C INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || true
+    done
+  fi
+  if command -v ip6tables >/dev/null 2>&1; then
+    for port in 80 443 8443 8445 8446; do
+      ip6tables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || true
+      ip6tables -C INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || true
+    done
+  fi
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
+    ufw allow 80/tcp >/dev/null 2>&1 || true
+    ufw allow 443/tcp >/dev/null 2>&1 || true
+    ufw allow 443/udp >/dev/null 2>&1 || true
+    ufw allow 8443/tcp >/dev/null 2>&1 || true
+    ufw allow 8443/udp >/dev/null 2>&1 || true
+    ufw allow 8445/tcp >/dev/null 2>&1 || true
+    ufw allow 8446/udp >/dev/null 2>&1 || true
+  fi
+}
+ensure_firewall_ports
+
 info "生成参数..."
 # 节点 1 的 flow：默认用兼容性最好的 xtls-rprx-vision。
 # 只有明确设置 VISION_UDP443=1 才写 -udp443（不拦截 UDP 443/QUIC）。
@@ -172,6 +198,25 @@ else
   [[ -z "$VPS_IP" ]] && error "无法获取 IPv4 地址"
   VPS_IP_URI="${VPS_IP}"
 fi
+
+check_domain_resolutions() {
+  local reality_resolved cdn_resolved
+  if [[ "$IP_CHOICE" == "2" ]]; then
+    reality_resolved=$(getent ahostsv6 "$REALITY_DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)
+    cdn_resolved=$(getent ahostsv6 "$CDN_DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)
+  else
+    reality_resolved=$(getent ahostsv4 "$REALITY_DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)
+    cdn_resolved=$(getent ahostsv4 "$CDN_DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)
+  fi
+
+  if [[ -n "$reality_resolved" && -n "$cdn_resolved" && -n "$VPS_IP" ]]; then
+    if [[ "$reality_resolved" != "$VPS_IP" && "$cdn_resolved" == "$VPS_IP" ]]; then
+      warn "检测到 REALITY_DOMAIN (${REALITY_DOMAIN}) 解析到 ${reality_resolved} (非本机 IP)，而 CDN_DOMAIN (${CDN_DOMAIN}) 直连本机 IP (${VPS_IP})！"
+      warn "这通常表明 REALITY_DOMAIN 与 CDN_DOMAIN 参数填写颠倒，请确认是否需要对调。"
+    fi
+  fi
+}
+check_domain_resolutions
 
 info "UUID1 (Vision): $UUID1"
 info "UUID2 (XHTTP):  $UUID2"

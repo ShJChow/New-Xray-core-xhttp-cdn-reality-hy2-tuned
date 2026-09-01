@@ -30,13 +30,19 @@ have_existing_dual_cert() {
 }
 
 issue_dual_cert() {
+  local force_flag=""
+  # 如果已有旧证书或 conf 但不满足双域名 SAN，必须加 --force 强制覆盖申请，否则 acme.sh 会因未到期直接 skip
+  if [[ -f "$ACME_CERT_CONF" || -f "$ACME_CERT_HOME/fullchain.cer" ]]; then
+    force_flag="--force"
+  fi
+
   if [[ "$IP_CHOICE" == "2" ]]; then
-    acme.sh --issue -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --standalone --listen-v6 --keylength ec-256 \
+    acme.sh --issue -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --standalone --listen-v6 --keylength ec-256 $force_flag \
       --pre-hook "${NGINX_STOP_CMD} 2>/dev/null || true" \
       --post-hook "${NGINX_START_CMD} 2>/dev/null || true"
   else
     prefer_ipv4_for_acme
-    acme.sh --issue -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --standalone --listen-v4 --request-v4 --keylength ec-256 \
+    acme.sh --issue -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --standalone --listen-v4 --request-v4 --keylength ec-256 $force_flag \
       --pre-hook "${NGINX_STOP_CMD} 2>/dev/null || true" \
       --post-hook "${NGINX_START_CMD} 2>/dev/null || true"
   fi
@@ -47,12 +53,11 @@ if have_existing_dual_cert; then
 else
   info "未检测到可复用的双域名证书，开始申请 (需要 80 端口空闲)..."
   if ! ISSUE_OUTPUT=$(issue_dual_cert 2>&1); then
-    grep -Eqi 'Domains not changed|Skipping\. Next renewal time' <<< "$ISSUE_OUTPUT" || {
-      echo "$ISSUE_OUTPUT"
-      error "双域名证书申请失败"
-    }
+    echo "$ISSUE_OUTPUT"
+    error "双域名证书申请失败，请确认 80 端口未被占用、本机防火墙已放行 80 端口且域名 DNS 已正确解析"
   fi
   echo "$ISSUE_OUTPUT"
+  have_existing_dual_cert || error "证书申请流程已结束，但未能在 ${ACME_CERT_HOME} 找到有效的双域名证书"
 fi
 
 echo ""

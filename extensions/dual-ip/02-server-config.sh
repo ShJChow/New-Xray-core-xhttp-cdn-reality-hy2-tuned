@@ -62,16 +62,17 @@ if cert_has_all_domains; then
   info "检测到证书已包含 IPv4 / IPv6 Reality 域名，跳过重新签发"
 else
   info "申请 / 更新包含 IPv4、IPv6 Reality 域名的证书..."
+  local force_flag=""
+  [[ -f "$ACME_CERT_HOME/fullchain.cer" || -f "$ACME_CERT_CONF" ]] && force_flag="--force"
   if ! ISSUE_OUTPUT=$(acme.sh --issue "${ACME_DOMAIN_ARGS[@]}" \
-      --standalone --listen-v6 --keylength ec-256 \
+      --standalone --listen-v6 --keylength ec-256 $force_flag \
       --pre-hook "${NGINX_STOP_CMD} 2>/dev/null || true" \
       --post-hook "${NGINX_START_CMD} 2>/dev/null || true" 2>&1); then
-    grep -Eqi 'Domains not changed|Skipping\. Next renewal time' <<< "$ISSUE_OUTPUT" || {
-      echo "$ISSUE_OUTPUT"
-      error "IPv4 / IPv6 Reality 域名证书申请失败"
-    }
+    echo "$ISSUE_OUTPUT"
+    error "IPv4 / IPv6 Reality 域名证书申请失败"
   fi
   echo "$ISSUE_OUTPUT"
+  cert_has_all_domains || error "证书申请流程已结束，但未能在 ${ACME_CERT_HOME} 找到包含所有所需域名的证书"
 fi
 
 info "安装证书..."
