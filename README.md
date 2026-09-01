@@ -123,25 +123,84 @@ bash ~/install.sh
 
 ### 2. 零交互环境变量一键部署
 
-适合重装系统或批量自动化部署：
+适合重装系统、自动化脚本或批量部署。遵循 **Karpathy 工程准则**（*Think Before Coding · Simplicity First · Surgical Changes*）设计：
 
+#### 方案 A：标准生产推荐模板（推荐直接复制修改域名）
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
-AUTO=1 REALITY_DOMAIN=reality.example.com CDN_DOMAIN=cdn.example.com IP_CHOICE=1 FALLBACK_MODE=proxy REALITY_FALLBACK_ORIGIN=https://www.sjsu.edu CDN_FALLBACK_ORIGIN=https://www.harvard.edu CDN_ECH=n bash ~/install.sh
+
+AUTO=1 \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
+IP_CHOICE=1 \
+FALLBACK_MODE="proxy" \
+REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu" \
+CDN_FALLBACK_ORIGIN="https://www.stanford.edu" \
+FEATURE_AUTO_TUNING=true \
+FEATURE_XPADDING=true \
+FEATURE_CDN_ECH=false \
+FEATURE_H3_DIRECT=true \
+FEATURE_H2_DIRECT=true \
+FEATURE_HY2=true \
+FEATURE_AUTOUPDATE=true \
+FEATURE_KEEPALIVE=true \
+NODE_TAG="oracle-vps" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
 
-#### 常用环境变量速查
+#### 方案 B：极简极速模板（仅配置必填项）
+```bash
+sudo -i
 
-| 环境变量 | 说明 | 默认值 |
-| :--- | :--- | :--- |
-| `AUTO` | 设为 `1` 开启零交互全自动安装 | `0` |
-| `REALITY_DOMAIN` | 直连 / Reality 域名（**必填**） | — |
-| `CDN_DOMAIN` | CDN 代理域名（**必填**） | — |
-| `IP_CHOICE` | `1` 为 IPv4，`2` 为 IPv6 | `1` |
-| `FALLBACK_MODE` | `proxy`（反代真实大学网站）/ `static`（本地网页） | `proxy` |
-| `FEATURE_AUTO_TUNING`| 自动开启系统与网络底层调优（BBR/64M缓冲/句柄） | `true` |
-| `NODE_TAG` | 自定义节点名称后缀（如 `hk-oracle`） | `vps` |
+AUTO=1 \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+```
+
+#### 方案 C：自定义端口与安全增强模板
+```bash
+sudo -i
+
+AUTO=1 \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
+H3_PORT=8446 \
+H2_PORT=8445 \
+HY2_PORT=8443 \
+HY2_PASSWORD="your_custom_hy2_password" \
+OBFS_PASSWORD="your_custom_salamander_password" \
+XHTTP_PATH="/mysecretpath" \
+NODE_TAG="node-01" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+```
+
+#### 全量环境变量配置矩阵速查表
+
+| 环境变量 | 适用类型 | 默认值 | 说明与工程建议 |
+| :--- | :---: | :---: | :--- |
+| `AUTO` | 基础控制 | `0` | 设为 `1` 开启零交互全自动无人值守安装。 |
+| `REALITY_DOMAIN` | 核心必填 | — | **直连 / Reality 域名**。Cloudflare 中设为 **仅 DNS（灰色云朵）**。 |
+| `CDN_DOMAIN` | 核心必填 | — | **CDN 代理域名**。Cloudflare 中设为 **已代理（橙色小黄云）**。 |
+| `IP_CHOICE` | 网络协议 | `1` | `1` 优先 IPv4，`2` 优先 IPv6。 |
+| `NODE_TAG` | 节点标识 | `vps` | 节点名称后缀（如 `hk-oracle`、`us-lax`），便于客户端策略组区分。 |
+| `FALLBACK_MODE` | 伪装模式 | `proxy` | `proxy`（反代真实高校网站）或 `static`（本地网页）。 |
+| `REALITY_FALLBACK_ORIGIN` | 伪装源站 | `https://www.sjsu.edu` | Reality 握手失败/主动探测回落的合法目标网站。 |
+| `CDN_FALLBACK_ORIGIN` | 伪装源站 | `https://www.stanford.edu`| CDN 路径未匹配时的伪装目标网站。 |
+| `FEATURE_AUTO_TUNING` | 系统优化 | `true` | 自动开启 BBR+fq、64MB Socket 缓冲区、1048576 句柄等系统级调优。 |
+| `FEATURE_XPADDING` | 流量混淆 | `true` | 启用 XHTTP 流量填充混淆（`xPaddingObfsMode`），破坏 CDN 侧长度指纹。 |
+| `FEATURE_CDN_ECH` | 实验特性 | `false` | Cloudflare ECH 加密 SNI 开关。未在 CF 控制台开启 ECH 时务必保持 `false`。 |
+| `FEATURE_H3_DIRECT` | 协议开关 | `true` | 开启直连 HTTP/3 (QUIC) 节点（监听 UDP `H3_PORT`）。 |
+| `FEATURE_H2_DIRECT` | 协议开关 | 跟随 H3 | 开启直连 HTTP/2 (TCP) 节点（监听 TCP `H2_PORT`）。 |
+| `FEATURE_HY2` | 协议开关 | `true` | 开启原生 Hysteria2 + Salamander 混淆节点（监听 UDP `HY2_PORT`）。 |
+| `FEATURE_AUTOUPDATE` | 运维管理 | `true` | 开启每周定期自动升级 Xray-core（自检不通过自动回滚）。 |
+| `FEATURE_KEEPALIVE` | 进程自愈 | `true` | 开启服务守护进程保活与自动拉起。 |
+| `H3_PORT` | 端口定义 | `8446` | HTTP/3 直连 UDP 端口（需云防火墙开放）。 |
+| `H2_PORT` | 端口定义 | `8445` | HTTP/2 直连 TCP 端口（需云防火墙开放）。 |
+| `HY2_PORT` | 端口定义 | `8443` | Hysteria2 直连 UDP 端口（需云防火墙开放）。 |
+| `XHTTP_PATH` | 路由路径 | 随机生成 | XHTTP 请求匹配路径（如 `/4ac061df`）。 |
+| `HY2_PASSWORD` | 认证密码 | 随机生成 | Hysteria2 节点连接密码。 |
+| `OBFS_PASSWORD` | 混淆密码 | 随机生成 | Salamander 混淆密码。 |
 
 ---
 
@@ -243,9 +302,13 @@ flowchart TD
 
 ## 六、常见问题与排错
 
-### 1. Reality 节点测速显示 `-1`（连不上）？
-- **原因**：Reality 属于 4 层纯 TCP 握手伪装协议，**绝对不能开启 Cloudflare 小黄云代理**。
-- **解决**：在 Cloudflare 控制台中确认 `reality.example.com` 为 **灰色云朵（仅 DNS）**，并且客户端填写的 `server` 必须是真实的 VPS IP 或灰云域名。
+### 1. Reality 三条节点全都不通 / 提示认证失败？
+Reality 节点的认证在服务端会被记录为 `authentication failed or validation criteria not met`，常见原因及排查方法如下：
+- **① 客户端系统时间偏差 > 30 秒（最常见）**：Reality 握手带有时间戳防重放校验。若手机/电脑系统时间与标准网络时间相差 30 秒以上，服务端会直接拒绝连接。**解决方法：在客户端设备设置中开启「自动从网络同步时间」**。
+- **② 客户端 Public Key (公钥) 或 ShortId 不匹配**：若服务端重新生成过配置，旧节点链接中的公钥失效。**解决方法：在 VPS 运行 `xh info` 或 `xh sub`，重新复制/导入最新节点链接**。
+- **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 7 / 节点 8）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
+- **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
+- **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
 
 ### 2. 直连 UDP / Hysteria 2 节点超时？
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。

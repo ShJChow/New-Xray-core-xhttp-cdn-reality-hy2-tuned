@@ -309,21 +309,61 @@ curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/
 > node the main script already disables by default). If you want Hysteria2, run the
 > extension as usual and ignore the h3 node.
 
-### Non-interactive (scripted reinstall)
+### Non-interactive (scripted install & automation)
 
+Designed following **Karpathy Engineering Principles** (*Think Before Coding · Simplicity First · Surgical Changes*):
+
+#### Option A: Standard Production Template (Recommended)
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+
 AUTO=1 \
-REALITY_DOMAIN=reality.example.com \
-CDN_DOMAIN=cdn.example.com \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
 IP_CHOICE=1 \
-FALLBACK_MODE=proxy \
-REALITY_FALLBACK_ORIGIN=https://www.sjsu.edu \
-CDN_FALLBACK_ORIGIN=https://www.harvard.edu \
-CDN_ECH=n \
-bash ~/install.sh
+FALLBACK_MODE="proxy" \
+REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu" \
+CDN_FALLBACK_ORIGIN="https://www.stanford.edu" \
+FEATURE_AUTO_TUNING=true \
+FEATURE_XPADDING=true \
+FEATURE_CDN_ECH=false \
+FEATURE_H3_DIRECT=true \
+FEATURE_H2_DIRECT=true \
+FEATURE_HY2=true \
+FEATURE_AUTOUPDATE=true \
+FEATURE_KEEPALIVE=true \
+NODE_TAG="oracle-vps" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
 ```
+
+#### Option B: Minimalist Template (Required variables only)
+```bash
+sudo -i
+
+AUTO=1 \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+```
+
+#### Option C: Custom Ports & Enhanced Security
+```bash
+sudo -i
+
+AUTO=1 \
+REALITY_DOMAIN="reality.example.com" \
+CDN_DOMAIN="cdn.example.com" \
+H3_PORT=8446 \
+H2_PORT=8445 \
+HY2_PORT=8443 \
+HY2_PASSWORD="your_custom_hy2_password" \
+OBFS_PASSWORD="your_custom_salamander_password" \
+XHTTP_PATH="/mysecretpath" \
+NODE_TAG="node-01" \
+bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+```
+
+---
 
 Available environment variables:
 
