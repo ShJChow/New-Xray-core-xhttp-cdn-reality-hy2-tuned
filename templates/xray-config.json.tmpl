@@ -148,9 +148,11 @@
             "streamSettings": {
                 "sockopt": {
                     "tcpNoDelay": true,
+                    "tcpFastOpen": true,
                     "tcpcongestion": "bbr",
                     "tcpKeepAliveIdle": 30,
-                    "tcpKeepAliveInterval": 5
+                    "tcpKeepAliveInterval": 5,
+                    "tcpUserTimeout": 60000
                 }
             }
         },
