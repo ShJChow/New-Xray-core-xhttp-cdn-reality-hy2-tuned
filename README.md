@@ -296,6 +296,30 @@ flowchart TD
 | **7** | `VLESS-XHTTP-REALITY` | XHTTP-Reality | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 | **8** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上下行分离 | 上行直连 / 下行 CDN | 兼顾极速上行握手与 CDN 下行大带宽 |
 
+### 八条节点实测吞吐
+
+在服务端本机为每条节点单独起一个 SOCKS 入口，逐条跑 `https://www.gstatic.com/generate_204` 与 3 MB 下载（`speed.cloudflare.com`），一次采样结果：
+
+| # | 节点 | 链路 | 握手 | 3 MB 下载 |
+| :--- | :--- | :--- | ---: | ---: |
+| **1** | `VLESS-XHTTP-TLS-CF-h2` | 经 CDN 443/TCP | 204 / 232 ms | 8.2 MB/s |
+| **2** | `VLESS-XHTTP-TLS-CF-h3` | 经 CDN 443/UDP | 204 / 172 ms | 10.8 MB/s |
+| **3** | `VLESS-XHTTP-TLS-QUIC` | 直连 8446/UDP | 204 / 106 ms | 26.8 MB/s |
+| **4** | `VLESS-XHTTP-TLS-TCP` | 直连 8445/TCP | 204 / 120 ms | 26.8 MB/s |
+| **5** | `Hysteria2-QUIC-TLS` | 直连 8443/UDP | 204 / 38 ms | **45.5 MB/s** |
+| **6** | `VLESS-TCP-REALITY-Vision` | 直连 443/TCP | 204 / **27 ms** | 33.2 MB/s |
+| **7** | `VLESS-XHTTP-REALITY` | 直连 443/TCP | 204 / 117 ms | 29.0 MB/s |
+| **8** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上行直连 / 下行 CDN | 204 / 28 ms | 29.0 MB/s |
+
+怎么读这张表：
+
+- **测的是服务端侧的协议栈开销，不是你的实际网速。** 客户端跑在 VPS 本机、经公网 IP 回环，不含最后一公里，所以数字只能横向比较节点之间的相对开销，不能当作客户端能跑到的带宽。
+- 1、2 两条经 Cloudflare 的节点明显慢于直连，是多跳一次 CDN 边缘的正常代价——它们的价值是隐藏源站 IP 与救砖，不是速度。
+- 5（Hysteria 2）吞吐最高、6（Reality-Vision）握手最快，正对应 Brutal 拥塞引擎与 `xtls-rprx-vision` 的 Splice 零拷贝，与第五节的架构预期一致。
+- 3 与 4 数值几乎相同，说明 XHTTP 在 QUIC 与 TCP 两种承载上开销对等，手机端可以放心按省电优先选 4。
+
+自测命令见 `xh diag`；若某条节点在客户端不通而本机自测正常，问题在该设备到 VPS 的网络路径，而非服务端配置。
+
 ---
 
 ## 六、常见问题与排错
