@@ -2,7 +2,7 @@
 
 ## 上游来源
 
-本项目 `Xray-core-xhttp-cdn-tuned` 是 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的**衍生作品**。
+本项目 `New-Xray-core-xhttp-cdn-reality-hy2-tuned` 是 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的**衍生作品**。
 
 上游以 MIT 许可发布，版权归 Yulinanami 所有。本仓库沿用其许可证（见 [LICENSE](./LICENSE)），并在 LICENSE 中同时保留上游版权行。
 

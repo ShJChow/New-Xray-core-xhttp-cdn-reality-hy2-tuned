@@ -269,7 +269,7 @@ Debian / Ubuntu:
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -278,7 +278,7 @@ The script is re-runnable — use it to change domains, fallback sites and other
 ### Extension: XHTTP over HTTP/3 (3 h3 nodes)
 
 ```bash
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
 ```
 
 Ported from the upstream `add-quic.sh`, this appends `Vless-xhttp-tls-h3`,
@@ -295,7 +295,7 @@ Add these after the main deployment as needed. They reuse the existing
 
 ```bash
 # Direct Hysteria2 (the XHTTP+TLS+H3 node in the same extension is known to be broken, see below)
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
+curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
 ```
 
 > Since v2.0.1 this extension **only emits `Hysteria2-direct` by default**.
@@ -328,7 +328,7 @@ FEATURE_HY2=true \
 FEATURE_AUTOUPDATE=true \
 FEATURE_KEEPALIVE=true \
 NODE_TAG="oracle-vps" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 #### Option B: Minimalist Template (Required variables only)
@@ -338,7 +338,7 @@ sudo -i
 AUTO=1 \
 REALITY_DOMAIN="reality.example.com" \
 CDN_DOMAIN="cdn.example.com" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 #### Option C: Custom Ports & Path Template (Passwords auto-generated as 64-char SHA256 hex)
@@ -353,7 +353,7 @@ H2_PORT=8445 \
 HY2_PORT=8443 \
 XHTTP_PATH="/$(openssl rand -hex 4)" \
 NODE_TAG="node-01" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 ---
@@ -420,7 +420,7 @@ the space by clients such as Shadowrocket.
 
 ```bash
 # 1. Download
-curl -O https://raw.githubusercontent.com/ShJChow/Xray-core-xhttp-cdn-tuned/main/tools/ubuntu_vps_optimize.sh
+curl -O https://raw.githubusercontent.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/main/tools/ubuntu_vps_optimize.sh
 
 # 2. Make it executable
 chmod +x ubuntu_vps_optimize.sh

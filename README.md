@@ -110,7 +110,7 @@ chmod 600 /etc/ssl/private/*.key
 
 ```bash
 sudo -i
-curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh -o ~/install.sh
+curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh -o ~/install.sh
 bash ~/install.sh
 ```
 
@@ -145,7 +145,7 @@ FEATURE_HY2=true \
 FEATURE_AUTOUPDATE=true \
 FEATURE_KEEPALIVE=true \
 NODE_TAG="oracle-vps" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 #### 方案 B：极简极速模板（仅配置必填项）
@@ -155,7 +155,7 @@ sudo -i
 AUTO=1 \
 REALITY_DOMAIN="reality.example.com" \
 CDN_DOMAIN="cdn.example.com" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 #### 方案 C：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
@@ -170,7 +170,7 @@ H2_PORT=8445 \
 HY2_PORT=8443 \
 XHTTP_PATH="/$(openssl rand -hex 4)" \
 NODE_TAG="node-01" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/Xray-core-xhttp-cdn-tuned/releases/latest/download/install.sh)"
+bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 ```
 
 #### 全量环境变量配置矩阵速查表
