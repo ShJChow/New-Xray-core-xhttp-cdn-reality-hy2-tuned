@@ -4,50 +4,10 @@
 # 第 4 条 Hysteria2，后两条是 Reality TCP 直连兜底。
 proxies:
   # ---------- 经 CDN / QUIC 直连 ----------
-  # 1. 经 CDN：走 TCP（h2）。alpn 恰好只有 h3 时 mihomo 才走 HTTP/3
-  #    （transport/xhttp/client.go:159），本节点**刻意不这么做**。
-  #    改动理由（v4.6.0）：h3 把这条链路压在 UDP 443 上，而中国移动等运营商
-  #    对出境 UDP 443 普遍限速，且 alpn 只有 h3 时 mihomo 不会回落 TCP，
-  #    表现为该节点单独很慢而其余节点正常。
-  #    实测（服务器本机发起，CF 边缘就近，回源侧无差异）：
-  #      h3 65-77 MB/s，h2 73-85 MB/s，h2+http/1.1 73-85 MB/s，上行均 ~26 MB/s。
-  #    h3 的收益仅存在于 UDP 通畅的网络，代价是 UDP 被限速时无解。
-  #    故改为 h2 + http/1.1（Chrome 真实 ALPN 组合，指纹也更自然）。
-  #    仍需要 QUIC 时用 Vless-xhttp-h3-direct（直连 UDP ${H3_PORT}，不经 CDN）。
-  - name: Vless-xhttp-tls-cdn-${HOSTNAME_TAG}
-    type: vless
-    server: ${CDN_DOMAIN}
-    port: 443
-    uuid: ${UUID2}
-    udp: true
-    flow: ""
-    tls: true
-    network: xhttp
-    alpn:
-      - h2
-      - http/1.1
-    servername: ${CDN_DOMAIN}
-    client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
-    xhttp-opts:
-      host: ${CDN_DOMAIN}
-      path: ${XHTTP_PATH}
-      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
-      reuse-settings:
-        max-concurrency: "16-32"
-        c-max-reuse-times: "0"
-        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
-
-  # 1b. 经 CDN 的 QUIC 链路（v4.7.4 新增）：与节点 1 同 server / 同 port / 同 UUID /
-  #     同 path / 同 encryption，**唯一差别是 alpn 只有 h3**。
-  #     mihomo 仅在 alpn 恰好等于 h3 时才走 HTTP/3（transport/xhttp/client.go:159），
-  #     多列任何一个值都会退回 TCP——所以无法靠给节点 1 加 h3 来兼得，只能另开一条。
-  #     服务端零改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP，
-  #     因此这条节点不占用任何额外端口，也不需要安全组放行。
-  #     与节点 1 的取舍：h3 走 UDP 443，运营商限速出境 UDP 时更慢甚至不通；UDP 通畅
-  #     时省一次握手往返且不受 TCP 队头阻塞影响。两条都留，由「自动选择」按延迟择优。
-  #     v4.6.0 曾把节点 1 从 h3 改为 h2（实测 h3 65-77 MB/s、h2 73-85 MB/s），
-  #     本节点不是回退那次改动——是在保留 h2 主力的前提下把 h3 作为并存的备选。
+  # 1. 经 CDN 的 QUIC 链路（v4.7.4 新增）：
+  #    mihomo 仅在 alpn 恰好等于 h3 时才走 HTTP/3（transport/xhttp/client.go:159）。
+  #    服务端零改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP，
+  #    因此这条节点不占用任何额外端口，也不需要安全组放行。
   - name: Vless-xhttp-h3-cdn-${HOSTNAME_TAG}
     type: vless
     server: ${CDN_DOMAIN}

@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.7.18"
+PROJECT_VERSION="4.7.19"
 PROJECT_REPO="ShJChow/Xray-core-xhttp-cdn-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -51,21 +51,20 @@ FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
-# 节点集：默认 7 条，全部由 Xray 单核心提供
+# 节点集：默认 6 条，全部由 Xray 单核心提供
 # ==================================================
-#   1. Vless-xhttp-tls-cdn   经 CDN，h2/TCP
-#   2. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
-#   3. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
-#   4. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
-#   5. Vless-reality-vision  直连 TCP 443，Vision
-#   6. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
-#   7. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
+#   1. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
+#   2. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
+#   3. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
+#   4. Vless-reality-vision  直连 TCP 443，Vision
+#   5. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
+#   6. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
 
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
-# 默认关闭（保持 7 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
+# 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
 

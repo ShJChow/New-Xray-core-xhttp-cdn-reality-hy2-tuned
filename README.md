@@ -4,7 +4,7 @@
 
 >  **已在 Oracle ARM (4 核 24G) / Debian 12 & 13 (推荐) / Ubuntu 22.04 & 24.04 深度测试与调优**
 
-基于 Xray-core 的 **XHTTP + CDN + Reality + Hysteria2** 全能高可用部署方案。默认开启 **xpadding 流量填充混淆 / Hysteria2 Salamander 混淆 / 全套 7 条节点**，并在安装时自动应用**系统级与网络层流控调优（BBR + fq、64MB 缓冲区、1048576 句柄、全套安全加固）**，附带常驻管理工具 `xh`。
+基于 Xray-core 的 **XHTTP + CDN + Reality + Hysteria2** 全能高可用部署方案。默认开启 **xpadding 流量填充混淆 / Hysteria2 Salamander 混淆 / 全套 6 条节点**，并在安装时自动应用**系统级与网络层流控调优（BBR + fq、64MB 缓冲区、1048576 句柄、全套安全加固）**，附带常驻管理工具 `xh`。
 
 支持 V2rayN / Clash Verge Rev / Mihomo Party / Sing-box / Shadowrocket / Loon / Surge / onexray 等全平台客户端。
 
@@ -264,7 +264,7 @@ sudo sysctl -w net.ipv4.tcp_fastopen=3
 
 ## 五、节点拓扑与双轨架构
 
-安装完成后将提供 **7 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
+安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
 ```mermaid
 flowchart TD
@@ -287,36 +287,34 @@ flowchart TD
 
 | # | 节点名称 | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-TLS-CF-h2` | XHTTP (TCP) | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
-| **2** | `VLESS-XHTTP-TLS-CF-h3` | XHTTP (QUIC) | 经 CDN 443 | 经 CDN 的 QUIC 备用链路 |
-| **3** | `VLESS-XHTTP-TLS-QUIC` | XHTTP (QUIC) | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
-| **4** | `Hysteria2-QUIC-TLS` | Hysteria 2 | 直连 UDP 8443 | **Brutal 拥塞引擎**，弱网丢包杀手 |
-| **5** | `VLESS-TCP-REALITY-Vision` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
-| **6** | `VLESS-XHTTP-REALITY` | XHTTP-Reality | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
-| **7** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上下行分离 | 上行直连 / 下行 CDN | 兼顾极速上行握手与 CDN 下行大带宽 |
+| **1** | `VLESS-XHTTP-TLS-CF-h3` | XHTTP (QUIC) | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
+| **2** | `VLESS-XHTTP-TLS-QUIC` | XHTTP (QUIC) | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
+| **3** | `Hysteria2-QUIC-TLS` | Hysteria 2 | 直连 UDP 8443 | **Brutal 拥塞引擎**，弱网丢包杀手 |
+| **4** | `VLESS-TCP-REALITY-Vision` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
+| **5** | `VLESS-XHTTP-REALITY` | XHTTP-Reality | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
+| **6** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上下行分离 | 上行直连 / 下行 CDN | 兼顾极速上行握手与 CDN 下行大带宽 |
 
-### 七条核心节点实测吞吐
+### 六条核心节点实测吞吐
 
-在服务端本机为每条节点单独起一个 SOCKS 入口，**9 轮交替轮询**采样：每轮先测一次不走代理的直连基线，再依次测 7 条核心节点，因此同一轮内所有条目共享同样的上游状态。下载取 `cachefly.cachefly.net/50mb.test`，握手取 `www.gstatic.com/generate_204`。表中为 **9 次采样的中位数（最小–最大）**。
+在服务端本机为每条节点单独起一个 SOCKS 入口，**9 轮交替轮询**采样：每轮先测一次不走代理的直连基线，再依次测 6 条核心节点，因此同一轮内所有条目共享同样的上游状态。下载取 `cachefly.cachefly.net/50mb.test`，握手取 `www.gstatic.com/generate_204`。表中为 **9 次采样的中位数（最小–最大）**。
 
 | # | 节点 | 链路 | 下载 MB/s 中位（范围） | 握手 ms 中位（范围） |
 | :--- | :--- | :--- | ---: | ---: |
 | — | *直连基线（不走代理）* | — | *681.6（277.8–714.2）* | *23（21–26）* |
-| **1** | `VLESS-XHTTP-TLS-CF-h2` | 经 CDN 443/TCP | 49.2（36.0–114.3） | 247（79–821） |
-| **2** | `VLESS-XHTTP-TLS-CF-h3` | 经 CDN 443/UDP | 57.8（35.3–80.2） | 217（88–643） |
-| **3** | `VLESS-XHTTP-TLS-QUIC` | 直连 8446/UDP | 59.3（45.2–67.1） | 25（23–36） |
-| **4** | `Hysteria2-QUIC-TLS` | 直连 8443/UDP | 32.2（28.8–43.6） | 26（23–66） |
-| **5** | `VLESS-TCP-REALITY-Vision` | 直连 443/TCP | **374.1（285.2–432.2）** | 26（25–33） |
-| **6** | `VLESS-XHTTP-REALITY` | 直连 443/TCP | 97.5（91.0–134.4） | 25（23–65） |
-| **7** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上行直连 / 下行 CDN | 99.6（88.9–111.1） | 25（24–30） |
+| **1** | `VLESS-XHTTP-TLS-CF-h3` | 经 CDN 443/UDP | 57.8（35.3–80.2） | 217（88–643） |
+| **2** | `VLESS-XHTTP-TLS-QUIC` | 直连 8446/UDP | 59.3（45.2–67.1） | 25（23–36） |
+| **3** | `Hysteria2-QUIC-TLS` | 直连 8443/UDP | 32.2（28.8–43.6） | 26（23–66） |
+| **4** | `VLESS-TCP-REALITY-Vision` | 直连 443/TCP | **374.1（285.2–432.2）** | 26（25–33） |
+| **5** | `VLESS-XHTTP-REALITY` | 直连 443/TCP | 97.5（91.0–134.4） | 25（23–65） |
+| **6** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上行直连 / 下行 CDN | 99.6（88.9–111.1） | 25（24–30） |
 
 怎么读这张表：
 
 - **测的是服务端侧的协议栈开销，不是你的实际网速。** 客户端跑在 VPS 本机、经公网 IP 回环，不含最后一公里。直连基线 681.6 MB/s 说明上游几乎不构成瓶颈，因此各节点的差距基本可归因于协议栈本身——但这也意味着**表里没有任何一个数字是你在真实跨境链路上能跑到的**。
-- **必须看范围，不能只看中位数。** 早期用单次采样、且测速源本身抖动到数倍时，节点间的排名完全是噪声。换成快速稳定的源并取 9 次中位数后结论才立得住；即便如此，1、2 两条 CDN 节点的握手仍在 79–821 ms 之间大幅波动——那是 Cloudflare 选边缘的结果，不是服务端的抖动。
-- **5 号 Reality-Vision 一骑绝尘（374 MB/s，约为直连基线的 55%）**，与 `xtls-rprx-vision` 走 Splice 零拷贝、数据不经用户态搬运的设计相符，是全部核心节点里唯一达到这个量级的。
-- **4 号 Hysteria 2 是最慢也最稳的一档**（32.2 MB/s，波动最小）。瓶颈在协议自身的拥塞控制与用户态包处理，而非链路——同机直连有 681 MB/s 可作对照。它的价值在弱网丢包场景，本测试环境（零丢包）恰好是它最不占优的场景。
-- **6 与 7 中位数几乎相同**（97.5 / 99.6）。上下行分离的收益在本机回环里体现不出来——下行走 CDN 那半段在这里没有任何优势，要在真实跨境链路上才有意义。
+- **必须看范围，不能只看中位数。** 早期用单次采样、且测速源本身抖动到数倍时，节点间的排名完全是噪声。换成快速稳定的源并取 9 次中位数后结论才立得住；即便如此，1 号 CDN 节点的握手仍在 79–821 ms 之间大幅波动——那是 Cloudflare 选边缘的结果，不是服务端的抖动。
+- **4 号 Reality-Vision 一骑绝尘（374 MB/s，约为直连基线的 55%）**，与 `xtls-rprx-vision` 走 Splice 零拷贝、数据不经用户态搬运的设计相符，是全部核心节点里唯一达到这个量级的。
+- **3 号 Hysteria 2 是最慢也最稳的一档**（32.2 MB/s，波动最小）。瓶颈在协议自身的拥塞控制与用户态包处理，而非链路——同机直连有 681 MB/s 可作对照。它的价值在弱网丢包场景，本测试环境（零丢包）恰好是它最不占优的场景。
+- **5 与 6 中位数几乎相同**（97.5 / 99.6）。上下行分离的收益在本机回环里体现不出来——下行走 CDN 那半段在这里没有任何优势，要在真实跨境链路上才有意义。
 
 复现方法与自检命令见 `xh diag`；若某条节点在客户端不通而本机自测正常，问题在该设备到 VPS 的网络路径，而非服务端配置。
 
@@ -329,7 +327,7 @@ flowchart TD
 Reality 节点的认证在服务端会被记录为 `authentication failed or validation criteria not met`，常见原因及排查方法如下：
 - **① 客户端系统时间偏差 > 30 秒（最常见）**：Reality 握手带有时间戳防重放校验。若手机/电脑系统时间与标准网络时间相差 30 秒以上，服务端会直接拒绝连接。**解决方法：在客户端设备设置中开启「自动从网络同步时间」**。
 - **② 客户端 Public Key (公钥) 或 ShortId 不匹配**：若服务端重新生成过配置，旧节点链接中的公钥失效。**解决方法：在 VPS 运行 `xh info` 或 `xh sub`，重新复制/导入最新节点链接**。
-- **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 6 / 节点 7）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
+- **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 5 / 节点 6）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
 

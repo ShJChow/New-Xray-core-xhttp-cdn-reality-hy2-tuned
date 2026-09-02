@@ -5,7 +5,7 @@
 **Tested on Oracle 4 OCPU / 24 GB, Ubuntu 26.04 and Debian 13 (recommended).**
 
 A one-command deployment of **XHTTP + CDN** built on Xray-core, with **xpadding,
-Hysteria2 obfuscation and all 7 nodes enabled by default** (ECH is off by default;
+Hysteria2 obfuscation and all 6 nodes enabled by default** (ECH is off by default;
 set `CDN_ECH=y` to enable it). Kernel-level network tuning (BBR + fq, buffers, file
 descriptors) is applied automatically at install time, and a resident management
 command `xh` is installed alongside.
@@ -98,21 +98,16 @@ airport-style names instead, see [Custom node names](#custom-node-names).
 
 | # | Node name | Path | Transport |
 |---|---|---|---|
-| 1 | `Vless-xhttp-tls-cdn-<host>` | Via CDN, **TCP 443** | XHTTP + TLS, alpn h2 + http/1.1 (v4.6.0 switched this back from h3 to TCP; the `UDP` in the name is a leftover from before that change, kept so existing clients do not lose their node selection) |
-| 2 | `Vless-xhttp-h3-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 only (added in v4.7.4 as node 1's QUIC twin; no server-side change) |
-| 3 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8446** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
-| 4 | `Vless-xhttp-h2-tcp-direct-<host>` | Direct to VPS, **TCP 8445** | XHTTP + TLS, alpn h2 + http/1.1, `mode=stream-up` (v4.7.13, ~50 ms faster than auto); added in v4.7.0 as node 3's TCP twin. Recommended on mobile |
-| 5 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
-| 6 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
-| 7 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
-| 8 | `Vless-xhttp-reality-up-cdn-down-<host>` | Upload Reality direct 443, Download TLS CDN 443 | XHTTP Split-Routing (Uplink via Reality direct, Downlink via CDN) |
+| 1 | `Vless-xhttp-h3-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 (QUIC over Cloudflare CDN; no server-side change) |
+| 2 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8446** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
+| 3 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
+| 4 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
+| 5 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
+| 6 | `Vless-xhttp-reality-up-cdn-down-<host>` | Upload Reality direct 443, Download TLS CDN 443 | XHTTP Split-Routing (Uplink via Reality direct, Downlink via CDN) |
 
-Nodes 3 and 5 are bare UDP to the VPS and node 4 is TCP 8445, so all three need to be
-opened in your **cloud provider's security group** (UDP 8446, UDP 8443, TCP 8445). Node 2
-goes through the CDN over Cloudflare's UDP 443 and needs **no** port opened at all — that
-layer sits outside the machine, where the script can neither see nor change anything. If
-the Xray core is older than 26.6.1, nodes 2 and 4 are disabled automatically. Node 4's port
-can be set with `H2_PORT=<port>`, or turned off entirely with `FEATURE_H2_DIRECT=false`.
+Nodes 2 and 3 are bare UDP to the VPS, so both need to be opened in your **cloud provider's security group** (UDP 8446, UDP 8443). Node 1
+goes through the CDN over Cloudflare's UDP 443 and needs **no** port opened at all — that layer sits outside the machine. Optional TCP 8445
+can be enabled with `FEATURE_H2_DIRECT=true`.
 
 > **Known limitation of node 2** (downgraded to opt-in in v4.0.3, back on by default in
 > v4.2.0): XHTTP over h3 has two upstream issues that are unfixed and closed as not
