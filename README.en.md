@@ -328,7 +328,7 @@ FEATURE_AUTO_TUNING=true \
 FEATURE_XPADDING=true \
 FEATURE_CDN_ECH=false \
 FEATURE_H3_DIRECT=true \
-FEATURE_H2_DIRECT=true \
+FEATURE_H2_DIRECT=false \
 FEATURE_HY2=true \
 FEATURE_AUTOUPDATE=true \
 FEATURE_KEEPALIVE=true \
@@ -378,6 +378,7 @@ Available environment variables:
 | `CDN_ECH` | `y` enables ECH (must be enabled in Cloudflare Edge Certificates first, or the CDN nodes fail the handshake) | `n` |
 | `VISION_UDP443` | `1` makes node 1 use `xtls-rprx-vision-udp443` (client support required) | `0` |
 | `FEATURE_H3_DIRECT` | `false` disables the direct h3 node (UDP 8446; known upstream issues, on by default) | `true` |
+| `FEATURE_H2_DIRECT` | `true` enables direct HTTP/2 TCP node (TCP 8445; off by default for 7-node layout) | `false` |
 | `FEATURE_HY2` | `false` disables the Hysteria2-obfs node (UDP 8443) | `true` |
 | `FEATURE_AUTO_TUNING` | `false` skips the automatic kernel tuning at install time (`xh tuning off` rolls it back at any point) | `true` |
 | `H3_PORT` / `HY2_PORT` | Ports for the two direct UDP nodes (`H3_PORT` may not be 443; it is forced back to 8446) | `8446` / `8443` |
