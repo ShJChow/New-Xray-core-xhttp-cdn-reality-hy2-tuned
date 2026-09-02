@@ -601,6 +601,13 @@ cmd_tuning() {
       done
       [[ "$kept_user" -eq 1 ]] && \
         warn "你自己修改过的 override.conf 已保留（本命令只移除本项目写入的 10-xray-xhttp.conf）"
+      # 与 fs.nr_open 对齐用的 DefaultLimitNOFILE drop-in 也一并移除（见
+      # align_default_nofile）。删掉后 systemd 回到 /etc/systemd/system.conf 的值。
+      if [[ -f /etc/systemd/system.conf.d/10-xray-xhttp-nofile.conf ]]; then
+        rm -f /etc/systemd/system.conf.d/10-xray-xhttp-nofile.conf
+        rmdir /etc/systemd/system.conf.d 2>/dev/null || true
+        systemctl daemon-reexec >/dev/null 2>&1 || true
+      fi
       [[ "$SERVICE_TYPE" == "systemd" ]] && systemctl daemon-reload >/dev/null 2>&1
       sysctl --system >/dev/null 2>&1 || true
       info "已移除本项目写入的全部调优配置"

@@ -17,6 +17,53 @@
 
 sysctl_get() { sysctl -n "$1" 2>/dev/null || true; }
 
+# fs.nr_open 是单进程可打开句柄数的内核硬上限，systemd 的 DefaultLimitNOFILE 无论
+# 写多大都不能越过它。两者一旦倒挂（DefaultLimitNOFILE > fs.nr_open），systemd 在
+# 拉起任何"没有自己声明 LimitNOFILE"的服务时都会在设限那一步失败：
+#
+#   Failed to adjust resource limit RLIMIT_NOFILE: Operation not permitted
+#   Failed at step LIMITS spawning ...: Operation not permitted
+#   Main process exited, code=exited, status=205/LIMITS
+#
+# 这不是本项目独有的坑，而是我们把 fs.nr_open 钉到 1048576 之后，会让别的调优脚本
+# 早先写下的更大的 DefaultLimitNOFILE 变成非法值。实测踩过：某第三方 TCP 调优脚本
+# 写了 DefaultLimitNOFILE=2097152，本项目随后设 fs.nr_open=1048576，结果 logrotate /
+# apt-daily / systemd-timedated / netfilter-persistent 等十个单元全部起不来；xray 与
+# nginx 反而幸免——因为它们的 drop-in 自带 LimitNOFILE=1048576，没走默认值。
+#
+# 所以设完 fs.nr_open 必须把 DefaultLimitNOFILE 拉回来对齐。写 system.conf.d/ 下的
+# drop-in 而不是改 /etc/systemd/system.conf 本体：drop-in 优先级更高，别的脚本以后
+# 再改主文件也覆盖不掉我们，且 xh tuning off 删一个文件即可干净回滚。
+align_default_nofile() {
+  [[ "$SERVICE_TYPE" == "systemd" ]] || return 0
+
+  local nr_open cur
+  nr_open=$(sysctl_get fs.nr_open)
+  [[ "$nr_open" =~ ^[0-9]+$ ]] || return 0
+
+  cur=$(systemctl show -p DefaultLimitNOFILE --value 2>/dev/null)
+  # infinity 同样越界（systemd 会解析成远大于 nr_open 的值）
+  if [[ "$cur" =~ ^[0-9]+$ ]] && [[ "$cur" -le "$nr_open" ]]; then
+    return 0
+  fi
+
+  install -d -m 755 /etc/systemd/system.conf.d 2>/dev/null || {
+    warn "无法创建 /etc/systemd/system.conf.d，跳过 DefaultLimitNOFILE 对齐"; return 0; }
+  if ! cat > /etc/systemd/system.conf.d/10-xray-xhttp-nofile.conf <<EOF
+# 由 xh tuning on 生成 / xh tuning off 移除。
+# 与 fs.nr_open 对齐——高于它会让 systemd 无法启动未自带 LimitNOFILE 的服务
+# （报 205/LIMITS）。详见 src/06-tuning-lib.sh 中 align_default_nofile 的注释。
+[Manager]
+DefaultLimitNOFILE=${nr_open}
+EOF
+  then
+    warn "写入 DefaultLimitNOFILE drop-in 失败"
+    return 0
+  fi
+  systemctl daemon-reexec >/dev/null 2>&1 || warn "systemctl daemon-reexec 失败"
+  info "已将 DefaultLimitNOFILE 由 ${cur:-未设置} 对齐到 fs.nr_open=${nr_open}（原值越界会导致服务报 205/LIMITS）"
+}
+
 apply_system_tuning() {
   local SYSCTL_APPLIED=() SYSCTL_SKIPPED=() TUNING_BBR_OK=false
   local MEM_MB CPU_CORES ARCH PAGE_SIZE MEM_PAGES
@@ -178,6 +225,7 @@ apply_system_tuning() {
   # ---------- 文件句柄 ----------
   try_sysctl fs.file-max 1048576
   try_sysctl fs.nr_open 1048576
+  align_default_nofile
 
   # ---------- 路由与网络硬件队列增强（best-effort）----------
   # 1. 优化默认路由初始拥塞窗口（initcwnd/initrwnd 32），加速 TLS 握手
