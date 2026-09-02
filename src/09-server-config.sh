@@ -68,13 +68,13 @@ EOF
 # sockopt 是 Xray 建的 socket 选项，sysctl 都调不到，只能在 config.json 里写。
 # --------------------------------------------------
 # policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），同样配置
-# ARM 机器吞吐被压死。按内存分档显式写入，三档 512 / 256 / 64 KB。
+# ARM 机器吞吐被压死。按内存分档显式写入，三档 2048 / 1024 / 256 KB。
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=1024
-elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=512
-else XRAY_BUFFER_KB=128
+if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=2048
+elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=1024
+else XRAY_BUFFER_KB=256
 fi
-XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":300,\"uplinkOnly\":2,\"downlinkOnly\":5,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":300,\"uplinkOnly\":1,\"downlinkOnly\":2,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
 
 
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
