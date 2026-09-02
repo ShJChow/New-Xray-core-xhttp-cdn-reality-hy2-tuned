@@ -35,11 +35,34 @@ sysctl_get() { sysctl -n "$1" 2>/dev/null || true; }
 # drop-in 而不是改 /etc/systemd/system.conf 本体：drop-in 优先级更高，别的脚本以后
 # 再改主文件也覆盖不掉我们，且 xh tuning off 删一个文件即可干净回滚。
 align_default_nofile() {
-  [[ "$SERVICE_TYPE" == "systemd" ]] || return 0
-
   local nr_open cur
   nr_open=$(sysctl_get fs.nr_open)
   [[ "$nr_open" =~ ^[0-9]+$ ]] || return 0
+
+  # 1. 清理 /etc/profile 与 /etc/profile.d/ 中第三方脚本遗留的全局 ulimit 语句
+  # 避免非 root 用户登录时报 "-bash: ulimit: open files: cannot modify limit: Operation not permitted"
+  if [[ -f /etc/profile ]]; then
+    if grep -qE "ulimit[[:space:]]+-[A-Za-z]*n[[:space:]]+[0-9]+" /etc/profile 2>/dev/null; then
+      sed -i -E "/ulimit[[:space:]]+-[A-Za-z]*n[[:space:]]+[0-9]+/d" /etc/profile
+      info "已清理 /etc/profile 中遗留的全局 ulimit 语句（修复非 root 登录时的 Operation not permitted 报错）"
+    fi
+  fi
+  local pf
+  for pf in /etc/profile.d/*.sh; do
+    [[ -f "$pf" ]] || continue
+    if grep -qE "ulimit[[:space:]]+-[A-Za-z]*n[[:space:]]+[0-9]+" "$pf" 2>/dev/null; then
+      sed -i -E "/ulimit[[:space:]]+-[A-Za-z]*n[[:space:]]+[0-9]+/d" "$pf"
+      info "已清理 ${pf} 中遗留的全局 ulimit 语句"
+    fi
+  done
+
+  # 2. 修复 /etc/security/limits.conf 中大于 fs.nr_open 的越界配置
+  if [[ -f /etc/security/limits.conf ]]; then
+    sed -i -E "s/nofile[[:space:]]+[0-9]+/nofile ${nr_open}/g" /etc/security/limits.conf 2>/dev/null || true
+  fi
+
+  # 3. 对齐 systemd DefaultLimitNOFILE
+  [[ "$SERVICE_TYPE" == "systemd" ]] || return 0
 
   cur=$(systemctl show -p DefaultLimitNOFILE --value 2>/dev/null)
   # infinity 同样越界（systemd 会解析成远大于 nr_open 的值）
