@@ -21,7 +21,7 @@ proxies:
       - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
+    encryption: "none"${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
@@ -47,7 +47,7 @@ proxies:
       - h3
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}
+    encryption: "none"
     xhttp-opts:
       path: ${XHTTP_PATH}
       mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
@@ -78,7 +78,7 @@ proxies:
       - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
-    encryption: ${VLESSENC_ENCRYPTION}
+    encryption: "none"
     xhttp-opts:
       path: ${XHTTP_PATH}
       mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
@@ -132,7 +132,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: ${VLESSENC_ENCRYPTION}
+    encryption: "none"
     network: xhttp
     alpn:
       - h2
@@ -157,7 +157,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: ${VLESSENC_ENCRYPTION}
+    encryption: "none"
     network: xhttp
     alpn:
       - h2

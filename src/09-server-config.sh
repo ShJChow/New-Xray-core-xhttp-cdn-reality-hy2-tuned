@@ -134,7 +134,7 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                         "level": 0
                     }
                 ],
-                "decryption": "${VLESSENC_DECRYPTION}"
+                "decryption": "none"
             },
             "streamSettings": {
                 "network": "xhttp",
@@ -183,7 +183,7 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
                         "level": 0
                     }
                 ],
-                "decryption": "${VLESSENC_DECRYPTION}"
+                "decryption": "none"
             },
             "streamSettings": {
                 "network": "xhttp",

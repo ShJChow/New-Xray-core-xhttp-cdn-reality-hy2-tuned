@@ -139,7 +139,7 @@ fi
 # 实测经 Cloudflare 用 stream-up：CDN-TLS 吞吐直接掉到 0、CDN-H3 连接超时。
 # Reality 节点也不用改——它的 auto 本来就会选 stream-up（实测 18ms）。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
+  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=none&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
 else
   H3_DIRECT_NODE_LINE=""
 fi
@@ -152,12 +152,12 @@ fi
 # CDN 存在则它必然可生成。真正决定它能否用的是 Cloudflare 侧是否开着 HTTP/3
 # （默认开启，`curl -sI https://<cdn域名>/ | grep alt-svc` 可确认），
 # 那是安装脚本无从探测也无权更改的东西，做成开关只会给出虚假的控制感。
-H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-cdn-${HOSTNAME_TAG}"
+H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-cdn-${HOSTNAME_TAG}"
 
 # h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
 # alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
 if [[ "$FEATURE_H2_DIRECT" == true ]]; then
-  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}"
+  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=none&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}"
 else
   H2_DIRECT_NODE_LINE=""
 fi
