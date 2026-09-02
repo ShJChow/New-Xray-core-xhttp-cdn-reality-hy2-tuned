@@ -21,7 +21,7 @@ proxies:
       - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
-    encryption: "none"${MIHOMO_ECH_PROXY_BLOCK}
+    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
@@ -29,6 +29,7 @@ proxies:
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
   #<<FEATURE_H3_DIRECT
@@ -47,13 +48,14 @@ proxies:
       - h3
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
-    encryption: "none"
+    encryption: ${VLESSENC_ENCRYPTION}
     xhttp-opts:
       path: ${XHTTP_PATH}
       mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
   #>>FEATURE_H3_DIRECT
 
@@ -78,13 +80,14 @@ proxies:
       - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
-    encryption: "none"
+    encryption: ${VLESSENC_ENCRYPTION}
     xhttp-opts:
       path: ${XHTTP_PATH}
       mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
   #>>FEATURE_H2_DIRECT
 
@@ -132,7 +135,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: "none"
+    encryption: ${VLESSENC_ENCRYPTION}
     network: xhttp
     alpn:
       - h2
@@ -147,6 +150,7 @@ proxies:
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
   - name: Vless-xhttp-reality-up-cdn-down-${HOSTNAME_TAG}
@@ -157,7 +161,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: "none"
+    encryption: ${VLESSENC_ENCRYPTION}
     network: xhttp
     alpn:
       - h2
@@ -172,6 +176,7 @@ proxies:
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
       download-settings:
         server: ${CDN_DOMAIN}
@@ -190,5 +195,6 @@ proxies:
           reuse-settings:
             max-concurrency: "16-32"
             c-max-reuse-times: "0"
+            h-max-request-times: "600-900"
             h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
 

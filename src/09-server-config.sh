@@ -79,12 +79,12 @@ XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":30
 
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
 if [[ "$AVAIL" == *bbr* ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
 else
   warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000,"tcpNoDelay":true}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
 fi
 
 # ==================================================
@@ -134,7 +134,7 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                         "level": 0
                     }
                 ],
-                "decryption": "none"
+                "decryption": "${VLESSENC_DECRYPTION}"
             },
             "streamSettings": {
                 "network": "xhttp",
@@ -183,7 +183,7 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
                         "level": 0
                     }
                 ],
-                "decryption": "none"
+                "decryption": "${VLESSENC_DECRYPTION}"
             },
             "streamSettings": {
                 "network": "xhttp",
@@ -225,7 +225,7 @@ if [[ "$FEATURE_HY2" == true ]]; then
             "protocol": "hysteria",
             "settings": {
                 "version": 2,
-                "users": [
+                "clients": [
                     {
                         "auth": "${HY2_PASSWORD}",
                         "level": 0

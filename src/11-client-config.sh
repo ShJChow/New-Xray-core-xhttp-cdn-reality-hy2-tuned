@@ -32,15 +32,18 @@ fi
 
 rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null || true
 
+# xmux 参数依据 Xray 官方文档及 #4113 建议：
+#   maxConcurrency: 16-32  → 兼顾多路复用与抗审查
+#   cMaxReuseTimes: 0      → leftUsage = -1，无限复用
+#   hMaxRequestTimes: 600-900 → 避免 Nginx 单连接累计 1000 请求断开
+#   hMaxReusableSecs: 1800-3000 → 定期切换主连接消除特征
+#   hKeepAlivePeriod: 0    → h3 取 quic-go 默认、h2 取 Chrome 默认
+XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
-  # xmux 参数与上游 Yulinanami/my-xhttp-cdn-config 完全一致，本项目不再改动：
-  #   cMaxReuseTimes: 0    → leftUsage = -1，**无限复用**，不是"不复用"
-  #   hKeepAlivePeriod: 0  → h3 取 quic-go 默认、h2 取 Chrome 默认，不是"禁用"
-  #                          （负值才是禁用，见 dialer.go:154-186）
-  # 这两项写死为"采用默认"，改成拍脑袋的正值等于覆盖掉更好的默认（L16）。
-  XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
   XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D"
 
   MIHOMO_XPADDING_XHTTP_BLOCK=$(cat <<EOF
 
@@ -78,8 +81,8 @@ EOF
 )
 else
   XPAD_FIELDS_ENC=""
-  XMUX_ENC=""
-  XPAD_EXTRA_ENC=""
+  XPAD_EXTRA_ENC="%7B${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D"
   MIHOMO_XPADDING_XHTTP_BLOCK=""
   MIHOMO_XPADDING_DOWNLOAD_BLOCK=""
   MIHOMO_SC_MIN_POSTS_BLOCK=""
@@ -97,9 +100,9 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
   XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 else
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
-  XPAD_SPLIT_EXTRA_ENC="%7B${DOWNLOAD_SETTINGS_ENC}%7D"
+  XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
@@ -139,7 +142,7 @@ fi
 # 实测经 Cloudflare 用 stream-up：CDN-TLS 吞吐直接掉到 0、CDN-H3 连接超时。
 # Reality 节点也不用改——它的 auto 本来就会选 stream-up（实测 18ms）。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=none&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
+  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#Vless-xhttp-h3-direct-${HOSTNAME_TAG}"
 else
   H3_DIRECT_NODE_LINE=""
 fi
@@ -152,12 +155,12 @@ fi
 # CDN 存在则它必然可生成。真正决定它能否用的是 Cloudflare 侧是否开着 HTTP/3
 # （默认开启，`curl -sI https://<cdn域名>/ | grep alt-svc` 可确认），
 # 那是安装脚本无从探测也无权更改的东西，做成开关只会给出虚假的控制感。
-H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h3-cdn-${HOSTNAME_TAG}"
+H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#Vless-xhttp-h3-cdn-${HOSTNAME_TAG}"
 
 # h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
 # alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
 if [[ "$FEATURE_H2_DIRECT" == true ]]; then
-  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=none&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_FIELDS_ENC:+&extra=%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D}#Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}"
+  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#Vless-xhttp-h2-tcp-direct-${HOSTNAME_TAG}"
 else
   H2_DIRECT_NODE_LINE=""
 fi

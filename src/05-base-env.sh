@@ -181,9 +181,14 @@ if [[ "$CDN_ECH_ENABLED" == true ]]; then
   CDN_ECH_QUERY_ENC=$(echo "$CDN_ECH_QUERY" | sed -e 's/%/%25/g' -e 's/+/%2B/g' -e 's/:/%3A/g' -e 's/\//%2F/g')
 fi
 
-info "配置 VLESS Encryption (默认 none，保证客户端全平台兼容)..."
-VLESSENC_ENCRYPTION="none"
-VLESSENC_DECRYPTION="none"
+info "生成 VLESS Encryption 密钥 (X25519 认证，临时密钥交换保持后量子 ML-KEM-768，保证 URL 与客户端全兼容)..."
+if ! VLESSENC_OUTPUT=$(xray vlessenc 2>&1) || ! grep -qi "encryption" <<< "$VLESSENC_OUTPUT"; then
+  error "VLESS Encryption 密钥生成失败，请确保 Xray 版本支持 vlessenc。输出: $VLESSENC_OUTPUT"
+fi
+VLESSENC_ENCRYPTION=$(echo "$VLESSENC_OUTPUT" | awk -F'"' '/Authentication: X25519/{found=1} found && /"encryption"/{print $4; exit}')
+VLESSENC_DECRYPTION=$(echo "$VLESSENC_OUTPUT" | awk -F'"' '/Authentication: X25519/{found=1} found && /"decryption"/{print $4; exit}')
+[[ -z "$VLESSENC_ENCRYPTION" ]] && error "未能提取 VLESS Encryption Key，xray vlessenc 输出: $VLESSENC_OUTPUT"
+[[ -z "$VLESSENC_DECRYPTION" ]] && error "未能提取 VLESS Decryption Key，xray vlessenc 输出: $VLESSENC_OUTPUT"
 if [[ "$IP_CHOICE" == "2" ]]; then
   VPS_IP=$(curl -6 -s --max-time 5 ip.sb)
   [[ -z "$VPS_IP" ]] && error "无法获取 IPv6 地址"

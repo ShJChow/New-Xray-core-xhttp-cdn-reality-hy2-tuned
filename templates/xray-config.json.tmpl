@@ -53,7 +53,7 @@
                 "decryption": "none",
                 "fallbacks": [
                     {
-                        "dest": "8001",
+                        "dest": "127.0.0.1:8001",
                         "xver": 0
                     }
                 ]
@@ -63,7 +63,7 @@
                 "security": "reality",
                 "realitySettings": {
                     "show": false,
-                    "target": "8003",
+                    "target": "127.0.0.1:8003",
                     "xver": 0,
                     "serverNames": [
                         "${REALITY_DOMAIN}",
@@ -99,7 +99,7 @@
                         "level": 0
                     }
                 ],
-                "decryption": "none"
+                "decryption": "${VLESSENC_DECRYPTION}"
             },
             "streamSettings": {
                 "network": "xhttp",
@@ -119,7 +119,6 @@
                 "sockopt": {
                     "trustedXForwardedFor": ["X-Real-IP"],
                     "tcpFastOpen": true,
-                    "tcpNoDelay": true,
                     "tcpcongestion": "bbr",
                     "tcpKeepAliveIdle": 30,
                     "tcpKeepAliveInterval": 5,
@@ -148,7 +147,6 @@
             },
             "streamSettings": {
                 "sockopt": {
-                    "tcpNoDelay": true,
                     "tcpFastOpen": true,
                     "tcpcongestion": "bbr",
                     "tcpKeepAliveIdle": 30,
