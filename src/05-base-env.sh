@@ -172,7 +172,14 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
                     "xPaddingKey": "${XHTTP_PADDING_KEY}",
                     "xPaddingHeader": "${XHTTP_PADDING_HEADER}",
                     "xPaddingPlacement": "${XHTTP_PADDING_PLACEMENT}",
-                    "xPaddingMethod": "${XHTTP_PADDING_METHOD}"
+                    "xPaddingMethod": "${XHTTP_PADDING_METHOD}",
+                    "scStreamUpServerSecs": "20-50"
+EOF
+)
+else
+  XRAY_XHTTP_PADDING_JSON=$(cat <<EOF
+,
+                    "scStreamUpServerSecs": "20-50"
 EOF
 )
 fi

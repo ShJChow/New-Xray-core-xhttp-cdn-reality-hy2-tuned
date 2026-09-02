@@ -222,11 +222,9 @@ apply_system_tuning() {
   # 极大，一条丢包严重的连接会把偏低的 ssthresh 写进缓存，之后**同网段**的新连接
   # 全部继承这个坏起点，慢启动被人为压制。关掉后每条连接独立探测。
   try_sysctl net.ipv4.tcp_no_metrics_save 1
-  # tcp_retries2 = 8：死连接在内核层约 1 分钟内被关闭（默认 15 约 15 分钟）。
-  # 代理机器上对端死亡（掉线/关机/被墙）后，连接表槽位与 fd 被僵尸连接占住，
-  # 收得越快、给正常连接腾的资源越多。代价是瞬时网络抖动可能更早报错——
-  # 对代理是收益：应用层（Xray 自动重连）能更快接管。
-  try_sysctl net.ipv4.tcp_retries2 8
+  # tcp_retries2 = 12：兼顾死连接清理与抗跨境网络抖动（约 3.5 分钟重试窗口）。
+  # 避免因此前 8 次（约 50 秒）过于激进导致高峰期跨境网络微小丢包抖动时直接断连。
+  try_sysctl net.ipv4.tcp_retries2 12
   # 出站 SYN 最多重试 4 次（约 30s），默认 6 次（约 3 分钟）。连接发给回落站/上游
   # 时对端若不可达，不必为已死的对端浪费 3 分钟。
   try_sysctl net.ipv4.tcp_syn_retries 4
@@ -235,9 +233,10 @@ apply_system_tuning() {
   # 该 RST。零成本，语义上是防御性的。
   try_sysctl net.ipv4.tcp_rfc1337 1
   try_sysctl net.ipv4.tcp_fin_timeout 15
-  try_sysctl net.ipv4.tcp_keepalive_time 600
-  try_sysctl net.ipv4.tcp_keepalive_intvl 30
-  try_sysctl net.ipv4.tcp_keepalive_probes 5
+  # TCP Keepalive 60s / 10s / 6次：彻底解决空闲长连接被家用路由器 / 运营商 NAT 防火墙超时掐断
+  try_sysctl net.ipv4.tcp_keepalive_time 60
+  try_sysctl net.ipv4.tcp_keepalive_intvl 10
+  try_sysctl net.ipv4.tcp_keepalive_probes 6
 
   # ---------- 内存行为（v3.0.2 从 ubuntu_vps_optimize.sh 同步）----------
   # 转发型服务器没有写负载，降低 swap 倾向但不关——OOM 时 swap 比杀进程安全。
@@ -252,11 +251,15 @@ apply_system_tuning() {
 
   # ---------- 路由与网络硬件队列增强（best-effort）----------
   # 1. 优化默认路由初始拥塞窗口（initcwnd/initrwnd 32），加速 TLS 握手
-  local def_route clean_route
+  local def_route clean_route def_dev
   def_route=$(ip route show default 2>/dev/null | head -1)
   if [[ -n "$def_route" ]]; then
     clean_route=$(echo "$def_route" | sed 's/ initcwnd [0-9]*//g; s/ initrwnd [0-9]*//g')
     ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
+    def_dev=$(echo "$def_route" | awk '{print $5}')
+    if [[ -n "$def_dev" ]]; then
+      ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
+    fi
   fi
 
   # 2. RPS/RFS 多核软中断调优与网卡流控

@@ -67,24 +67,27 @@ EOF
 # 与 `xh tuning on` 的 sysctl 层互不冲突：bufferSize 是 Xray 进程内的 Go 分配、
 # sockopt 是 Xray 建的 socket 选项，sysctl 都调不到，只能在 config.json 里写。
 # --------------------------------------------------
-# policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），同样配置
-# ARM 机器吞吐被压死。按内存分档显式写入，三档 2048 / 1024 / 256 KB。
+# policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），显式按内存分档
+# 扩容三档 4096 / 2048 / 512 KB，释放 4K/8K 与千兆高吞吐性能。
+# 超时调优：handshake 10s（防跨境抖动重试断开）、connIdle 1800s（30分钟长连接保活）、
+# uplinkOnly 5s / downlinkOnly 10s（防非对称关闭提前截断数据）。
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=2048
-elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=1024
-else XRAY_BUFFER_KB=256
+if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=4096
+elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=2048
+else XRAY_BUFFER_KB=512
 fi
-XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":4,\"connIdle\":300,\"uplinkOnly\":1,\"downlinkOnly\":2,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":10,\"connIdle\":1800,\"uplinkOnly\":5,\"downlinkOnly\":10,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
 
 
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
+# tcpUserTimeout 设为 300000 (5分钟)，杜绝因 20s/60s 瞬时抖动杀死健康连接
 if [[ "$AVAIL" == *bbr* ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 else
   warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":60000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi
 
 # ==================================================
@@ -246,6 +249,7 @@ if [[ "$FEATURE_HY2" == true ]]; then
                 },
                 "hysteriaSettings": {
                     "version": 2,
+                    "udpIdleTimeout": 300,
                     "masquerade": {
                         "type": "proxy",
                         "url": "https://127.0.0.1:8003",
