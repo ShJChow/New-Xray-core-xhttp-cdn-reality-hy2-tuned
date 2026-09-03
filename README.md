@@ -1,5 +1,5 @@
 # xray-xhttp
-
+小白请使用ai agent，把本项目发给agent配置。
 **语言：** **简体中文** · [English](./README.en.md) · [فارسی](./README.fa.md)
 
 >  **已在 Oracle ARM (4 核 24G) / Debian 12 & 13 (推荐) / Ubuntu 22.04 & 24.04 深度测试与调优**
