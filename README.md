@@ -331,6 +331,12 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
 
+> **关于 `minClientVer` 的提示**：为兼容 mihomo/sing-box 等非 Xray 内核，本项目把 Reality
+> 的 `minClientVer` 从 26.x 新默认值 `v26.3.27` 放宽到了 `1.8.0`。这是一个真实的权衡：
+> 执行 `xray run -test` 时内核会警告此举「会增加服务器 IP 被 GFW 封锁的可能性」，因为
+> 放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，扩大了主动探测的暴露面。若你主要
+> 使用 v2rayN（Xray 内核），删掉这一行更安全；若要兼容 Clash 系客户端，则需要保留。
+
 ### 2. 直连 UDP / Hysteria 2 节点超时？
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。
 - **解决**：在云服务商控制台的安全组规则中，放行入站端口：

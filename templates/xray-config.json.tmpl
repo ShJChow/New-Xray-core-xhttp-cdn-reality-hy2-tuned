@@ -78,6 +78,12 @@
                     // 两条 Reality 节点在 mihomo / Clash 系客户端下全部不可用
                     // （启动日志里那句 "other clients may be refused to connect" 就是它）。
                     // 放宽到 1.8.0 后 Xray / mihomo / sing-box 三种内核均可连接。
+                    // 注意：这是一个真实的权衡，`xray run -test` 会为此打印警告：
+                    // "Changing minClientVer will increase the likelihood of your
+                    // server's IP being blocked by the GFW"——放宽后 Reality 对更旧、
+                    // 非 Xray 的客户端也开放握手，主动探测的暴露面变大。若你主要用
+                    // v2rayN（Xray 内核），删掉这行更安全；若要兼容 Clash 系客户端，
+                    // 则需要保留。
                     "minClientVer": "1.8.0"
                 }${REALITY_SOCKOPT_JSON}
             },
