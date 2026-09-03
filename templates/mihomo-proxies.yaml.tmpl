@@ -4,7 +4,33 @@
 # 第 4 条 Hysteria2，后两条是 Reality TCP 直连兜底。
 proxies:
   # ---------- 经 CDN / QUIC 直连 ----------
-  # 1. 经 CDN 的 QUIC 链路（v4.7.4 新增）：
+  # 1. 经 CDN：走 TCP（h2）。最稳健的 CDN 节点，不受运营商 UDP 443 限速/丢包影响。
+  - name: Vless-xhttp-h2-cdn-${HOSTNAME_TAG}
+    type: vless
+    server: ${CDN_DOMAIN}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    network: xhttp
+    alpn:
+      - h2
+      - http/1.1
+    servername: ${CDN_DOMAIN}
+    client-fingerprint: chrome
+    encryption: ${VLESSENC_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+
+  # 1b. 经 CDN 的 QUIC 链路（v4.7.4 新增）：
   #    mihomo 仅在 alpn 恰好等于 h3 时才走 HTTP/3（transport/xhttp/client.go:159）。
   #    服务端零改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP，
   #    因此这条节点不占用任何额外端口，也不需要安全组放行。

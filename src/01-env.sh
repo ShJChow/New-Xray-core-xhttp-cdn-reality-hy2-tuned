@@ -51,14 +51,15 @@ FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
-# 节点集：默认 6 条，全部由 Xray 单核心提供
+# 节点集：默认 7 条，全部由 Xray 单核心提供
 # ==================================================
-#   1. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
-#   2. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
-#   3. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
-#   4. Vless-reality-vision  直连 TCP 443，Vision
-#   5. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
-#   6. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
+#   1. Vless-xhttp-h2-cdn    经 CDN，h2/TCP
+#   2. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
+#   3. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
+#   4. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
+#   5. Vless-reality-vision  直连 TCP 443，Vision
+#   6. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
+#   7. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}

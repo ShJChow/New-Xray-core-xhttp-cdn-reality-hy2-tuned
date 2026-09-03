@@ -147,6 +147,9 @@ else
   H3_DIRECT_NODE_LINE=""
 fi
 
+# h2-cdn: 经 CDN 的 TCP(h2) 链路，最稳健的 CDN 节点（不受出境 UDP 443 限速/丢包影响）
+H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#Vless-xhttp-h2-cdn-${HOSTNAME_TAG}"
+
 # h3-cdn（v4.7.4）：节点 1 的 QUIC 版，只差 alpn（h2,http/1.1 → h3）与节点名。
 # 不需要任何服务端改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP。
 # 之所以必须另开一条而不能给节点 1 加个 h3：mihomo 仅在 alpn **恰好等于** h3 时才走
@@ -171,7 +174,7 @@ else
   HY2_NODE_LINE=""
 fi
 
-info "节点集: h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2 + Reality-up-CDN-down"
+info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2 + Reality-up-CDN-down"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
