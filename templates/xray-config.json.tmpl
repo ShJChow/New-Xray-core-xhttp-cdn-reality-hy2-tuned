@@ -72,19 +72,14 @@
                     "privateKey": "${PRIVATE_KEY}",
                     "shortIds": [
                         "${SHORT_ID}"
-                    ],
-                    // Xray 26.x 的 Reality 默认最低客户端版本是 Xray-core v26.3.27，
-                    // 会拒绝其它实现：mihomo 在握手时报 REALITY authentication failed，
-                    // 两条 Reality 节点在 mihomo / Clash 系客户端下全部不可用
-                    // （启动日志里那句 "other clients may be refused to connect" 就是它）。
-                    // 放宽到 1.8.0 后 Xray / mihomo / sing-box 三种内核均可连接。
-                    // 注意：这是一个真实的权衡，`xray run -test` 会为此打印警告：
-                    // "Changing minClientVer will increase the likelihood of your
-                    // server's IP being blocked by the GFW"——放宽后 Reality 对更旧、
-                    // 非 Xray 的客户端也开放握手，主动探测的暴露面变大。若你主要用
-                    // v2rayN（Xray 内核），删掉这行更安全；若要兼容 Clash 系客户端，
-                    // 则需要保留。
-                    "minClientVer": "1.8.0"
+                    ]
+                    // 不设置 minClientVer：按安全性优先的取舍，遵循 Xray 26.x 的新默认值
+                    // （即 Xray-core v26.3.27），把 Reality 的探测面收到最小。代价是
+                    // mihomo / sing-box / Clash 系等非最新 Xray 内核客户端握手会报
+                    // REALITY authentication failed（启动日志里 "other clients may be
+                    // refused to connect" 说的就是这个）。如需兼容这些客户端，加回
+                    // "minClientVer": "1.8.0"，但要接受 `xray run -test` 提示的代价：
+                    // 会增加服务器 IP 被 GFW 封锁的概率。
                 }${REALITY_SOCKOPT_JSON}
             },
             "sniffing": {
