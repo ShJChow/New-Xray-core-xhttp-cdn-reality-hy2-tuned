@@ -118,13 +118,13 @@ proxies:
   #>>FEATURE_H2_DIRECT
 
   #<<FEATURE_HY2
-  # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
-  #    inbound 提供，不再需要独立的 hysteria 二进制。
-  #    up/down 留空 = 客户端用 BBR；填具体值则切到 Brutal 模式。
+  # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT} + 端口跳跃 40000-50000）：
+  #    由官方 Hysteria 2.12.2 提供，支持 Brutal 拥塞控制、0-RTT 握手、连接迁移与原生端口跳跃。
   - name: Hysteria2-obfs-${HOSTNAME_TAG}
     type: hysteria2
     server: ${VPS_IP}
     port: ${HY2_PORT}
+    ports: ${HY2_PORT},40000-50000
     password: ${HY2_PASSWORD}
     obfs: salamander
     obfs-password: ${OBFS_PASSWORD}

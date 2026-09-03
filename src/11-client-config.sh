@@ -169,7 +169,7 @@ else
 fi
 
 if [[ "$FEATURE_HY2" == true ]]; then
-  HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-obfs-${HOSTNAME_TAG}"
+  HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},40000-50000&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-obfs-${HOSTNAME_TAG}"
 else
   HY2_NODE_LINE=""
 fi
