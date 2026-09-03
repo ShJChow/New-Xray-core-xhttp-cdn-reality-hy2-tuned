@@ -330,7 +330,12 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 - **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 5 / 节点 6）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
-- **⑥ mihomo / sing-box / Clash 系客户端报 `REALITY authentication failed`**：本项目按**安全性优先**的取舍，不设置 `minClientVer`，遵循 Xray 26.x 的新默认值（即要求客户端至少为 Xray-core v26.3.27），把 Reality 的探测面收到最小；代价是这些非最新 Xray 内核的客户端会被拒绝握手。**解决方法：优先升级客户端内核到最新版 Xray-core；若做不到，可在 `realitySettings` 里加回 `"minClientVer": "1.8.0"` 换取兼容性，但要接受 `xray run -test` 提示的代价——会增加服务器 IP 被 GFW 封锁的概率**。
+
+> **关于 `minClientVer` 的提示**：为兼容 mihomo/sing-box 等非 Xray 内核，本项目把 Reality
+> 的 `minClientVer` 从 26.x 新默认值 `v26.3.27` 放宽到了 `1.8.0`。这是一个真实的权衡：
+> 执行 `xray run -test` 时内核会警告此举「会增加服务器 IP 被 GFW 封锁的可能性」，因为
+> 放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，扩大了主动探测的暴露面。若你主要
+> 使用 v2rayN（Xray 内核），删掉这一行更安全；若要兼容 Clash 系客户端，则需要保留。
 
 ### 2. 直连 UDP / Hysteria 2 节点超时？
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。

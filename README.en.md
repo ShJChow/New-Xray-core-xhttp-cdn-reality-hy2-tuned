@@ -220,15 +220,12 @@ re-run the installer to pick them up.
 | v4.7.12 | **Fixed the regression introduced in v4.7.9: Hysteria2 broken under v2rayN / sing-box.** v4.7.9 changed the inbound users from `clients[].auth` to `clients[].password`, based on "testing with Xray's own hysteria outbound showed only this form authenticates" — but that test client put auth in `settings.auth`, whereas the [official docs](https://xtls.github.io/config/transports/hysteria.html) place the outbound auth in `streamSettings.hysteriaSettings.auth`. Two non-standard configs happened to match each other, producing a wrong conclusion that broke standard clients instead: sing-box (v2rayN's Hysteria2 core) reported `authentication failed, status code: 404` ever since. The correct form is the documented `settings.users[].auth`. Verified against three cores, each with a negative control confirming a wrong password really does fail: sing-box 236 Mbps, Xray 253 Mbps, mihomo working. |
 | v4.7.13 | **Handshake latency configured per node type; fixed the Reality nodes being unusable under mihomo.** ① The two direct XHTTP nodes (h3-direct / h2-direct) now use `mode=stream-up`: under `security=tls`, `auto` conservatively picks packet-up, which splits the upload into a series of POSTs with a minimum interval and costs about 50 ms of extra first-byte latency. Measured first byte went from 68/69 ms to **18 ms** (equal to the no-proxy baseline), with throughput unchanged. **The CDN nodes must stay on packet-up** — packet-up exists precisely because CDNs do not support streaming request bodies, and measured through Cloudflare with stream-up, CDN-TLS throughput dropped to 0 and CDN-H3 timed out. The Reality nodes need no change; their `auto` already picks stream-up. ② Reality gained `minClientVer: "1.8.0"`: Xray 26.x's Reality defaults to a minimum client version of Xray-core v26.3.27 (the `other clients may be refused to connect` line in the startup log), so mihomo failed the handshake outright with `REALITY authentication failed` and **both Reality nodes were unusable** under mihomo / Clash-family clients. After relaxing it, all seven nodes work under mihomo. |
 
-> **Update on `minClientVer`**: this project now ships **without** it, favoring
-> security over compatibility — Reality follows Xray 26.x's own default (client
-> must be Xray-core ≥ v26.3.27), keeping the probing surface as small as
-> possible. The cost: mihomo / sing-box / Clash-family clients on an older core
-> will fail the handshake with `REALITY authentication failed`. Prefer
-> upgrading the client's Xray core first; if that's not possible, add back
-> `"minClientVer": "1.8.0"` in `realitySettings` for compatibility, accepting
-> the trade-off `xray run -test` warns about — an increased likelihood of the
-> server's IP being blocked by the GFW.
+> **Note on `minClientVer`**: lowering it is a real trade-off. Xray warns on
+> `xray run -test` that doing so "will increase the likelihood of your server's
+> IP being blocked by the GFW", because it opens Reality up to older, non-Xray
+> clients and widens the surface exposed to active probing. If you mainly use
+> v2rayN (Xray core), removing this line is safer; if you need Clash-family
+> client compatibility, keep it.
 
 ---
 
