@@ -429,7 +429,24 @@ xh diag        # 输出示例：
 
 `info` 会为每条连接落一行、且包含目标域名，实测 24 小时约 2260 行——既是磁盘噪音，也等于在服务器上留了一份用户访问记录。
 
-### 6.〔实测后不采纳〕REALITY 后量子签名 `mldsa65Seed`
+### 6.〔修正误报〕`xh diag` 对独立 hysteria 二进制的判断
+
+旧逻辑只要发现 `/etc/hysteria/config.yaml` 存在就报 `[!!]`，并建议
+`systemctl disable --now hysteria-server`。**这个建议在部分机器上会直接打掉一条正在用的节点。**
+
+原因：本项目的 Hysteria2 可由 Xray 原生 inbound（`"protocol": "hysteria"`）提供，但该 inbound
+在安装时**未取得 acme 证书就会被自动跳过**（见 `src/09-server-config.sh` 中 `FEATURE_HY2=false` 的回退分支）。
+此时 hy2 节点其实由独立 hysteria 二进制唯一提供，停掉它节点立刻失效。
+
+新逻辑先看 xray 配置里到底有没有原生 hy2 inbound，再决定怎么报：
+
+| xray 原生 hy2 | 独立二进制端口 | 判定 |
+| :--- | :--- | :--- |
+| 无 | 任意 | `[OK]` 独立二进制是唯一提供者，**明确提示不要停用** |
+| 有，同端口 | 与之相同 | `[!!]` 真冲突，二选一 |
+| 有，不同端口 | 与之不同 | `[OK]` 冗余但不冲突 |
+
+### 7.〔实测后不采纳〕REALITY 后量子签名 `mldsa65Seed`
 
 Xray 26.7.28 的 REALITY 支持 ML-DSA-65 后量子签名（`xray mldsa65` 生成密钥对）。**实测在本环境下会直接破坏 REALITY 握手**：
 
@@ -443,7 +460,7 @@ Xray 26.7.28 的 REALITY 支持 ML-DSA-65 后量子签名（`xray mldsa65` 生�
 二分定位确认元凶是 `mldsa65Seed`（`limitFallback` 无影响）。配置本身能通过 `xray run -test` 校验，
 故判断为 26.7.28（预发布版）自身问题。**本版不启用**，待上游稳定后再评估。
 
-### 7.〔实测后不采纳〕把 MTU 从 9000 降到 1500
+### 8.〔实测后不采纳〕把 MTU 从 9000 降到 1500
 
 Oracle Cloud 的 VNIC 默认 MTU 9000，而到公网的实际 PMTU 是 1500（`ping -M do -s 8972` 失败、`-s 1472` 成功），
 一度怀疑会造成额外重传。**实测恰好相反**（Reality 节点，取 3 次最好值）：
@@ -455,7 +472,7 @@ Oracle Cloud 的 VNIC 默认 MTU 9000，而到公网的实际 PMTU 是 1500（`p
 
 对端通告的 MSS（通常 1460）本来就会把实际分段限制住，巨帧 MTU 在此几乎不生效；反而是本机内部路径受益。**保持 9000 不动。**
 
-### 8. `minClientVer` 的既有权衡（未改动）
+### 9. `minClientVer` 的既有权衡（未改动）
 
 `xray run -test` 会为 `"minClientVer": "1.8.0"` 打印警告：
 
@@ -466,7 +483,7 @@ REALITY: Changing "minClientVer" will increase the likelihood of your server's I
 这是上游明确的取舍提示：放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，主动探测的暴露面变大。
 本项目为兼容 Clash / mihomo / sing-box 三种内核而保留该设置；**若你只用 v2rayN（Xray 内核），删掉这行更安全。**
 
-### 9. 关于本机回环测速的口径（重要）
+### 10. 关于本机回环测速的口径（重要）
 
 在服务端本机经公网 IP 回环测速时，**UDP 会额外经过云厂商的发夹（hairpin）路径，吞吐大约减半**，
 而 TCP 不受同等影响。实测裸 UDP：

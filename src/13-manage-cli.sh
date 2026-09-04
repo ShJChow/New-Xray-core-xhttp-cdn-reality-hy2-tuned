@@ -438,11 +438,42 @@ cmd_diag() {
     fi
   fi
 
-  # 旧版遗留：独立 hysteria 二进制。v4.0.0 起 Hysteria2 由 Xray 原生提供，
-  # 两者同时在会抢同一个 UDP 端口。
+  # 独立 hysteria 二进制的处置判断。
+  #
+  # v4.0.0 起本项目的 Hysteria2 可由 Xray 原生 inbound（"protocol": "hysteria"）提供，
+  # 此时独立二进制是冗余的、且可能与之抢同一个 UDP 端口。
+  #
+  # 但**不能一看到 /etc/hysteria/config.yaml 就报错并建议停用**：
+  # 当 xray 配置里并没有原生 hy2 inbound 时（例如安装时未取得 acme 证书而自动
+  # 跳过了该 inbound，或用户有意用官方二进制），这个独立进程就是该 Hysteria2
+  # 节点的**唯一提供者**——按旧提示执行 `systemctl disable --now hysteria-server`
+  # 会直接打掉一条正在用的节点。所以先看 xray 到底提不提供，再决定怎么报。
   if [[ -f /etc/hysteria/config.yaml ]]; then
-    chk "检测到独立 hysteria 二进制的配置" 1 \
-      "v4.0.0 起 Hysteria2 由 Xray 原生提供，两者会抢端口；停用: systemctl disable --now hysteria-server"
+    local hy_std_port hy_xray_port
+    hy_std_port=$(grep -oE '^listen:[[:space:]]*:?[0-9]+' /etc/hysteria/config.yaml 2>/dev/null \
+                  | grep -oE '[0-9]+$' | head -1)
+    # 取 xray 原生 hysteria inbound 的端口：从含 "protocol": "hysteria" 的那段
+    # 往回找最近的 "port"（inbound 里 port 在 protocol 之前）
+    hy_xray_port=""
+    if grep -q '"protocol"[[:space:]]*:[[:space:]]*"hysteria"' "$XRAY_CONF" 2>/dev/null; then
+      hy_xray_port=$(grep -B5 '"protocol"[[:space:]]*:[[:space:]]*"hysteria"' "$XRAY_CONF" \
+                     | grep -oE '"port"[[:space:]]*:[[:space:]]*[0-9]+' | tail -1 \
+                     | grep -oE '[0-9]+$')
+    fi
+
+    if [[ -z "$hy_xray_port" ]]; then
+      # xray 不提供原生 hy2 —— 独立二进制是该节点的唯一提供者，保留它是正确的
+      chk "Hysteria2 由独立 hysteria 二进制提供（UDP ${hy_std_port:-?}）" 0 \
+        "xray 配置中无原生 hysteria inbound，请勿停用 hysteria-server，否则该节点会立即失效"
+    elif [[ -n "$hy_std_port" && "$hy_std_port" == "$hy_xray_port" ]]; then
+      # 真冲突：两者抢同一个端口
+      chk "独立 hysteria 与 Xray 原生 hy2 抢占同一端口 UDP ${hy_std_port}" 1 \
+        "二选一；用 Xray 原生请执行: systemctl disable --now hysteria-server"
+    else
+      # 两者都在但端口不同：冗余而非故障
+      chk "独立 hysteria（UDP ${hy_std_port:-?}）与 Xray 原生 hy2（UDP ${hy_xray_port}）并存" 0 \
+        "端口不冲突；如无需两套，可停用其一"
+    fi
   fi
 
   # 本机防火墙：只报告，不改动（规则可能是用户或云厂商 agent 写的）
