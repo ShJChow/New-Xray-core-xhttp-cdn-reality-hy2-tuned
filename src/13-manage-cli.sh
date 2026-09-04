@@ -286,8 +286,60 @@ cmd_conflict() {
 #      既不经 nginx 也没有独立 hysteria 二进制。查的是 xray 进程的监听。
 #   3. add-quic-h3 扩展的节点 —— 由 nginx listen quic 提供（下方单独检查）。
 # 判据：1 通而 2 全不通 → 云厂商安全组没放行 UDP，或内核 <26.6.1。
+# UDP 端口劫持自检。
+# 背景：Hysteria2 端口跳跃靠 nat 表里的「端口段」规则（DNAT/REDIRECT）实现。
+# 这类规则按端口范围匹配，会把落在范围内的**任何**本机 UDP 服务端口一并改写。
+# 真实事故：同机另一套脚本的 Hysteria2 基础端口 44116 落在本项目建议的跳跃段
+# 40000-50000 内，于是所有直连 44116 的包被 REDIRECT 到 8443（本项目的实例），
+# 因两边 obfs 密码不同而被静默丢弃——现象是「节点链接里的基础端口连不上，
+# 只有跳跃段能连」，且被劫持方服务端日志里**没有任何记录**，极难排查。
+cmd_portconflict() {
+  echo -e "${CYAN}[+] UDP 端口段劫持检测${NC}"
+  command -v iptables >/dev/null 2>&1 || { info "未安装 iptables，跳过"; echo ""; return 0; }
+
+  local ranges listen found=0
+  ranges=$(iptables -t nat -S PREROUTING 2>/dev/null | grep -E '\-\-dport [0-9]+:[0-9]+')
+  [[ -z "$ranges" ]] && { info "未发现端口段规则，无劫持风险"; echo ""; return 0; }
+
+  # 只统计「真实服务端口」，排除代理进程的临时出站 UDP socket（它们同样
+  # 绑在通配地址上，直接取 ss 输出会大量误报）。判据：服务端口在 INPUT 链里
+  # 有一条显式的单端口 ACCEPT 规则，临时出站 socket 没有。
+  local svc_ports
+  svc_ports=$(iptables -S INPUT 2>/dev/null \
+              | grep -E '\-p udp .*--dport [0-9]+ -j ACCEPT' \
+              | grep -oE '\-\-dport [0-9]+' | awk '{print $2}' | sort -un)
+  listen=$(ss -uln 2>/dev/null | tail -n +2 | awk '{print $4}' \
+           | sed 's/.*://' | grep -E '^[0-9]+$' | sort -un)
+  # 取交集：既在监听、又被防火墙显式放行的端口
+  # （用 grep -Fx 而非 comm：comm 要求字典序，这里两侧都是数值序）
+  listen=$(echo "$listen" | grep -Fx -f <(echo "$svc_ports") 2>/dev/null)
+
+  while read -r line; do
+    local rng lo hi tgt
+    rng=$(echo "$line" | grep -oE '\-\-dport [0-9]+:[0-9]+' | awk '{print $2}')
+    tgt=$(echo "$line" | grep -oE '(to-destination :|--to-ports )[0-9]+' | grep -oE '[0-9]+$')
+    lo=${rng%%:*}; hi=${rng##*:}
+    for p in $listen; do
+      # 已插入 RETURN 例外的端口视为已修复，不再报警
+      if iptables -t nat -C PREROUTING -p udp --dport "$p" -j RETURN 2>/dev/null; then
+        continue
+      fi
+      if [[ "$p" -ge "$lo" && "$p" -le "$hi" && "$p" != "$tgt" ]]; then
+        echo -e "  ${RED}[!!]${NC}   UDP $p 落在端口段 ${lo}-${hi} 内（该段被导向 $tgt）"
+        echo -e "         直连 $p 的流量会被改写投递到 $tgt，两端密钥不同则静默丢弃。"
+        echo -e "         修复：${YELLOW}iptables -t nat -I PREROUTING 1 -p udp --dport $p -j RETURN${NC}"
+        found=1
+      fi
+    done
+  done <<< "$ranges"
+
+  [[ "$found" -eq 0 ]] && echo -e "  ${GREEN}[OK]${NC}   无端口被跳跃段劫持"
+  echo ""
+}
+
 cmd_diag() {
   cmd_conflict
+  cmd_portconflict
   local ok=0 bad=0
   chk() { # chk 描述 结果(0/1) 补充说明
     if [[ "$2" -eq 0 ]]; then echo -e "  ${GREEN}[OK]${NC}   $1${3:+ — $3}"; ok=$((ok+1))

@@ -26,7 +26,8 @@
   - [Linux](#3-linux-客户端)
 - [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
 - [六、常见问题与排错](#六常见问题与排错)
-- [七、免责声明](#七免责声明)
+- [七、v4.8.0 实测诊断与修复记录](#七v480-实测诊断与修复记录)
+- [八、免责声明](#八免责声明)
 
 ---
 
@@ -350,7 +351,138 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 
 ---
 
-## 七、免责声明
+## 七、v4.8.0 实测诊断与修复记录
+
+本节记录一次在 **Oracle ARM (4 核 24G) / Ubuntu 26.04 / kernel 7.0** 上、对同机共存的
+xray-xhttp 与 sbbox 两套节点做的完整诊断。**每一条都有实测数据支撑，包括三条"测了但不采纳"的结论。**
+
+### 1.〔严重〕端口跳跃段会劫持同机其他 UDP 服务端口
+
+**现象**：同机另一套脚本的 Hysteria2 节点，链接里的基础端口 `44116` 完全连不上（客户端报
+`connect error: timeout: no recent network activity`），但同一节点的跳跃段端口能正常连；
+**被劫持方的服务端日志里没有任何记录**，常规排查手段全部失效。
+
+**根因**：端口跳跃依赖 nat 表的**端口段**规则。本项目节点链接里建议的跳跃段是
+`mport=${HY2_PORT},40000-50000`，对应规则为
+
+```
+-A PREROUTING -p udp --dport 40000:50000 -j REDIRECT --to-ports 8443
+```
+
+这条规则按**范围**匹配，会把落在 40000-50000 内的**任何**本机 UDP 端口一并改写。
+另一套脚本随机分到的基础端口 44116 正好落在段内，于是所有直连 44116 的包被投递给
+本项目的 8443 实例；两边 obfs 密码不同，握手包被当作垃圾**静默丢弃**——既不报错也不落日志。
+
+**验证方法**（用另一实例的凭据去连被劫持的端口，若能连通即证明劫持成立）：
+
+```bash
+# 用 8443 实例的密码连 44116 —— 若返回 200，说明包确实被改写投递到了 8443
+hysteria client -c <(printf 'server: <IP>:44116\nauth: <8443实例的密码>\nobfs: {type: salamander, salamander: {password: <8443实例的obfs>}}\ntls: {sni: <域名>}\nsocks5: {listen: 127.0.0.1:10871}\n') &
+curl -s --socks5-hostname 127.0.0.1:10871 -o /dev/null -w '%{http_code}\n' https://www.cloudflare.com/cdn-cgi/trace
+```
+
+实测结果：返回 `200`，且 **8443 实例**的日志出现 `client connected`，被劫持的 44116 实例日志为空 —— 劫持确认。
+
+**修复**：新增 `xh diag` 中的 **UDP 端口段劫持检测**（`cmd_portconflict`），自动列出被劫持的服务端口并给出修复命令：
+
+```bash
+xh diag        # 输出示例：
+#   [!!]   UDP 44116 落在端口段 40000-50000 内（该段被导向 8443）
+#          修复：iptables -t nat -I PREROUTING 1 -p udp --dport 44116 -j RETURN
+```
+
+修复原理是在所有端口段规则**之前**插一条 `RETURN` 例外，使直连基础端口的包不被改写。
+该检测只统计**真实服务端口**（在 INPUT 链有显式单端口 ACCEPT 规则的），不会把代理进程的
+临时出站 UDP socket 误报进来；已插入 RETURN 例外的端口不再重复报警。
+
+> **同机共存多套代理脚本时，这是最容易踩且最难排查的一类故障。** 任何使用端口跳跃的脚本都有这个问题。
+
+### 2. REALITY 回落限速（`limitFallback*`）
+
+未通过 Reality 认证的连接会被回落到伪装站点。不限速时，主动探测者可以把这里当成一条免费高速代理刷流量，
+本机出站特征也会异常。本版默认：前 10MB 不限速（保证正常浏览伪装站不被察觉），之后限到 1MB/s：
+
+```json
+"limitFallbackUpload":   { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 },
+"limitFallbackDownload": { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 }
+```
+
+### 3. 直连 h3 / h2 入站启用 `rejectUnknownSni`
+
+此前 8446 / 8445 入站接受任意 SNI，可被当作任意 SNI 的 TLS 前置来探测。现改为只接受证书覆盖的域名，
+未知 SNI 直接拒绝握手，行为更接近真实站点。
+
+### 4. `freedom` 出站新增 `finalRules` 私有地址兜底
+
+`routing.domainStrategy` 为 `AsIs` 时，路由层的 `ip: geoip:private` 规则拿不到域名的解析结果。
+新增的 `finalRules` 在**解析成 IP 之后**再判一次，与路由规则互补：
+
+```json
+"targetStrategy": "UseIPv4",
+"finalRules": [ { "action": "block", "ip": ["geoip:private"] } ]
+```
+
+> 实测本项目 Reality 节点在**加固前**就已能拦住 `http://127.0.0.1.nip.io/`（返回被阻断），
+> 该项属于纵深防御加固，而非修复已存在的漏洞。（同机 sbbox 侧则确实存在此绕过，见该项目 README。）
+
+### 5. 日志级别 `info` → `warning`
+
+`info` 会为每条连接落一行、且包含目标域名，实测 24 小时约 2260 行——既是磁盘噪音，也等于在服务器上留了一份用户访问记录。
+
+### 6.〔实测后不采纳〕REALITY 后量子签名 `mldsa65Seed`
+
+Xray 26.7.28 的 REALITY 支持 ML-DSA-65 后量子签名（`xray mldsa65` 生成密钥对）。**实测在本环境下会直接破坏 REALITY 握手**：
+
+| 服务端 `mldsa65Seed` | 客户端 `mldsa65Verify` | 节点连通性 |
+| :--- | :--- | :--- |
+| 未设置 | 未设置 | ✅ 200 |
+| **已设置** | 未设置 | ❌ 000（TLS 阶段 connection reset） |
+| **已设置** | **已设置** | ❌ 000 |
+| 未设置 + 仅 `limitFallback` | — | ✅ 200 |
+
+二分定位确认元凶是 `mldsa65Seed`（`limitFallback` 无影响）。配置本身能通过 `xray run -test` 校验，
+故判断为 26.7.28（预发布版）自身问题。**本版不启用**，待上游稳定后再评估。
+
+### 7.〔实测后不采纳〕把 MTU 从 9000 降到 1500
+
+Oracle Cloud 的 VNIC 默认 MTU 9000，而到公网的实际 PMTU 是 1500（`ping -M do -s 8972` 失败、`-s 1472` 成功），
+一度怀疑会造成额外重传。**实测恰好相反**（Reality 节点，取 3 次最好值）：
+
+| MTU | 吞吐 |
+| :--- | ---: |
+| **9000（默认）** | **3755 Mbps** |
+| 1500 | 2991 Mbps |
+
+对端通告的 MSS（通常 1460）本来就会把实际分段限制住，巨帧 MTU 在此几乎不生效；反而是本机内部路径受益。**保持 9000 不动。**
+
+### 8. `minClientVer` 的既有权衡（未改动）
+
+`xray run -test` 会为 `"minClientVer": "1.8.0"` 打印警告：
+
+```
+REALITY: Changing "minClientVer" will increase the likelihood of your server's IP being blocked by the GFW
+```
+
+这是上游明确的取舍提示：放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，主动探测的暴露面变大。
+本项目为兼容 Clash / mihomo / sing-box 三种内核而保留该设置；**若你只用 v2rayN（Xray 内核），删掉这行更安全。**
+
+### 9. 关于本机回环测速的口径（重要）
+
+在服务端本机经公网 IP 回环测速时，**UDP 会额外经过云厂商的发夹（hairpin）路径，吞吐大约减半**，
+而 TCP 不受同等影响。实测裸 UDP：
+
+| 路径 | 裸 UDP 吞吐 |
+| :--- | ---: |
+| 纯 loopback（127.0.0.1） | 1189 Mbps |
+| 经公网 IP 发夹 | 603 Mbps |
+
+同一 Hysteria2 实例：loopback 593 Mbps vs 发夹 312 Mbps；TUIC：1490 vs 748 Mbps。
+**因此本机自测出的 QUIC 类节点数字系统性偏低，不能据此判断"UDP 节点比 TCP 节点慢"**——
+要比较协议本身，必须固定在同一条路径上比。
+
+---
+
+## 八、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

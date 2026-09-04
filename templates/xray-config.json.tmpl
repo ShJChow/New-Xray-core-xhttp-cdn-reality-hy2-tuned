@@ -1,6 +1,6 @@
 {
     "log": {
-        "loglevel": "info"
+        "loglevel": "warning"
     },
     "dns": {
         "servers": [
@@ -84,7 +84,12 @@
                     // 非 Xray 的客户端也开放握手，主动探测的暴露面变大。若你主要用
                     // v2rayN（Xray 内核），删掉这行更安全；若要兼容 Clash 系客户端，
                     // 则需要保留。
-                    "minClientVer": "1.8.0"
+                    "minClientVer": "1.8.0",
+                    // 回落限速：未通过 Reality 认证的连接会被回落到伪装站点。
+                    // 不限速时，主动探测者可以把这里当免费高速代理刷流量。
+                    // 前 10MB 不限（保证正常浏览伪装站不被察觉），之后限到 1MB/s。
+                    "limitFallbackUpload":   { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 },
+                    "limitFallbackDownload": { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 }
                 }${REALITY_SOCKOPT_JSON}
             },
             "sniffing": {
@@ -149,7 +154,14 @@
             "protocol": "freedom",
             "tag": "direct",
             "settings": {
-                "domainStrategy": "UseIPv4"
+                // targetStrategy 是 domainStrategy 的新名字（旧名仍兼容）。
+                "targetStrategy": "UseIPv4",
+                // finalRules 在「域名解析成 IP 之后」再判一次，拦住解析到
+                // 内网/云元数据地址的域名。routing 里的 ip 规则在
+                // domainStrategy=AsIs 时拿不到解析结果，两者互补，缺一不可。
+                "finalRules": [
+                    { "action": "block", "ip": ["geoip:private"] }
+                ]
             },
             "streamSettings": {
                 "sockopt": {
