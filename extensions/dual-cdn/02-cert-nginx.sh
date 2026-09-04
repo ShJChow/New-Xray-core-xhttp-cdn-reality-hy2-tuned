@@ -61,7 +61,9 @@ if cert_has_all_domains; then
   info "检测到证书已包含所需域名，跳过重新签发"
 else
   info "申请 / 更新包含 CDN-A、CDN-B 的证书..."
-  local force_flag=""
+  # 注意：本段位于顶层（不在函数体内），不能用 local —— bash 会报
+  # "local: can only be used in a function"，而本脚本开了 set -e，会就地中止。
+  force_flag=""
   [[ -f "$ACME_CERT_HOME/fullchain.cer" || -f "$ACME_CERT_CONF" ]] && force_flag="--force"
   if ! ISSUE_OUTPUT=$(acme.sh --issue "${ACME_DOMAIN_ARGS[@]}" \
       --standalone "${ACME_LISTEN_ARGS[@]}" --keylength ec-256 $force_flag \

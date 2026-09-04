@@ -2,15 +2,61 @@ name: Build release installers
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  # 产物校验。
+  #
+  # 构建脚本只是把 src/*.sh 按 @@include 拼接起来，本身不做任何检查：
+  # src 里一个语法错误会原样进入 dist/install.sh，构建仍然退出 0，
+  # CI 显示成功，Release 照常发布，用户装到的是一个跑不起来的脚本。
+  # 这里补上最基本的两道关，并让 build-release 依赖本 job。
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 安装 shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+
+      - name: 构建安装器（dist 未入库，需先生成）
+        run: |
+          set -euo pipefail
+          bash .github/scripts/build-install.sh
+          bash .github/scripts/build-dual-cdn.sh
+          bash .github/scripts/build-dual-ip.sh
+          bash .github/scripts/build-quic.sh
+          bash .github/scripts/build-quic-h3.sh
+
+      - name: bash -n 语法检查（源码与产物）
+        run: |
+          set -euo pipefail
+          for f in src/*.sh extensions/*/*.sh .github/scripts/*.sh dist/*.sh; do
+            [ -e "$f" ] || continue
+            bash -n "$f" || { echo "语法错误: $f"; exit 1; }
+          done
+          echo "OK: 全部脚本通过 bash -n"
+
+      - name: ShellCheck（只让 error 级问题失败）
+        run: |
+          set -euo pipefail
+          # 风格类告警在本项目里大量属于有意为之，只拦真正会导致运行期
+          # 错误的问题。例如 SC2168（local 用在函数外）——它在 set -e 下
+          # 会让脚本就地中止，正是这道关要挡住的那类事故。
+          shellcheck -S error dist/*.sh
+          echo "OK: ShellCheck 无 error 级问题"
+
   build-release:
+    needs: validate
     runs-on: ubuntu-latest
 
     steps:
