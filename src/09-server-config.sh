@@ -81,6 +81,11 @@ XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":10,\"connIdle\":1
 
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
 # tcpUserTimeout 设为 300000 (5分钟)，杜绝因 20s/60s 瞬时抖动杀死健康连接
+AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+if [[ "$AVAIL" != *bbr* ]]; then
+  modprobe tcp_bbr 2>/dev/null || true
+  AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+fi
 if [[ "$AVAIL" == *bbr* ]]; then
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
   REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
