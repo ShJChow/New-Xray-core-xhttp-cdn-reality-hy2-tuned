@@ -169,9 +169,16 @@ else
 fi
 
 if [[ "$FEATURE_HY2" == true ]]; then
-  HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},40000-50000&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-obfs-${HOSTNAME_TAG}"
+  if [[ "${FEATURE_PORT_HOPPING:-false}" == true ]]; then
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-obfs-${HOSTNAME_TAG}"
+    MIHOMO_HY2_PORTS_LINE=$(printf '\n    ports: %s,%s' "${HY2_PORT}" "${PORT_HOP_RANGE:-40000-50000}")
+  else
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-obfs-${HOSTNAME_TAG}"
+    MIHOMO_HY2_PORTS_LINE=""
+  fi
 else
   HY2_NODE_LINE=""
+  MIHOMO_HY2_PORTS_LINE=""
 fi
 
 info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2 + Reality-up-CDN-down"
