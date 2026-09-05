@@ -560,7 +560,65 @@ REALITY: Changing "minClientVer" will increase the likelihood of your server's I
 （注意这组数字整体高于上面的单流表——同一配置不同时段可差 50%，
 这也说明单次测量在本环境下不足以支撑结论。）
 
-### 11. 两个不要碰的地方
+### 11.〔严重·定时炸弹〕证书续期后 `/etc/ssl/private/` 可能不会更新
+
+本项目的 **xray 8446（h3-direct）**、**独立 hysteria 8443**、**nginx 8003（CDN 回源 + 伪装站）**
+三者都直接读 `/etc/ssl/private/` 下的证书**副本**，而不是 acme.sh 自己的目录。
+这份副本靠安装时配置的 `acme.sh --install-cert --key-file/--fullchain-file` 在每次续期后自动更新，
+路径记在域名配置的 `Le_RealKeyPath` / `Le_RealFullChainPath` 里。
+
+**这两个值一旦被清空，就是一颗一个月后引爆的定时炸弹。**
+
+真实事故：同机另一套脚本执行 `acme.sh --install-cert` 时**只传了 `--reloadcmd`**。
+acme.sh 的 `--install-cert` 会**重写整组部署配置** —— 只给 reloadcmd 时，
+`Le_RealKeyPath` / `Le_RealFullChainPath` / `Le_RealCertPath` 会被一并清空。之后：
+
+```
+续期日   acme 照常续期到 ~/.acme.sh/，reloadcmd 照常重启 nginx/xray
+         → 但它们重新加载的还是那份从未被更新过的旧文件
+旧证书
+到期日   h3-direct / hy2 / 全部 CDN 节点同时失效
+```
+
+**隐蔽性极高**：续期成功、服务重启成功、日志无任何异常，问题要到一个月后才发作。
+REALITY 节点不受影响（用自签公钥，不读这份证书），所以表现是「一部分节点突然全断，另一部分好好的」。
+
+**本版新增 `xh diag` 三项证书续期自检**：
+
+```
+[OK]   acme 证书落地路径已配置（/etc/ssl/private/fullchain.cer）
+[OK]   已部署证书与 acme 源一致
+[OK]   acme reloadcmd 覆盖了全部读证书的服务
+```
+
+分别检查：落地路径是否配置且指向本项目实际使用的位置；已部署副本与 acme 源的**叶证书指纹**
+是否一致（不一致 = 续期后没落地）；`reloadcmd` 是否覆盖了所有读这份证书的服务
+（nginx / xray，以及本机确实在跑独立 hysteria 时的 `hysteria-server`）。
+
+路径被清空时的输出，附带可直接粘贴的修复命令：
+
+```
+[!!]   acme 未配置证书落地路径（Le_RealFullChainPath/Le_RealKeyPath 为空）
+       — 续期后 /etc/ssl/private/ 不会更新，旧证书到期时 h3-direct/hy2/CDN 节点会同时失效。
+       修复: acme.sh --install-cert -d <域名> --ecc \
+             --key-file /etc/ssl/private/private.key \
+             --fullchain-file /etc/ssl/private/fullchain.cer \
+             --reloadcmd '<原有 reloadcmd>'
+```
+
+**同时修复安装脚本的 `reloadcmd` 漏掉独立 hysteria**：本项目默认由 Xray 原生提供 Hysteria2
+（安装时会停用 `hysteria-server`），此时无需重启它；但装在已有独立 hysteria 的机器上时，
+8443 由该二进制提供服务、同样读 `/etc/ssl/private/`，续期后不重启会一直用旧证书。
+现改为**有条件重启**（`is-active` 判断），避免在没有该服务的机器上让整条 reloadcmd 返回非零。
+
+> **手工自查**（不装本版也能用）：
+> ```bash
+> ym=<你的 Reality 域名>
+> grep -E "Le_Real(Key|FullChain)Path" ~/.acme.sh/${ym}_ecc/${ym}.conf
+> # 两者都应非空且指向 /etc/ssl/private/
+> ```
+
+### 12. 两个不要碰的地方
 
 - **不要给 REALITY 回落限速**（`limitFallback*`）。理由见本节第 2 条：
   在本架构里回落是全部 CDN 节点的生产通路。
@@ -568,7 +626,7 @@ REALITY: Changing "minClientVer" will increase the likelihood of your server's I
   而模板里 8003 的 `listen` 没有 `proxy_protocol` 参数；开了 `xver` 而不同步改
   nginx，nginx 会把 PROXY 头当成 HTTP 请求，同样打掉全部 CDN 节点。
 
-### 12. 关于本机回环测速的口径（重要）
+### 13. 关于本机回环测速的口径（重要）
 
 在服务端本机经公网 IP 回环测速时，**UDP 会额外经过云厂商的发夹（hairpin）路径，吞吐大约减半**，
 而 TCP 不受同等影响。实测裸 UDP：

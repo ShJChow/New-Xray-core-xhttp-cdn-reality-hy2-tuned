@@ -438,6 +438,78 @@ cmd_diag() {
     fi
   fi
 
+  # 证书自动续期链路自检。
+  #
+  # 本项目的 xray 8446（h3-direct）、独立 hysteria 8443、nginx 8003 三者都直接读
+  # /etc/ssl/private/ 下的证书副本，而不是 acme.sh 自己的目录。这份副本靠安装时
+  # 配置的 `acme.sh --install-cert --key-file/--fullchain-file` 在每次续期后自动
+  # 更新——那几个路径记在域名配置的 Le_RealKeyPath / Le_RealFullChainPath 里。
+  #
+  # 真实事故：同机另一套脚本执行 `--install-cert` 时只传了 --reloadcmd，acme.sh
+  # 会连带重写整组部署配置、把这几个路径清空。之后续期照常成功、reloadcmd 照常
+  # 重启服务，但服务重新加载的还是那份从未更新过的旧文件——直到旧证书到期当天，
+  # h3-direct / hy2 / 全部 CDN 节点同时失效。续期成功、重启成功、日志无异常，
+  # 问题要到一个月后才发作，因此必须靠自检提前拦下。
+  if [[ -n "${REALITY_DOMAIN:-}" ]] && [[ -d "$HOME/.acme.sh" ]]; then
+    local _ac=""
+    for _d in "$HOME/.acme.sh/${REALITY_DOMAIN}_ecc" "$HOME/.acme.sh/${REALITY_DOMAIN}"; do
+      [[ -f "$_d/${REALITY_DOMAIN}.conf" ]] && _ac="$_d/${REALITY_DOMAIN}.conf" && break
+    done
+    if [[ -n "$_ac" ]]; then
+      local _fc _kf _rc
+      _fc=$(. "$_ac" 2>/dev/null; printf '%s' "${Le_RealFullChainPath:-}")
+      _kf=$(. "$_ac" 2>/dev/null; printf '%s' "${Le_RealKeyPath:-}")
+      _rc=$(. "$_ac" 2>/dev/null; printf '%s' "${Le_ReloadCmd:-}")
+      case "$_rc" in
+        *__ACME_BASE64__START_*)
+          _rc=$(printf '%s' "$_rc" | sed -e 's/^__ACME_BASE64__START_//' -e 's/__ACME_BASE64__END_$//' | base64 -d 2>/dev/null) ;;
+      esac
+
+      if [[ -z "$_fc" || -z "$_kf" ]]; then
+        chk "acme 未配置证书落地路径（Le_RealFullChainPath/Le_RealKeyPath 为空）" 1 \
+          "续期后 /etc/ssl/private/ 不会更新，旧证书到期时 h3-direct/hy2/CDN 节点会同时失效。修复: acme.sh --install-cert -d ${REALITY_DOMAIN} --ecc --key-file /etc/ssl/private/private.key --fullchain-file /etc/ssl/private/fullchain.cer --reloadcmd '<原有 reloadcmd>'"
+      elif [[ "$_fc" != "/etc/ssl/private/fullchain.cer" ]]; then
+        chk "acme 落地路径与本项目使用的不一致（$_fc）" 1 \
+          "本项目各服务读的是 /etc/ssl/private/fullchain.cer"
+      else
+        chk "acme 证书落地路径已配置（$_fc）" 0
+      fi
+
+      # 已部署副本与 acme 源的指纹是否一致——不一致说明续期后没落地
+      local _src="${_ac%/*}/fullchain.cer"
+      if [[ -f "$_src" && -f /etc/ssl/private/fullchain.cer ]]; then
+        local _f1 _f2
+        _f1=$(openssl x509 -in "$_src" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+        _f2=$(openssl x509 -in /etc/ssl/private/fullchain.cer -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+        if [[ -n "$_f1" && "$_f1" == "$_f2" ]]; then
+          chk "已部署证书与 acme 源一致" 0
+        else
+          chk "已部署证书与 acme 源不一致（续期后未落地）" 1 \
+            "执行 acme.sh --install-cert 重新落地，或手工复制后重启 nginx/xray"
+        fi
+      fi
+
+      # reloadcmd 是否覆盖了所有读这份证书的服务
+      if [[ -z "$_rc" ]]; then
+        chk "acme reloadcmd 为空" 1 "续期后没有任何服务会重新加载新证书"
+      else
+        local _miss=""
+        [[ "$_rc" == *nginx* ]] || _miss="$_miss nginx"
+        [[ "$_rc" == *xray* ]]  || _miss="$_miss xray"
+        # 仅当本机确实跑着独立 hysteria 时才要求它出现在 reloadcmd 里
+        if systemctl is-active --quiet hysteria-server 2>/dev/null; then
+          [[ "$_rc" == *hysteria-server* ]] || _miss="$_miss hysteria-server"
+        fi
+        if [[ -n "$_miss" ]]; then
+          chk "acme reloadcmd 未覆盖:${_miss}" 1 \
+            "这些服务读 /etc/ssl/private/ 的证书，续期后不重启会继续用旧证书"
+        else
+          chk "acme reloadcmd 覆盖了全部读证书的服务" 0
+        fi
+      fi
+    fi
+  fi
+
   # 独立 hysteria 二进制的处置判断。
   #
   # v4.0.0 起本项目的 Hysteria2 可由 Xray 原生 inbound（"protocol": "hysteria"）提供，
