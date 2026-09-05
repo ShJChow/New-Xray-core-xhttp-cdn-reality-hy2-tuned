@@ -26,7 +26,7 @@
   - [Linux](#3-linux-客户端)
 - [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
 - [六、常见问题与排错](#六常见问题与排错)
-- [七、v4.8.0 实测诊断与修复记录](#七v480-实测诊断与修复记录)
+- [七、v4.8.x 实测诊断与修复记录](#七v48x-实测诊断与修复记录)
 - [八、免责声明](#八免责声明)
 
 ---
@@ -351,7 +351,7 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 
 ---
 
-## 七、v4.8.0 实测诊断与修复记录
+## 七、v4.8.x 实测诊断与修复记录
 
 本节记录一次在 **Oracle ARM (4 核 24G) / Ubuntu 26.04 / kernel 7.0** 上、对同机共存的
 xray-xhttp 与 sbbox 两套节点做的完整诊断。**每一条都有实测数据支撑，包括三条"测了但不采纳"的结论。**
@@ -397,15 +397,50 @@ xh diag        # 输出示例：
 
 > **同机共存多套代理脚本时，这是最容易踩且最难排查的一类故障。** 任何使用端口跳跃的脚本都有这个问题。
 
-### 2. REALITY 回落限速（`limitFallback*`）
+### 2.〔实测后撤回〕REALITY 回落限速（`limitFallback*`）——**会掐断全部 CDN 节点**
 
-未通过 Reality 认证的连接会被回落到伪装站点。不限速时，主动探测者可以把这里当成一条免费高速代理刷流量，
-本机出站特征也会异常。本版默认：前 10MB 不限速（保证正常浏览伪装站不被察觉），之后限到 1MB/s：
+v4.8.0 / v4.8.1 引入了这项，理由是「未通过 Reality 认证的连接会回落到伪装站，
+不限速等于给主动探测者提供免费高速代理」。**这个理由在本项目的架构下是错的，
+该配置会让所有经 CDN 的节点瘫痪。v4.8.2 已移除。**
 
-```json
-"limitFallbackUpload":   { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 },
-"limitFallbackDownload": { "afterBytes": 10485760, "bytesPerSec": 1048576, "burstBytesPerSec": 2097152 }
-```
+原因在于本项目的端口分工：
+
+| 端口 | 归属 |
+| :--- | :--- |
+| 443 | **Xray 的 REALITY 入站** |
+| 8003 | nginx（REALITY 的 `target`，同时承载 `/path` → `grpc_pass` → Xray 8001） |
+
+Cloudflare 回源走的是源站 **443**，而 CF 不是 REALITY 客户端 —— 于是它的 TLS 握手
+认证失败，被 REALITY **回落**到 `127.0.0.1:8003` 的 nginx，再由 nginx 的
+`grpc_pass` 转给 Xray 8001。也就是说：
+
+> **在这套架构里，REALITY 的「回落」不是探测诱饵，而是全部 CDN 节点的生产数据通路。**
+> 探测流量与合法 CDN 回源流量在这一层完全同形，无法区分。
+
+给回落限速 = 给所有 CDN 节点限速。按 `afterBytes: 10MB / bytesPerSec: 1MB/s` 计算，
+一个 100MB 下载需要约 90 秒，客户端普遍会先超时。
+
+实测（同一台机器，`cachefly` 100MB，各 3 次，丢弃重启后的首次请求）：
+
+| 配置 | 成功 | 吞吐 |
+| :--- | :--- | ---: |
+| 不带 `limitFallback`（基线） | 3/3 | 808 Mbps |
+| **带 `limitFallback`** | **0/3** | **0（超时）** |
+| 仅 `targetStrategy` + `finalRules` | 3/3 | 正常（无辜） |
+
+移除后全部 7 条节点复测：
+
+| 节点 | 吞吐 |
+| :--- | ---: |
+| `Vless-xhttp-h2-cdn` | 909 Mbps |
+| `Vless-xhttp-h3-cdn` | 654 Mbps |
+| `Vless-reality-vision` | 2837 Mbps |
+| `Vless-xhttp-reality` | 755 Mbps |
+| `Vless-xhttp-reality-up-cdn-down` | 832 Mbps |
+
+**排查经验**：症状是 CDN 节点「能连上、握手正常、小请求返回 200，但大文件传 0 字节」，
+nginx 报 `upstream rejected request with error 5`。若你自建的架构也是「REALITY 占 443 +
+CDN 回源到 443」，就不要给回落加任何限速。
 
 ### 3. 直连 h3 / h2 入站启用 `rejectUnknownSni`
 
