@@ -146,6 +146,9 @@ proxies:
     flow: xtls-rprx-vision
     encryption: "none"
     network: tcp
+    alpn:
+      - h2
+      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:
@@ -164,6 +167,7 @@ proxies:
     network: xhttp
     alpn:
       - h2
+      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:
@@ -191,6 +195,7 @@ proxies:
     network: xhttp
     alpn:
       - h2
+      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:

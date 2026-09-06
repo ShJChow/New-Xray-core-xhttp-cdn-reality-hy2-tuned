@@ -163,6 +163,7 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                 "security": "tls",
                 "tlsSettings": {
                     "alpn": ["h3"],
+                    "minVersion": "1.2",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,
@@ -262,6 +263,7 @@ if [[ "$FEATURE_HY2" == true ]]; then
                 "security": "tls",
                 "tlsSettings": {
                     "alpn": ["h3"],
+                    "minVersion": "1.2",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,
