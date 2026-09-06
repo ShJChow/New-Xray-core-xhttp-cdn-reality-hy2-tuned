@@ -259,6 +259,7 @@ apply_system_tuning() {
     def_dev=$(echo "$def_route" | awk '{print $5}')
     if [[ -n "$def_dev" ]]; then
       ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
+      ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
     fi
   fi
 
@@ -539,7 +540,7 @@ show_sb_tuning() {
   echo "  - Hysteria2 带宽校准:  up_mbps: 100, down_mbps: 1000"
   echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
   echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"
-  echo "  - TUN 网卡巨帧加速:    mtu: 9000, stack: mixed, endpoint_independent_nat: true"
+  echo "  - TUN 网卡极速优化:    mtu: 1480, stack: mixed, endpoint_independent_nat: true"
   echo "  - 智能秒级故障转移:    urltest 测速周期 3m, connect_timeout: 3s"
   echo ""
   echo -e "${YELLOW}[+] 完整配置已保存在: /root/sbbox/sbox_client.json${NC}"
