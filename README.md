@@ -331,6 +331,7 @@ flowchart TD
 Reality 节点的认证在服务端会被记录为 `authentication failed or validation criteria not met`，常见原因及排查方法如下：
 - **① 客户端系统时间偏差 > 30 秒（最常见）**：Reality 握手带有时间戳防重放校验。若手机/电脑系统时间与标准网络时间相差 30 秒以上，服务端会直接拒绝连接。**解决方法：在客户端设备设置中开启「自动从网络同步时间」**。
 - **② 客户端 Public Key (公钥) 或 ShortId 不匹配**：若服务端重新生成过配置，旧节点链接中的公钥失效。**解决方法：在 VPS 运行 `xh info` 或 `xh sub`，重新复制/导入最新节点链接**。
+- **③-a 节点 7 `Vless-xhttp-reality-up-cdn-down` 在 mihomo 上必然报 REALITY 认证失败**：这不是配置错误，是 mihomo 不支持「REALITY 父级 + `download-settings`」组合（实测 v1.19.30，详见第七节第 14 条）。自 v4.8.9 起该节点默认不再下发给 mihomo，Clash 系用户改用节点 6 即可。**v2rayN / Xray-core 客户端不受影响。**
 - **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 5 / 节点 6）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
@@ -642,6 +643,99 @@ REALITY 节点不受影响（用自签公钥，不读这份证书），所以表
 同一 Hysteria2 实例：loopback 593 Mbps vs 发夹 312 Mbps；TUIC：1490 vs 748 Mbps。
 **因此本机自测出的 QUIC 类节点数字系统性偏低，不能据此判断"UDP 节点比 TCP 节点慢"**——
 要比较协议本身，必须固定在同一条路径上比。
+
+---
+
+### 14.〔严重·客户端兼容〕节点 7 上下行分离在 mihomo 上 100% 连不上
+
+**现象**：`Vless-xhttp-reality-up-cdn-down` 在 v2rayN / Xray-core 上完全正常，
+在 Clash 系（mihomo）上却每次都失败，mihomo 日志：
+
+```
+[TCP] dial Vless-xhttp-reality-up-cdn-down-... --> www.gstatic.com:80
+      error: 192.9.145.231:443 connect error: REALITY authentication failed
+```
+
+注意报错地址是 **`:443`——上行那条直连腿**，不是 CDN 下行腿。也就是说
+加了 `download-settings` 之后，连原本好好的 REALITY 握手都一起废了。
+
+**Xray-core 侧对照（同一条分享链接原样还原成 Xray JSON）**：
+
+| 指标 | 结果 |
+| :--- | ---: |
+| `generate_204` 握手 | 72 ms |
+| cachefly 100MB × 3 | 90.4 / 103.3 / 112.2 MB/s（723–898 Mbps） |
+| 日志报错 | 无 |
+
+**mihomo v1.19.30 逐项二分**（每个变体只改一处，其余完全相同）：
+
+| 变体 | 结果 |
+| :--- | :--- |
+| A 原样下发 | **FAIL** REALITY authentication failed |
+| B 删掉 `download-settings` | **PASS**（即退化成节点 6） |
+| C `download-settings.servername` 改成 REALITY 域名 | FAIL |
+| D `download-settings` 去掉 `client-fingerprint` | FAIL |
+| E `download-settings` 补上父级的 `reality-opts` | FAIL |
+| F 父级 `encryption` 换成 `none`（排除后量子加密嫌疑） | FAIL |
+| G `download-settings` 去掉 `alpn` | FAIL |
+
+**关键对照——换个非 REALITY 的父级**：
+
+| 变体 | 结果 |
+| :--- | :--- |
+| H `h3-direct`（QUIC/TLS 父级）+ CDN 下行 | FAIL（context deadline exceeded） |
+| I `h2-cdn`（TCP/TLS 父级）+ CDN 下行 | **PASS** |
+| J `h3-direct` 原样（对照组） | PASS |
+
+**根因**：mihomo 支持 `xhttp-opts.download-settings` 本身（变体 I 通过），
+但**不能与 REALITY 父级并用**——变体 F 证明与后量子加密无关，
+变体 C/D/E/G 证明不是 `download-settings` 内部字段填错。
+这是 mihomo 侧的实现限制，服务端无从修复。
+
+**修复方式**：新增 `FEATURE_UP_CDN_DOWN_MIHOMO`，**默认 `false`**，
+mihomo 配置里不再下发这条节点（沿用既有的 `#<<FEATURE_X ... #>>FEATURE_X`
+裁剪机制，`mihomo-nodes.yaml` 与 `mihomo-full.yaml` 一起处理）。
+留着它不是"多一个选择"，而是一条**永远连不上的死节点**，
+还会被 `include-all: true` 的择优组反复探测拖慢切换。
+Clash 系用户本来就有节点 6（REALITY 直连）与节点 1（CDN），功能不缺。
+
+**v2rayN / Xray-core 的 URI 订阅不受影响，始终包含该节点。**
+确有需要（例如自建 mihomo 打了补丁）时 `FEATURE_UP_CDN_DOWN_MIHOMO=true` 打开。
+
+**修复后实测**（mihomo v1.19.30 逐节点起独立 mixed 入口）：
+
+```
+Vless-xhttp-h2-cdn           PASS
+Vless-xhttp-h3-cdn           PASS
+Vless-xhttp-h3-direct        PASS
+Hysteria2-obfs               PASS
+Vless-reality-vision         PASS
+Vless-xhttp-reality          PASS
+mihomo 日志 error 计数：0
+```
+
+### 15.〔客户端兼容矩阵〕七条节点各自需要什么内核
+
+上一条引出的普遍问题：**同一份订阅发给不同内核，能用的节点并不一样**。
+下表是实测（Xray-core 26.7.28 / mihomo v1.19.30）与协议支持面的汇总：
+
+| # | 节点 | Xray-core | mihomo | sing-box / Shadowrocket / NekoBox |
+| :--- | :--- | :---: | :---: | :---: |
+| 1 | `Vless-xhttp-h2-cdn` | ✅ | ✅ | ❌ 无 XHTTP |
+| 2 | `Vless-xhttp-h3-cdn` | ✅ | ✅ | ❌ 无 XHTTP |
+| 3 | `Vless-xhttp-h3-direct` | ✅ | ✅ | ❌ 无 XHTTP |
+| 4 | `Hysteria2-obfs` | ✅ | ✅ | ✅ |
+| 5 | `Vless-reality-vision` | ✅ | ✅ | ✅ |
+| 6 | `Vless-xhttp-reality` | ✅ | ✅ | ❌ 无 XHTTP |
+| 7 | `Vless-xhttp-reality-up-cdn-down` | ✅ | ❌ **REALITY + download-settings 冲突** | ❌ 无 downloadSettings |
+
+怎么用这张表：
+
+- **只有节点 4（Hysteria2）与节点 5（Reality-Vision）是全内核通吃的。**
+  给 sing-box / Shadowrocket / NekoBox 用户就发这两条，其余 XHTTP 节点它们的内核根本不认。
+- **Clash 系（mihomo）能用 1–6，唯独 7 不行**，这正是 v4.8.9 默认不下发的原因。
+- **想要全部 7 条，客户端必须是 Xray-core 内核**（v2rayN、onexray 等，建议 ≥ 26.x）。
+- 表里的 ❌「无 XHTTP」是内核层面不实现该传输，不是配置问题，**服务端改不了**。
 
 ---
 

@@ -224,7 +224,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2; do
+  for feat in FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_UP_CDN_DOWN_MIHOMO; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else

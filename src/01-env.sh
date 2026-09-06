@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.8.8"
+PROJECT_VERSION="4.8.9"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -67,6 +67,25 @@ FEATURE_HY2=${FEATURE_HY2:-true}
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
+
+# FEATURE_UP_CDN_DOWN_MIHOMO（v4.8.9 新增）：是否把 7 号节点
+# Vless-xhttp-reality-up-cdn-down 下发进 mihomo 配置。**默认关闭**。
+#
+# 该节点靠 xhttp 的 downloadSettings 做上下行分离，在 Xray-core 客户端上完全正常
+# （实测握手 72ms、cachefly 100MB 723~898 Mbps）。但 mihomo 一侧，只要
+# xhttp-opts 里出现 download-settings，**上行那条 REALITY 握手就会失败**：
+#   [TCP] dial ... 192.9.145.231:443 connect error: REALITY authentication failed
+# 实测 mihomo v1.19.30，逐项二分：改 download-settings 的 servername /
+# client-fingerprint / alpn、补 reality-opts、把 encryption 换成 none 都无效，
+# 唯独删掉 download-settings 才通（即退化成 6 号节点）。
+# 换成非 REALITY 的父级则正常（CDN 上行 + CDN 下行通过），
+# 说明 mihomo 支持 download-settings 本身，只是不能与 REALITY 父级并用。
+#
+# 所以默认不给 mihomo 下发这条节点：Clash 系用户本来就有 6 号（reality 直连）
+# 与 1 号（CDN），少这一条不缺功能；留着反而是一条永远连不上的死节点，
+# 还会被 include-all 的择优组反复探测。需要时可 FEATURE_UP_CDN_DOWN_MIHOMO=true 打开。
+# v2rayN / Xray-core 的 URI 订阅不受影响，始终包含该节点。
+FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-false}
 
 # FEATURE_PORT_HOPPING：UDP 端口跳跃（默认关闭）。
 # 避免客户端在服务端未配置 nat/iptables 端口段重定向时握手失败，或劫持同机其他 UDP 服务。

@@ -178,6 +178,7 @@ proxies:
         h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
+  #<<FEATURE_UP_CDN_DOWN_MIHOMO
   - name: Vless-xhttp-reality-up-cdn-down-${HOSTNAME_TAG}
     type: vless
     server: ${VPS_IP}
@@ -222,4 +223,5 @@ proxies:
             c-max-reuse-times: "0"
             h-max-request-times: "600-900"
             h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+  #>>FEATURE_UP_CDN_DOWN_MIHOMO
 
