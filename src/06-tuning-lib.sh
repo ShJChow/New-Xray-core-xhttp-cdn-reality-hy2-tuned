@@ -577,6 +577,57 @@ TCP_BRUTAL_RULES_FILE="/etc/tcp-brutal.rules"
 TCP_BRUTAL_SERVICE_FILE="/etc/systemd/system/tcp-brutal-rules.service"
 TCP_BRUTAL_RESTORE_BIN="/usr/local/bin/tcp-brutal-restore"
 
+get_machine_max_speed_mbps() {
+  local speed=0
+  local dev
+  dev=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+
+  # 1. 尝试从 Oracle Cloud (OCI) 元数据获取网络带宽
+  local oci_gbps
+  oci_gbps=$(curl -s -m 2 -H "Authorization: Bearer Oracle" -L http://169.254.169.254/opc/v2/instance/ 2>/dev/null | grep -o '"networkingBandwidthInGbps"[[:space:]]*:[[:space:]]*[0-9.]*' | head -n 1 | awk -F: '{print $2}' | tr -d ' ')
+  if [[ -n "$oci_gbps" ]] && awk "BEGIN {exit !($oci_gbps > 0)}" 2>/dev/null; then
+    speed=$(awk "BEGIN {printf \"%d\", $oci_gbps * 1000}")
+  fi
+
+  # 2. 尝试从网卡 sysfs speed 获取物理/虚拟链路协商速率
+  if [[ "$speed" -le 0 && -n "$dev" && -f "/sys/class/net/$dev/speed" ]]; then
+    local s
+    s=$(cat "/sys/class/net/$dev/speed" 2>/dev/null || echo 0)
+    if [[ "$s" =~ ^[0-9]+$ ]] && [[ "$s" -gt 0 ]]; then
+      speed="$s"
+    fi
+  fi
+
+  # 3. 尝试通过 ethtool 获取默认网卡速率
+  if [[ "$speed" -le 0 && -n "$dev" ]] && command -v ethtool >/dev/null 2>&1; then
+    local eth_s
+    eth_s=$(ethtool "$dev" 2>/dev/null | grep -i "Speed:" | grep -o "[0-9]\+" | head -n 1)
+    if [[ "$eth_s" =~ ^[0-9]+$ ]] && [[ "$eth_s" -gt 0 ]]; then
+      speed="$eth_s"
+    fi
+  fi
+
+  # 4. 兜底基准速率（1000 Mbps，千兆 VPS 标准）
+  if [[ "$speed" -le 0 ]]; then
+    speed=1000
+  fi
+
+  echo "$speed"
+}
+
+get_default_brutal_speed_mbps() {
+  if [[ -n "${BRUTAL_DEFAULT_MBPS:-}" && "${BRUTAL_DEFAULT_MBPS}" != "auto" ]]; then
+    echo "$BRUTAL_DEFAULT_MBPS"
+    return 0
+  fi
+
+  local max_spd
+  max_spd=$(get_machine_max_speed_mbps)
+  local target=$(( max_spd * 3 / 4 ))
+  [[ "$target" -gt 0 ]] || target=750
+  echo "$target"
+}
+
 install_tcp_brutal_module() {
   local avail
   avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
@@ -617,7 +668,10 @@ install_tcp_brutal_module() {
 }
 
 install_tcp_brutal_service() {
-  local default_mbps="${1:-500}"
+  local default_mbps="${1:-}"
+  if [[ -z "$default_mbps" || "$default_mbps" == "auto" ]]; then
+    default_mbps="$(get_default_brutal_speed_mbps)"
+  fi
 
   if [[ ! -f "$TCP_BRUTAL_RULES_FILE" ]]; then
     cat << EOF > "$TCP_BRUTAL_RULES_FILE"
@@ -682,7 +736,10 @@ EOF
 
 set_tcp_brutal_xray() {
   local action="$1"
-  local mbps="${2:-500}"
+  local mbps="${2:-}"
+  if [[ -z "$mbps" || "$mbps" == "auto" ]]; then
+    mbps="$(get_default_brutal_speed_mbps)"
+  fi
   local cfg="/usr/local/etc/xray/config.json"
   [[ -f "$cfg" ]] || { warn "未找到 Xray 配置文件: $cfg"; return 1; }
 
@@ -725,8 +782,11 @@ with open('$cfg', 'w') as f:
 }
 
 set_tcp_brutal_speed() {
-  local mbps="$1"
-  [[ -n "$mbps" ]] || { echo "用法: ${MANAGE_CMD} brutal speed <速率Mbps>"; return 1; }
+  local mbps="${1:-}"
+  if [[ -z "$mbps" || "$mbps" == "auto" ]]; then
+    mbps="$(get_default_brutal_speed_mbps)"
+    info "未指定速率，已自动设置为本机最大速度的 3/4: ${mbps} Mbps"
+  fi
   install_tcp_brutal_service "$mbps"
 
   sed -i -E "s/^(0\.0\.0\.0\/0)[[:space:]]+[0-9]+/\1 ${mbps}/" "$TCP_BRUTAL_RULES_FILE" 2>/dev/null || true
@@ -741,8 +801,11 @@ set_tcp_brutal_speed() {
 
 add_tcp_brutal_rule() {
   local ip="${1:-}"
-  local mbps="${2:-500}"
+  local mbps="${2:-}"
   [[ -n "$ip" ]] || { echo "用法: ${MANAGE_CMD} brutal add <目标IP/网段> [速率Mbps]"; return 1; }
+  if [[ -z "$mbps" || "$mbps" == "auto" ]]; then
+    mbps="$(get_default_brutal_speed_mbps)"
+  fi
   [[ "$ip" == *"/"* ]] || {
     if [[ "$ip" == *":"* ]]; then ip="${ip}/128"; else ip="${ip}/32"; fi
   }

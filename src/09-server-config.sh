@@ -95,7 +95,7 @@ XRAY_TCP_CC=""
 if [[ "$AVAIL" == *brutal* && "${FEATURE_BRUTAL:-true}" != false ]]; then
   XRAY_TCP_CC="brutal"
   info "检测到 TCP Brutal 内核模块，已为 Xray 入站启用 Brutal 极速拥塞控制"
-  install_tcp_brutal_service "${BRUTAL_DEFAULT_MBPS:-500}" 2>/dev/null || true
+  install_tcp_brutal_service "${BRUTAL_DEFAULT_MBPS:-auto}" 2>/dev/null || true
 elif [[ "$AVAIL" == *bbr* ]]; then
   XRAY_TCP_CC="bbr"
 fi

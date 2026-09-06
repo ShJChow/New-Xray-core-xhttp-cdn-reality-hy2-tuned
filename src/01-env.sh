@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.8.6"
+PROJECT_VERSION="4.8.8"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -75,7 +75,7 @@ FEATURE_PORT_HOPPING=${FEATURE_PORT_HOPPING:-false}
 # FEATURE_BRUTAL：TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制（默认开启）。
 # 当系统内核存在 brutal 模块时，自动为 Xray TCP 入站启用 Brutal 拥塞控制。
 FEATURE_BRUTAL=${FEATURE_BRUTAL:-true}
-BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-500}
+BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-auto}
 
 
 # ==================================================

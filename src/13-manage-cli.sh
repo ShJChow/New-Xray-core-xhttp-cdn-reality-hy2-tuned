@@ -787,6 +787,9 @@ cmd_brutal() {
   case "$action" in
     show|status|list|ls)
       echo ""
+      local max_spd default_spd
+      max_spd=$(get_machine_max_speed_mbps)
+      default_spd=$(get_default_brutal_speed_mbps)
       echo -e "${CYAN}=== TCP Brutal 状态 ===${NC}"
       if lsmod | grep -qw brutal; then
         echo -e "  内核模块:       ${GREEN}已加载 (v$(cat /sys/module/brutal/version 2>/dev/null || echo '2.x'))${NC}"
@@ -796,6 +799,8 @@ cmd_brutal() {
       local cc_xray
       cc_xray=$(grep -o '"tcpcongestion"[[:space:]]*:[[:space:]]*"[^"]*"' /usr/local/etc/xray/config.json 2>/dev/null | head -1 | cut -d'"' -f4 || echo "未知")
       echo -e "  Xray 入站 CC:   ${YELLOW}${cc_xray}${NC}"
+      echo -e "  本机最大带宽:   ${GREEN}${max_spd} Mbps${NC}"
+      echo -e "  默认下发速率:   ${GREEN}${default_spd} Mbps (本机最大带宽 3/4)${NC}"
       echo ""
       echo -e "${CYAN}=== 当前 Brutal 规则与实时连接 ===${NC}"
       if command -v brutalctl >/dev/null 2>&1; then
@@ -806,13 +811,13 @@ cmd_brutal() {
       echo ""
       ;;
     on)
-      set_tcp_brutal_xray on "${1:-500}"
+      set_tcp_brutal_xray on "${1:-auto}"
       ;;
     off)
       set_tcp_brutal_xray off
       ;;
     speed)
-      set_tcp_brutal_speed "${1:-500}"
+      set_tcp_brutal_speed "${1:-auto}"
       ;;
     add)
       add_tcp_brutal_rule "$@"
@@ -823,9 +828,9 @@ cmd_brutal() {
     *)
       echo "用法: ${MANAGE_CMD} brutal [show|on|off|speed|add|del]"
       echo "  ${MANAGE_CMD} brutal show          查看 TCP Brutal 状态与活跃连接"
-      echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认 500 Mbps）"
+      echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认设为本机最大速率的 3/4）"
       echo "  ${MANAGE_CMD} brutal off           关闭 Xray TCP Brutal（回落至 BBR）"
-      echo "  ${MANAGE_CMD} brutal speed <mbps>  修改全局默认下发速率"
+      echo "  ${MANAGE_CMD} brutal speed [mbps]  修改全局默认下发速率（不填则自动设为本机 3/4 速率）"
       echo "  ${MANAGE_CMD} brutal add <IP> [M]  为指定客户端 IP 设定独立下发速率"
       echo "  ${MANAGE_CMD} brutal del <IP>      删除指定客户端 IP 规则"
       ;;
