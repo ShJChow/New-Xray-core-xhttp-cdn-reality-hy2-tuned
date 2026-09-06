@@ -82,15 +82,29 @@ XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":10,\"connIdle\":1
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
 # tcpUserTimeout 设为 300000 (5分钟)，杜绝因 20s/60s 瞬时抖动杀死健康连接
 AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+if [[ "$AVAIL" != *brutal* ]]; then
+  modprobe brutal 2>/dev/null || true
+  AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+fi
 if [[ "$AVAIL" != *bbr* ]]; then
   modprobe tcp_bbr 2>/dev/null || true
   AVAIL=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
 fi
-if [[ "$AVAIL" == *bbr* ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"bbr","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+
+XRAY_TCP_CC=""
+if [[ "$AVAIL" == *brutal* && "${FEATURE_BRUTAL:-true}" != false ]]; then
+  XRAY_TCP_CC="brutal"
+  info "检测到 TCP Brutal 内核模块，已为 Xray 入站启用 Brutal 极速拥塞控制"
+  install_tcp_brutal_service "${BRUTAL_DEFAULT_MBPS:-500}" 2>/dev/null || true
+elif [[ "$AVAIL" == *bbr* ]]; then
+  XRAY_TCP_CC="bbr"
+fi
+
+if [[ -n "$XRAY_TCP_CC" ]]; then
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 else
-  warn "BBR 不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
+  warn "BBR / Brutal 均不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
   REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi

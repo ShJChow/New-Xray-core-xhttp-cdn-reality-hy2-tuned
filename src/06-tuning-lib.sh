@@ -569,3 +569,206 @@ show_client_tuning() {
       ;;
   esac
 }
+
+# ==================================================
+# TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制支持
+# ==================================================
+TCP_BRUTAL_RULES_FILE="/etc/tcp-brutal.rules"
+TCP_BRUTAL_SERVICE_FILE="/etc/systemd/system/tcp-brutal-rules.service"
+TCP_BRUTAL_RESTORE_BIN="/usr/local/bin/tcp-brutal-restore"
+
+install_tcp_brutal_module() {
+  local avail
+  avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+  if [[ "$avail" == *brutal* ]] && command -v brutalctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  info "正在检测并安装 TCP Brutal (tcp-brutal) 内核模块..."
+  if ! command -v dkms >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq dkms "linux-headers-$(uname -r)" || true
+  fi
+
+  if ! command -v dkms >/dev/null 2>&1; then
+    warn "未安装 dkms，无法自动编译 tcp-brutal 内核模块"
+    return 1
+  fi
+
+  local tmp_tar
+  tmp_tar=$(mktemp --suffix=.tar.gz)
+  if curl -fsSL https://github.com/HyNetworks/tcp-brutal/releases/latest/download/tcp-brutal.dkms.tar.gz -o "$tmp_tar" 2>/dev/null; then
+    dkms install "$tmp_tar" 2>/dev/null || true
+    rm -f "$tmp_tar"
+  fi
+
+  if ! command -v brutalctl >/dev/null 2>&1; then
+    bash <(curl -fsSL https://tcp.hy2.sh/) install 2>/dev/null || true
+  fi
+
+  modprobe brutal 2>/dev/null || true
+  if lsmod | grep -qw brutal; then
+    echo "brutal" > /etc/modules-load.d/tcp-brutal.conf 2>/dev/null || true
+    info "TCP Brutal 内核模块已加载成功"
+    return 0
+  else
+    warn "TCP Brutal 模块加载失败，请确认内核头文件匹配"
+    return 1
+  fi
+}
+
+install_tcp_brutal_service() {
+  local default_mbps="${1:-500}"
+
+  if [[ ! -f "$TCP_BRUTAL_RULES_FILE" ]]; then
+    cat << EOF > "$TCP_BRUTAL_RULES_FILE"
+# TCP Brutal Destination Rules (/etc/tcp-brutal.rules)
+# Format: <prefix> <rate_in_mbps> [noroute|lock|nolock]
+0.0.0.0/0 ${default_mbps} noroute
+::/0 ${default_mbps} noroute
+EOF
+  fi
+
+  cat << 'EOF' > "$TCP_BRUTAL_RESTORE_BIN"
+#!/usr/bin/env bash
+set -euo pipefail
+RULES_FILE="/etc/tcp-brutal.rules"
+
+if ! modprobe brutal 2>/dev/null && ! lsmod | grep -qw brutal; then
+  exit 0
+fi
+
+command -v brutalctl >/dev/null 2>&1 || exit 0
+
+brutalctl flush 2>/dev/null || true
+
+if [[ -f "$RULES_FILE" ]]; then
+  while read -r line || [[ -n "$line" ]]; do
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    read -r prefix rate opts <<< "$line"
+    if [[ -n "$prefix" && -n "$rate" ]]; then
+      if [[ -n "${opts:-}" ]]; then
+        brutalctl add "$prefix" "$rate" $opts 2>/dev/null || true
+      else
+        brutalctl add "$prefix" "$rate" 2>/dev/null || true
+      fi
+    fi
+  done < "$RULES_FILE"
+fi
+EOF
+  chmod +x "$TCP_BRUTAL_RESTORE_BIN"
+
+  cat << EOF > "$TCP_BRUTAL_SERVICE_FILE"
+[Unit]
+Description=TCP Brutal Rules Persistence Service
+After=network.target systemd-modules-load.service
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${TCP_BRUTAL_RESTORE_BIN}
+ExecReload=${TCP_BRUTAL_RESTORE_BIN}
+ExecStop=/usr/local/bin/brutalctl flush
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable tcp-brutal-rules.service 2>/dev/null || true
+  systemctl restart tcp-brutal-rules.service 2>/dev/null || true
+}
+
+set_tcp_brutal_xray() {
+  local action="$1"
+  local mbps="${2:-500}"
+  local cfg="/usr/local/etc/xray/config.json"
+  [[ -f "$cfg" ]] || { warn "未找到 Xray 配置文件: $cfg"; return 1; }
+
+  if [[ "$action" == "on" ]]; then
+    install_tcp_brutal_module || true
+    install_tcp_brutal_service "$mbps"
+
+    python3 -c "
+with open('$cfg', 'r') as f:
+    s = f.read()
+s = s.replace('\"tcpcongestion\":\"bbr\"', '\"tcpcongestion\":\"brutal\"')
+s = s.replace('\"tcpcongestion\": \"bbr\"', '\"tcpcongestion\": \"brutal\"')
+with open('$cfg', 'w') as f:
+    f.write(s)
+" 2>/dev/null || sed -i -e 's/"tcpcongestion":[[:space:]]*"bbr"/"tcpcongestion":"brutal"/g' "$cfg"
+
+    if "$XRAY_BIN" run -test -c "$cfg" >/dev/null 2>&1; then
+      svc restart xray
+      info "Xray 已成功开启 TCP Brutal（默认速率: ${mbps} Mbps）"
+    else
+      warn "Xray 配置文件测试失败，正在回滚..."
+      set_tcp_brutal_xray off
+      return 1
+    fi
+  else
+    python3 -c "
+with open('$cfg', 'r') as f:
+    s = f.read()
+s = s.replace('\"tcpcongestion\":\"brutal\"', '\"tcpcongestion\":\"bbr\"')
+s = s.replace('\"tcpcongestion\": \"brutal\"', '\"tcpcongestion\": \"bbr\"')
+with open('$cfg', 'w') as f:
+    f.write(s)
+" 2>/dev/null || sed -i -e 's/"tcpcongestion":[[:space:]]*"brutal"/"tcpcongestion":"bbr"/g' "$cfg"
+
+    if "$XRAY_BIN" run -test -c "$cfg" >/dev/null 2>&1; then
+      svc restart xray
+      info "Xray 已成功切回 BBR 拥塞控制"
+    fi
+  fi
+}
+
+set_tcp_brutal_speed() {
+  local mbps="$1"
+  [[ -n "$mbps" ]] || { echo "用法: ${MANAGE_CMD} brutal speed <速率Mbps>"; return 1; }
+  install_tcp_brutal_service "$mbps"
+
+  sed -i -E "s/^(0\.0\.0\.0\/0)[[:space:]]+[0-9]+/\1 ${mbps}/" "$TCP_BRUTAL_RULES_FILE" 2>/dev/null || true
+  sed -i -E "s/^(::\/0)[[:space:]]+[0-9]+/\1 ${mbps}/" "$TCP_BRUTAL_RULES_FILE" 2>/dev/null || true
+
+  if command -v brutalctl >/dev/null 2>&1; then
+    brutalctl add 0.0.0.0/0 "$mbps" noroute 2>/dev/null || true
+    brutalctl add ::/0 "$mbps" noroute 2>/dev/null || true
+    info "TCP Brutal 全局默认下发速率已更新为: ${mbps} Mbps"
+  fi
+}
+
+add_tcp_brutal_rule() {
+  local ip="${1:-}"
+  local mbps="${2:-500}"
+  [[ -n "$ip" ]] || { echo "用法: ${MANAGE_CMD} brutal add <目标IP/网段> [速率Mbps]"; return 1; }
+  [[ "$ip" == *"/"* ]] || {
+    if [[ "$ip" == *":"* ]]; then ip="${ip}/128"; else ip="${ip}/32"; fi
+  }
+
+  install_tcp_brutal_service
+  sed -i "\|^${ip}[[:space:]]|d" "$TCP_BRUTAL_RULES_FILE" 2>/dev/null || true
+  echo "${ip} ${mbps}" >> "$TCP_BRUTAL_RULES_FILE"
+
+  if command -v brutalctl >/dev/null 2>&1; then
+    brutalctl add "$ip" "$mbps"
+    info "已为 ${ip} 添加 TCP Brutal 限速规则: ${mbps} Mbps"
+  fi
+}
+
+del_tcp_brutal_rule() {
+  local ip="${1:-}"
+  [[ -n "$ip" ]] || { echo "用法: ${MANAGE_CMD} brutal del <目标IP/网段>"; return 1; }
+  [[ "$ip" == *"/"* ]] || {
+    if [[ "$ip" == *":"* ]]; then ip="${ip}/128"; else ip="${ip}/32"; fi
+  }
+
+  sed -i "\|^${ip}[[:space:]]|d" "$TCP_BRUTAL_RULES_FILE" 2>/dev/null || true
+
+  if command -v brutalctl >/dev/null 2>&1; then
+    brutalctl del "$ip" 2>/dev/null || true
+    info "已删除 ${ip} 的 TCP Brutal 规则"
+  fi
+}
+

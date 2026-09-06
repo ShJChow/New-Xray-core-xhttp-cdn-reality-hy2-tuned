@@ -194,6 +194,8 @@ bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality
 | `FEATURE_HY2` | 协议开关 | `true` | 开启原生 Hysteria2 + Salamander 混淆节点（监听 UDP `HY2_PORT`）。 |
 | `FEATURE_AUTOUPDATE` | 运维管理 | `true` | 开启每周定期自动升级 Xray-core（自检不通过自动回滚）。 |
 | `FEATURE_KEEPALIVE` | 进程自愈 | `true` | 开启服务守护进程保活与自动拉起。 |
+| `FEATURE_BRUTAL` | 拥塞控制 | `true` | 开启 TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制。 |
+| `BRUTAL_DEFAULT_MBPS` | 默认带宽 | `500` | TCP Brutal 默认全局下发速率（Mbps）。 |
 | `H3_PORT` | 端口定义 | `8446` | HTTP/3 直连 UDP 端口（需云防火墙开放）。 |
 | `H2_PORT` | 端口定义 | `8445` | HTTP/2 直连 TCP 端口（需云防火墙开放）。 |
 | `HY2_PORT` | 端口定义 | `8443` | Hysteria2 直连 UDP 端口（需云防火墙开放）。 |
@@ -213,6 +215,7 @@ xh status              # 查看服务运行状态、监听端口与调优状态
 xh info                # 查看节点参数与客户端链接
 xh sub                 # 查看/输出订阅链接与订阅二维码
 xh resub               # 修改配置后一键重新生成全量订阅
+xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
 xh log [xray|nginx]    # 实时查看服务运行与连接日志

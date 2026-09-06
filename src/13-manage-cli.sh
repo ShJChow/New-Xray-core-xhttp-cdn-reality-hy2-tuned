@@ -781,6 +781,57 @@ cmd_tuning() {
 
 @@include src/06-tuning-lib.sh
 
+cmd_brutal() {
+  local action="${1:-show}"
+  shift || true
+  case "$action" in
+    show|status|list|ls)
+      echo ""
+      echo -e "${CYAN}=== TCP Brutal 状态 ===${NC}"
+      if lsmod | grep -qw brutal; then
+        echo -e "  内核模块:       ${GREEN}已加载 (v$(cat /sys/module/brutal/version 2>/dev/null || echo '2.x'))${NC}"
+      else
+        echo -e "  内核模块:       ${RED}未加载${NC}"
+      fi
+      local cc_xray
+      cc_xray=$(grep -o '"tcpcongestion"[[:space:]]*:[[:space:]]*"[^"]*"' /usr/local/etc/xray/config.json 2>/dev/null | head -1 | cut -d'"' -f4 || echo "未知")
+      echo -e "  Xray 入站 CC:   ${YELLOW}${cc_xray}${NC}"
+      echo ""
+      echo -e "${CYAN}=== 当前 Brutal 规则与实时连接 ===${NC}"
+      if command -v brutalctl >/dev/null 2>&1; then
+        brutalctl list
+      else
+        echo "  未安装 brutalctl"
+      fi
+      echo ""
+      ;;
+    on)
+      set_tcp_brutal_xray on "${1:-500}"
+      ;;
+    off)
+      set_tcp_brutal_xray off
+      ;;
+    speed)
+      set_tcp_brutal_speed "${1:-500}"
+      ;;
+    add)
+      add_tcp_brutal_rule "$@"
+      ;;
+    del|rm)
+      del_tcp_brutal_rule "$@"
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} brutal [show|on|off|speed|add|del]"
+      echo "  ${MANAGE_CMD} brutal show          查看 TCP Brutal 状态与活跃连接"
+      echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认 500 Mbps）"
+      echo "  ${MANAGE_CMD} brutal off           关闭 Xray TCP Brutal（回落至 BBR）"
+      echo "  ${MANAGE_CMD} brutal speed <mbps>  修改全局默认下发速率"
+      echo "  ${MANAGE_CMD} brutal add <IP> [M]  为指定客户端 IP 设定独立下发速率"
+      echo "  ${MANAGE_CMD} brutal del <IP>      删除指定客户端 IP 规则"
+      ;;
+  esac
+}
+
 # 健康检查：服务掉线则拉起（由 cron 每 5 分钟调用）
 cmd_guard() {
   local restarted=0
@@ -934,11 +985,12 @@ cmd_menu() {
     echo "  5) 查看日志 (xray)"
     echo "  6) 更新 Xray-core"
     echo "  7) 系统层调优 show / on / off"
-    echo "  8) 保活开关"
-    echo "  9) 内核自动更新开关"
-    echo " 10) UDP 节点自检 (diag)"
-    echo " 11) sysctl 冲突检测 (conflict)"
-    echo " 12) 卸载"
+    echo "  8) TCP Brutal 极速加速 show / on / off / speed"
+    echo "  9) 保活开关"
+    echo " 10) 内核自动更新开关"
+    echo " 11) UDP 节点自检 (diag)"
+    echo " 12) sysctl 冲突检测 (conflict)"
+    echo " 13) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -949,11 +1001,12 @@ cmd_menu() {
       5) cmd_log xray ;;
       6) cmd_update ;;
       7) read -rp "  show / on / off / client: " a; cmd_tuning "${a:-show}" ;;
-      8) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
-      9) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
-      10) cmd_diag ;;
-      11) cmd_conflict ;;
-      12) cmd_uninstall; break ;;
+      8) read -rp "  show / on / off / speed: " a; cmd_brutal "${a:-show}" ;;
+      9) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
+      10) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
+      11) cmd_diag ;;
+      12) cmd_conflict ;;
+      13) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -974,6 +1027,7 @@ xray-xhttp 管理命令
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
+  xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]
   xh guard              健康检查并拉起异常服务（cron 调用）
@@ -996,6 +1050,7 @@ case "${1:-menu}" in
   restart)    cmd_restart ;;
   update)     shift; cmd_update "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
+  brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;
   autoupdate) shift; cmd_autoupdate "$@" ;;
   guard)      cmd_guard ;;

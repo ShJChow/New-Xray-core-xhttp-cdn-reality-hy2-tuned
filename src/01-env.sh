@@ -72,6 +72,11 @@ FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 # 避免客户端在服务端未配置 nat/iptables 端口段重定向时握手失败，或劫持同机其他 UDP 服务。
 FEATURE_PORT_HOPPING=${FEATURE_PORT_HOPPING:-false}
 
+# FEATURE_BRUTAL：TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制（默认开启）。
+# 当系统内核存在 brutal 模块时，自动为 Xray TCP 入站启用 Brutal 拥塞控制。
+FEATURE_BRUTAL=${FEATURE_BRUTAL:-true}
+BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-500}
+
 
 # ==================================================
 # 未识别环境变量检查（v4.7.10）
