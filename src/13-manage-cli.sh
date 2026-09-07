@@ -800,7 +800,7 @@ cmd_brutal() {
       cc_xray=$(grep -o '"tcpcongestion"[[:space:]]*:[[:space:]]*"[^"]*"' /usr/local/etc/xray/config.json 2>/dev/null | head -1 | cut -d'"' -f4 || echo "未知")
       echo -e "  Xray 入站 CC:   ${YELLOW}${cc_xray}${NC}"
       echo -e "  本机最大带宽:   ${GREEN}${max_spd} Mbps${NC}"
-      echo -e "  默认下发速率:   ${GREEN}${default_spd} Mbps (本机最大带宽 3/4)${NC}"
+      echo -e "  默认下发速率:   ${GREEN}${default_spd} Mbps (本机最大带宽 95%)${NC}"
       echo ""
       echo -e "${CYAN}=== 当前 Brutal 规则与实时连接 ===${NC}"
       if command -v brutalctl >/dev/null 2>&1; then
@@ -828,9 +828,9 @@ cmd_brutal() {
     *)
       echo "用法: ${MANAGE_CMD} brutal [show|on|off|speed|add|del]"
       echo "  ${MANAGE_CMD} brutal show          查看 TCP Brutal 状态与活跃连接"
-      echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认设为本机最大速率的 3/4）"
+      echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认设为本机最大速率的 95%）"
       echo "  ${MANAGE_CMD} brutal off           关闭 Xray TCP Brutal（回落至 BBR）"
-      echo "  ${MANAGE_CMD} brutal speed [mbps]  修改全局默认下发速率（不填则自动设为本机 3/4 速率）"
+      echo "  ${MANAGE_CMD} brutal speed [mbps]  修改全局默认下发速率（不填则自动设为本机 95% 速率）"
       echo "  ${MANAGE_CMD} brutal add <IP> [M]  为指定客户端 IP 设定独立下发速率"
       echo "  ${MANAGE_CMD} brutal del <IP>      删除指定客户端 IP 规则"
       ;;

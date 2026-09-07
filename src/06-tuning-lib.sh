@@ -624,8 +624,8 @@ get_default_brutal_speed_mbps() {
 
   local max_spd
   max_spd=$(get_machine_max_speed_mbps)
-  local target=$(( max_spd * 3 / 4 ))
-  [[ "$target" -gt 0 ]] || target=750
+  local target=$(( max_spd * 95 / 100 ))
+  [[ "$target" -gt 0 ]] || target=950
   echo "$target"
 }
 
@@ -786,7 +786,7 @@ set_tcp_brutal_speed() {
   local mbps="${1:-}"
   if [[ -z "$mbps" || "$mbps" == "auto" ]]; then
     mbps="$(get_default_brutal_speed_mbps)"
-    info "未指定速率，已自动设置为本机最大速度的 3/4: ${mbps} Mbps"
+    info "未指定速率，已自动设置为本机最大速度的 95%: ${mbps} Mbps"
   fi
   install_tcp_brutal_service "$mbps"
 
