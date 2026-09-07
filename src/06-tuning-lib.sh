@@ -363,7 +363,7 @@ LIMITSEOF
       # 若服务未安装或目录不存在，仅在存在/可创建时操作
       if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 || [[ -d "$dir" ]]; then
         install -d -m 755 "$dir" 2>/dev/null || continue
-        cat > "${dir}/${dropin}" <<'DROPINEOF' || warn "写入 ${unit} drop-in 失败"
+        cat > "${dir}/${dropin}" <<DROPINEOF || warn "写入 ${unit} drop-in 失败"
 # xray-xhttp 句柄上限，由 xh tuning on 生成 / xh tuning off 移除。
 # 本项目只写这一个文件，同目录下你自己的 override.conf 不会被改动。
 [Service]
@@ -388,6 +388,10 @@ DROPINEOF
     done
     systemctl daemon-reload >/dev/null 2>&1 || warn "systemctl daemon-reload 失败"
     info "已为代理与网关服务 (xray/nginx/sing-box/hysteria) 写入 systemd drop-in（LimitNOFILE=1048576 → ${dropin}）"
+    # daemon-reload 只让 systemd 重读单元文件，**不会**把 LimitNOFILE / Environment
+    # 应用到已在运行的进程——那些值只在 fork/exec 时读取一次。不在这里强制重启：
+    # 会无预警掐断在线连接。改为显式提示，由用户挑时机执行。
+    warn "上述 drop-in 对**已运行**的进程不生效，需重启后才应用：systemctl restart xray nginx hysteria-server sing-box"
     [[ "$migrated" -eq 1 ]] && info "已清理旧版留下的 override.conf（内容与本项目生成物一致）"
     [[ "$kept" -eq 1 ]] && \
       warn "检测到你自己修改过的 override.conf，已原样保留；它排在本项目文件之后，同名字段以你的为准"

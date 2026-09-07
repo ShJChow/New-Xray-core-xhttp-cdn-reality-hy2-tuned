@@ -737,6 +737,74 @@ mihomo 日志 error 计数：0
 - **想要全部 7 条，客户端必须是 Xray-core 内核**（v2rayN、onexray 等，建议 ≥ 26.x）。
 - 表里的 ❌「无 XHTTP」是内核层面不实现该传输，不是配置问题，**服务端改不了**。
 
+
+### 16.〔静默失效〕`xh tuning on` 的 systemd drop-in 有两处不生效
+
+一次例行体检里发现，`xh tuning on` 写出的 drop-in **两条路径都没真正生效**，
+且都不报错——机器看起来"已调优"，实际参数从未加载。
+
+**A. `GOMAXPROCS` 落盘的是未展开的字面量**
+
+drop-in 实际内容：
+
+```ini
+Environment="GOMAXPROCS=${CPU_CORES}"     # ← 字面量，不是核心数
+```
+
+根因是生成它的 heredoc 用了**带引号的定界符**，引号会关闭变量展开：
+
+```bash
+cat > "${dir}/${dropin}" <<'DROPINEOF'    # ← 'DROPINEOF' 带引号 = 不展开
+```
+
+这个 bug 一直没被发现，是因为**后果恰好与预期重合**：Go 运行时解析不了非法的
+`GOMAXPROCS` 就直接忽略它，回退到 `NumCPU()`，而这正是本来想设的值。
+但它掩盖了同一份文件里 `GOGC` / `GODEBUG` 是否生效的问题，见 B。
+
+**B. 写完 drop-in 只做了 `daemon-reload`，从不重启服务**
+
+`daemon-reload` 只让 systemd 重读单元文件；`LimitNOFILE` 与 `Environment`
+是 fork/exec 时读取一次的量，**对已在运行的进程一律不生效**。
+于是 drop-in 写入后，在下一次服务重启之前完全是摆设。
+
+实测：本机 drop-in 写于 `12:29`，而 `hysteria-server` 进程启动于 `11:08`——
+中间没有重启，进程环境里 `GOGC` / `GOMAXPROCS` / `GODEBUG` 一个都没有。
+
+**验证方法**（对着**运行中**的进程查，不要查文件）：
+
+```bash
+# 1. 看落盘的 drop-in 里是不是字面量
+grep GOMAXPROCS /etc/systemd/system/hysteria-server.service.d/10-xray-xhttp.conf
+
+# 2. 看运行中进程真正拿到的环境（空 = 未生效）
+PID=$(systemctl show hysteria-server -p MainPID --value)
+tr '\0' '\n' < /proc/$PID/environ | grep -E 'GOGC|GOMAXPROCS|GODEBUG'
+grep 'Max open files' /proc/$PID/limits
+```
+
+修复前后对比：
+
+```
+修复前： tr ... | grep -E 'GOGC|GOMAXPROCS|GODEBUG'   →  （空）
+修复后： GOGC=200 / GOMAXPROCS=4 / GODEBUG=madvdontneed=1
+        Max open files  1048576  1048576
+```
+
+**修复**：
+
+1. 生成 drop-in 的 heredoc 去掉定界符引号（该块内无其他 `$`，展开是安全的）：
+   `<<'DROPINEOF'` → `<<DROPINEOF`。
+2. 写完 drop-in 后**显式提示需要重启**，而不是静默 `daemon-reload` 了事：
+
+   ```
+   [!] 上述 drop-in 对已运行的进程不生效，需重启后才应用：
+       systemctl restart xray nginx hysteria-server sing-box
+   ```
+
+**为什么不在脚本里直接重启**：`xh tuning on` 可能在任意时刻被执行，
+自动重启会无预警掐断全部在线连接。句柄上限和 GC 参数都不是救火项，
+晚几小时到下次维护窗口才生效并无损失，**由用户挑时机**比脚本自作主张更合适。
+
 ---
 
 ## 八、免责声明
