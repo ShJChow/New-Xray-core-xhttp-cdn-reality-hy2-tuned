@@ -809,6 +809,50 @@ cmd_brutal() {
         echo "  未安装 brutalctl"
       fi
       echo ""
+
+      # 路由级 congctl lock 会按**目的地**强制 CC，优先级压过入站的 sockopt 分工，
+      # 把本该走 BBR 的入站（乃至 SSH）一并拽进 brutal 定速。单独列出来提醒。
+      local _rlocks
+      _rlocks=$(ip route show 2>/dev/null | grep -E 'congctl[[:space:]]+lock')
+      if [[ -n "$_rlocks" ]]; then
+        echo -e "${YELLOW}=== 路由级 congctl lock（按目的地强制 CC，会覆盖入站分工）===${NC}"
+        echo "$_rlocks" | sed 's/^/  /'
+        echo -e "  ${YELLOW}提示：该锁对目的地的所有 TCP 连接生效，不区分是否代理流量；${NC}"
+        echo -e "  ${YELLOW}      如需恢复「Xray 走 brutal / 其余走 BBR」的分工，用 brutalctl del <prefix> 移除。${NC}"
+        echo ""
+      fi
+
+      # 实测口径的效果对比：Brutal 是定速算法，速率超过链路真实容量时不会退让，
+      # 表现为重传率飙升。这里按 CC 汇总在线连接的发送量与重传量——
+      # brutal 重传率显著高于 bbr 即说明速率超配，应下调而不是继续加码。
+      echo -e "${CYAN}=== 在线连接实际 CC 分布与重传率 ===${NC}"
+      local _cc_stat
+      _cc_stat=$(ss -tin state established 2>/dev/null | awk '
+        /^[[:space:]]/ {
+          cc=""
+          for (i=1; i<=NF; i++)
+            if ($i=="bbr" || $i=="brutal" || $i=="cubic" || $i=="reno") { cc=$i; break }
+          if (cc=="") next
+          s=0; r=0
+          for (i=1; i<=NF; i++) {
+            if ($i ~ /^bytes_sent:/)    { t=$i; sub(/^bytes_sent:/,"",t);    s=t+0 }
+            if ($i ~ /^bytes_retrans:/) { t=$i; sub(/^bytes_retrans:/,"",t); r=t+0 }
+          }
+          n[cc]++; sent[cc]+=s; ret[cc]+=r
+        }
+        END {
+          for (c in n) {
+            p = sent[c]>0 ? ret[c]*100.0/sent[c] : 0
+            printf "  %-7s 连接 %-4d 发送 %8.1f MB  重传 %7.1f MB (%.1f%%)\n", c, n[c], sent[c]/1048576, ret[c]/1048576, p
+          }
+        }')
+      if [[ -n "$_cc_stat" ]]; then
+        echo "$_cc_stat"
+        echo -e "  ${YELLOW}注：CC 在连接建立时确定，改了规则后需客户端重连才会切换。${NC}"
+      else
+        echo "  (当前无已建立的 TCP 连接)"
+      fi
+      echo ""
       ;;
     on)
       set_tcp_brutal_xray on "${1:-auto}"

@@ -805,6 +805,87 @@ grep 'Max open files' /proc/$PID/limits
 自动重启会无预警掐断全部在线连接。句柄上限和 GC 参数都不是救火项，
 晚几小时到下次维护窗口才生效并无损失，**由用户挑时机**比脚本自作主张更合适。
 
+
+### 17.〔架构〕BBR 与 Brutal 如何共存，以及一条路由锁如何毁掉它
+
+常见疑问："能不能 BBR 和 Brutal 一起用？"
+
+先说硬约束：**一条 TCP 连接只能用一种拥塞控制**，两者无法在同一条流上混合。
+所谓共存只能是**按连接分流**——本项目与 sbbox 同机共存时，实际结构是这样的：
+
+| 节点 / 入站 | CC 来源 | 实际用的 |
+| :--- | :--- | :--- |
+| Xray 三个入站（xhttp / reality） | `sockopt.tcpcongestion=brutal` | **Brutal** |
+| sing-box vless-reality | 未设，跟内核默认 | **BBR** |
+| sing-box naive | 未设，跟内核默认 | **BBR** |
+| Hysteria2 | QUIC 用户态自带 brutal | 用户态，**不碰内核 TCP CC** |
+| TUIC | `congestion_control: bbr` | QUIC 用户态 BBR |
+
+TCP 侧靠 `sockopt` 逐 socket 指定、内核默认 `bbr` 兜底；QUIC 侧（hy2 / tuic）在用户态
+自己实现拥塞控制，**与内核 TCP CC 完全无关**。所以"要极速切 Brutal 节点、要稳切 BBR 节点"
+这套分工是天然成立的，不需要额外配置。
+
+**毁掉它的是路由级 `congctl lock`。** `brutalctl add <prefix> <rate>` 除了设速率，
+还会装一条路由：
+
+```
+120.235.161.48 via 10.0.0.1 dev enp0s6 proto 233 congctl lock brutal
+```
+
+路由锁按**目的地**生效，优先级压过入站的 sockopt 分工。后果是发往该 IP 的**所有** TCP
+连接都被拽进 brutal 定速——包括本该走 BBR 的 sing-box 入站，**以及 SSH 会话本身**：
+
+```
+10.0.0.239:22 ←→ 120.235.161.48:14773   brutal  pacing_rate 3800000000bps
+```
+
+分流方案就此被抹平成"全 brutal 定速"，正是使用者想避免的结果。
+
+**实测数据（Brutal 速率超配的代价）**
+
+该 /32 被锁到 3800 Mbps（按服务器 4 Gbps 出口的 95% 推算），而客户端是家宽。
+同一台机器上按 CC 汇总在线连接：
+
+```
+  bbr     连接 72   发送     40.5 MB  重传     0.0 MB (0.0%)
+  brutal  连接 29   发送   1255.7 MB  重传   359.1 MB (28.6%)
+```
+
+单看那条 sing-box naive 连接更直观：
+
+```
+bytes_sent:    1,200,745,235
+bytes_retrans:   358,902,006   →  29.9%
+pacing_rate:   3,800,000,000 bps   (3800 Mbps)
+delivery_rate:    71,902,448 bps   (~72 Mbps)
+```
+
+**实际投递约 72 Mbps，却按 3800 Mbps 定速发包，近三成流量在重传。**
+Brutal 是无视丢包的定速算法，速率超过链路真实容量时不会退让，只会持续自我洪泛。
+`0.0.0.0/0` 的默认值取"服务器出口的 95%"，那是**服务器**的出口能力，
+**不是客户端线路的承受能力**——两者可以差一到两个数量级。
+
+**修复与验证**
+
+```bash
+brutalctl del 120.235.161.48/32     # 移除 /32 速率组与随附的路由锁
+```
+
+删除后恢复按入站分流。注意 **CC 在连接建立时确定，存量连接不会改变**，
+需客户端重连才切换。复核：
+
+```bash
+ss -tin state established dst <客户端IP> | grep -oE '\b(bbr|brutal)\b' | sort | uniq -c
+# 预期：sing-box 的 reality / naive 连接为 bbr，Xray 的 443 连接仍为 brutal
+```
+
+`xh brutal show` 已内置这两项自检：存在路由级 `congctl lock` 时单独告警，
+并按 CC 汇总在线连接的发送量与重传率。**判据：brutal 重传率显著高于 bbr
+即说明速率超配，应下调而不是继续加码。**
+
+**给 Brutal 定速率的正确口径**：以**客户端实测下行**的 90% 为准，而不是服务器出口带宽。
+测速要在客户端做；服务器上经公网 IP 回环测出来的数字不作数（见第 13 条）。
+
 ---
 
 ## 八、免责声明
