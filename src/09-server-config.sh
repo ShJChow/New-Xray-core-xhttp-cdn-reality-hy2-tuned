@@ -163,7 +163,10 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                 "security": "tls",
                 "tlsSettings": {
                     "alpn": ["h3"],
-                    "minVersion": "1.2",
+                    // 只谈 TLS 1.3。注意不能靠「删掉这行」来要最新特性——
+                    // 删掉后 Xray 会退回它自己的默认下限（更低），
+                    // 所以这里显式写死 1.3。
+                    "minVersion": "1.3",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,
@@ -216,7 +219,10 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
                 "security": "tls",
                 "tlsSettings": {
                     "alpn": ["h2", "http/1.1"],
-                    "minVersion": "1.2",
+                    // 只谈 TLS 1.3。注意不能靠「删掉这行」来要最新特性——
+                    // 删掉后 Xray 会退回它自己的默认下限（更低），
+                    // 所以这里显式写死 1.3。
+                    "minVersion": "1.3",
                     "certificates": [
                         {
                             "certificateFile": "${CERT_FILE}",
@@ -263,7 +269,10 @@ if [[ "$FEATURE_HY2" == true ]]; then
                 "security": "tls",
                 "tlsSettings": {
                     "alpn": ["h3"],
-                    "minVersion": "1.2",
+                    // 只谈 TLS 1.3。注意不能靠「删掉这行」来要最新特性——
+                    // 删掉后 Xray 会退回它自己的默认下限（更低），
+                    // 所以这里显式写死 1.3。
+                    "minVersion": "1.3",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,

@@ -22,10 +22,13 @@ mkdir -p /etc/ssl/private
 # hysteria 的机器上时，8443 由该二进制提供服务、同样读 /etc/ssl/private/ 的证书，
 # 续期后不重启就会一直用旧证书。用 is-active 判断而非无条件重启，避免在没有该
 # 服务的机器上让整条 reloadcmd 返回非零。
+# reloadcmd 开头那句 xh-trim-chain：acme.sh 每次续期都会把完整 4 张链重新写进
+# /etc/ssl/private/fullchain.cer，裁剪结果不会自己留下来，必须在续期后重跑。
+# 用 `|| true` 兜底——裁剪失败只是握手多传 1.6KB，绝不该阻断证书续期。
 acme.sh --install-cert -d "$REALITY_DOMAIN" --ecc \
   --key-file /etc/ssl/private/private.key \
   --fullchain-file /etc/ssl/private/fullchain.cer \
-  --reloadcmd "nginx -t && ${NGINX_RESTART_CMD} && { ${XRAY_RESTART_CMD} || true; }; { command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet hysteria-server 2>/dev/null && systemctl restart hysteria-server; } || true" || \
+  --reloadcmd "/usr/local/sbin/xh-trim-chain /etc/ssl/private/fullchain.cer 2>/dev/null || true; nginx -t && ${NGINX_RESTART_CMD} && { ${XRAY_RESTART_CMD} || true; }; { command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet hysteria-server 2>/dev/null && systemctl restart hysteria-server; } || true" || \
   warn "acme.sh reloadcmd 返回非零，下面的 Nginx 自检会给出具体原因"
 
 info "测试 Nginx 配置..."

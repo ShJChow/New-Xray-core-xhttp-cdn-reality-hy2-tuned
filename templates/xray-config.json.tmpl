@@ -3,9 +3,13 @@
         "loglevel": "warning"
     },
     "dns": {
+        // 服务器顺序即优先级。freedom 出站的 targetStrategy=UseIPv4 会让每个
+        // 新域名都走一次这里，所以第一位是谁直接决定每条新连接的额外延迟。
+        // 本机实测（dig +tries=1，随机不存在的子域以避开各级缓存）：
+        // 1.1.1.1 约 4ms、8.8.8.8 约 14ms、9.9.9.9 约 14ms。
         "servers": [
-            "8.8.8.8",
             "1.1.1.1",
+            "8.8.8.8",
             "localhost"
         ],
         "queryStrategy": "UseIPv4"
@@ -72,19 +76,16 @@
                     "privateKey": "${PRIVATE_KEY}",
                     "shortIds": [
                         "${SHORT_ID}"
-                    ],
-                    // Xray 26.x 的 Reality 默认最低客户端版本是 Xray-core v26.3.27，
-                    // 会拒绝其它实现：mihomo 在握手时报 REALITY authentication failed，
-                    // 两条 Reality 节点在 mihomo / Clash 系客户端下全部不可用
-                    // （启动日志里那句 "other clients may be refused to connect" 就是它）。
-                    // 放宽到 1.8.0 后 Xray / mihomo / sing-box 三种内核均可连接。
-                    // 注意：这是一个真实的权衡，xray run -test 会为此打印警告：
+                    ]
+                    // 不设 minClientVer：采用当前 Xray 版本的默认最低客户端版本，
+                    // 只接受与本内核同代的 Reality 实现。这是 v4.9.0 起的取舍——
+                    // 代价是 mihomo / Clash 系客户端会在握手时报
+                    // REALITY authentication failed，两条 Reality 节点在这类客户端
+                    // 下不可用；换来的是不再向更旧、非 Xray 的实现开放握手，
+                    // 主动探测的暴露面回到默认水平，xray run -test 那句
                     // "Changing minClientVer will increase the likelihood of your
-                    // server's IP being blocked by the GFW"——放宽后 Reality 对更旧、
-                    // 非 Xray 的客户端也开放握手，主动探测的暴露面变大。若你主要用
-                    // v2rayN（Xray 内核），删掉这行更安全；若要兼容 Clash 系客户端，
-                    // 则需要保留。
-                    "minClientVer": "1.8.0"
+                    // server's IP being blocked by the GFW" 警告也随之消失。
+                    // 要兼容 Clash 系客户端就把 "minClientVer": "1.8.0" 加回来。
                 }${REALITY_SOCKOPT_JSON}
             },
             "sniffing": {

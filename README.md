@@ -27,7 +27,8 @@
 - [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
 - [六、常见问题与排错](#六常见问题与排错)
 - [七、v4.8.x 实测诊断与修复记录](#七v48x-实测诊断与修复记录)
-- [八、免责声明](#八免责声明)
+- [八、v4.9.0 握手提速与「全部采用最新特性」](#八v490-握手提速与全部采用最新特性)
+- [九、免责声明](#九免责声明)
 
 ---
 
@@ -336,11 +337,15 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
 
-> **关于 `minClientVer` 的提示**：为兼容 mihomo/sing-box 等非 Xray 内核，本项目把 Reality
-> 的 `minClientVer` 从 26.x 新默认值 `v26.3.27` 放宽到了 `1.8.0`。这是一个真实的权衡：
-> 执行 `xray run -test` 时内核会警告此举「会增加服务器 IP 被 GFW 封锁的可能性」，因为
-> 放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，扩大了主动探测的暴露面。若你主要
-> 使用 v2rayN（Xray 内核），删掉这一行更安全；若要兼容 Clash 系客户端，则需要保留。
+> **关于 `minClientVer`（v4.9.0 起已移除）**：本项目曾把 Reality 的 `minClientVer`
+> 从 26.x 新默认值 `v26.3.27` 放宽到 `1.8.0` 以兼容 mihomo/sing-box 等非 Xray 内核。
+> 自 v4.9.0 起该行**已删除**，改为采用当前 Xray 版本的默认最低客户端版本——
+> 代价是 **mihomo / Clash 系客户端在两条 Reality 节点上会报 `REALITY authentication failed`**，
+> 换来的是不再向更旧、非 Xray 的实现开放握手，`xray run -test` 那句
+> 「会增加服务器 IP 被 GFW 封锁的可能性」的警告也随之消失。
+> **要兼容 Clash 系客户端**：在 `/usr/local/etc/xray/config.json` 的 `realitySettings`
+> 里把 `"minClientVer": "1.8.0"` 加回去（注意给上一行的 `shortIds` 数组补回逗号），
+> 然后 `xray run -test -c /usr/local/etc/xray/config.json && systemctl restart xray`。
 
 ### 2. 直连 UDP / Hysteria 2 节点超时？
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。
@@ -511,16 +516,37 @@ Oracle Cloud 的 VNIC 默认 MTU 9000，而到公网的实际 PMTU 是 1500（`p
 
 对端通告的 MSS（通常 1460）本来就会把实际分段限制住，巨帧 MTU 在此几乎不生效；反而是本机内部路径受益。**保持 9000 不动。**
 
-### 9. `minClientVer` 的既有权衡（未改动）
+### 9.〔v4.9.0 变更〕移除 `minClientVer`，回到内核默认
 
-`xray run -test` 会为 `"minClientVer": "1.8.0"` 打印警告：
+v4.8.x 及之前，Reality 入站带 `"minClientVer": "1.8.0"`，`xray run -test` 会为此打印：
 
 ```
 REALITY: Changing "minClientVer" will increase the likelihood of your server's IP being blocked by the GFW
 ```
 
-这是上游明确的取舍提示：放宽后 Reality 对更旧、非 Xray 的客户端也开放握手，主动探测的暴露面变大。
-本项目为兼容 Clash / mihomo / sing-box 三种内核而保留该设置；**若你只用 v2rayN（Xray 内核），删掉这行更安全。**
+自 v4.9.0 起该行已删除。删除后同一条命令改打印：
+
+```
+REALITY: The default minimal client version is Xray-core v26.3.27, other clients may be refused to connect
+```
+
+**验证命令**（在服务器上跑）：
+
+```bash
+grep -c minClientVer /usr/local/etc/xray/config.json   # 期望 0（注释里的说明不计，见下一条）
+xray run -test -c /usr/local/etc/xray/config.json 2>&1 | grep REALITY
+```
+
+**这是一个真实的取舍，两边都要写清楚**：
+
+| | `minClientVer: 1.8.0`（v4.8.x） | 删除（v4.9.0，当前） |
+|---|---|---|
+| Xray-core / v2rayN 客户端 | 可用 | 可用 |
+| mihomo / Clash 系客户端 | 可用 | **握手报 `REALITY authentication failed`，两条 Reality 节点不可用** |
+| 主动探测暴露面 | 向更旧、非 Xray 实现开放握手 | 回到内核默认 |
+| `xray run -test` | 打印 GFW 封 IP 风险警告 | 无该警告 |
+
+要改回兼容 Clash 系客户端，见第六节第 1 条末尾的还原步骤。
 
 ### 10.〔实测后不采纳〕REALITY 节点的进一步提速
 
@@ -888,7 +914,174 @@ ss -tin state established dst <客户端IP> | grep -oE '\b(bbr|brutal)\b' | sort
 
 ---
 
-## 八、免责声明
+## 八、v4.9.0 握手提速与「全部采用最新特性」
+
+本节记录 v4.9.0 这一轮改动。目标只有两个：**每条节点的握手少花一个 RTT / 少传一批字节**，
+以及**把所有向后兼容的下限一律提到最新**。同样每条都有实测数据，包括「测了但不采纳」的。
+
+改完在同机跑了完整的 13 节点回归（`run_test.py`，覆盖本项目 7 条 + sbbox 5 条 + 1 条自研），
+**13/13 全通过**：
+
+```
+Xray     n0-h2-cdn                 PASS   396.0ms   TCP/H2 + Cloudflare CDN
+Xray     n1-h3-cdn                 PASS   158.3ms   QUIC/H3 + Cloudflare CDN
+Xray     n2-h3-direct              PASS    13.0ms   QUIC/H3 + VLESS Direct
+Xray     n3-hy2-obfs               PASS    27.5ms   Hysteria 2 + Salamander
+Xray     n4-reality-vision         PASS     6.3ms   VLESS + Reality + Vision
+Xray     n5-reality-xhttp          PASS    84.5ms   VLESS + Reality + XHTTP
+Xray     n6-reality-up-cdn-down    PASS   107.7ms   Reality Up + CDN Down
+sbbox    tuic / hysteria2 / naive-h3 / naive-h2 / vless-reality   全部 PASS
+```
+
+> CDN 两条的百来毫秒是 Cloudflare 边缘路径，不是服务端——口径见第七节第 13 条。
+
+---
+
+### 1.〔握手提速〕裁掉证书链尾部的根证书
+
+**现象**：Let's Encrypt 签发的 `fullchain.cer` 是 **4 张**证书：
+
+```
+leaf(reality.cch.us.kg) → YE2(中间) → Root YE(由 ISRG Root X2 交叉签名) → ISRG Root X2(由 X1 交叉签名)
+```
+
+**根因**：根证书本来就该由客户端信任库提供，服务端在**每一次** TLS 握手里都把它重传一遍。
+对 QUIC 尤其贵——客户端地址被验证前服务端受 **3 倍放大限制**，首包群越大越容易多吃一个 RTT，
+这直接落在 `h3-direct`、`Hysteria2-obfs`、`CDN-H3` 三条节点上。
+
+**判据不能用「自签根」**：链尾那张是**交叉签名**的（ISRG Root X2 由 X1 签发），
+`subject != issuer`，按自签去找一张都裁不掉。本项目改成直接测我们真正要的性质——
+**从尾部逐张试删，每删一张就拿系统信任库验一次，验得过才落实，验不过立即停手**。
+
+**验证命令**：
+
+```bash
+# 裁剪前后各跑一次，看服务端出向字节数
+tcpdump -i lo -n -w /tmp/h.pcap 'tcp port 8003' & sleep 1
+openssl s_client -connect 127.0.0.1:8003 -servername "$(xh info | grep -o 'reality[^ ]*' | head -1)" -tls1_3 </dev/null >/dev/null 2>&1
+sleep 1; kill %1
+tcpdump -r /tmp/h.pcap -n 'src port 8003' | awk '{for(i=1;i<=NF;i++) if($i=="length"){gsub(":","",$(i+1)); s+=$(i+1)}} END{print "server->client bytes:",s}'
+
+# 链长与体积
+grep -c BEGIN /etc/ssl/private/fullchain.cer   # 4 → 3
+wc -c < /etc/ssl/private/fullchain.cer         # 4841 → 3243
+```
+
+**实测前后对照**：
+
+| | 裁剪前 | 裁剪后 | 差 |
+|---|---|---|---|
+| 链长 | 4 张 | 3 张 | −1 |
+| `fullchain.cer` | 4841 B | 3243 B | −1598 B |
+| 单条 TLS 1.3 握手服务端出向字节 | 5509 B | 4364 B | **−1145 B** |
+| `openssl verify`（系统信任库） | OK | OK | 无差异 |
+
+**为什么停在 3 张而不是 2 张**：只留 `leaf + YE2` 时验证直接失败——
+
+```
+$ openssl verify -CAfile /etc/ssl/certs/ca-certificates.crt -untrusted YE2.pem leaf.pem
+error 20 at 1 depth lookup: unable to get local issuer certificate
+```
+
+`Root YE` 还没进主流信任库，砍掉它就没人能建链了。脚本自己会停在这里，不需要写死张数。
+
+**修复方式**：`/usr/local/sbin/xh-trim-chain`（源码 `tools/xh-trim-chain.sh`，安装时由
+`07-acme-cert.sh` 落地），并把它加到 acme.sh 的 `reloadcmd` **最前面**——
+续期时 acme.sh 会把完整 4 张链重新写回 `/etc/ssl/private/fullchain.cer`，
+**裁剪结果不会自己留下来，必须每次续期后重跑**。失败只 `|| true` 记一笔，绝不阻断续期。
+
+> **踩过的坑（已修）**：这个脚本的第一版在 POSIX sh 里没有局部变量，
+> `chain_ok()` 里复用了外层游标 `keep`，函数每调一次就把外层游标改掉，
+> **结果验证失败也照样把链砍短了一张**（实测把 3 张砍成 2 张，客户端直接验不过）。
+> 现在函数内部一律用 `_ck` / `_ci`。回归用例：原始 4 张链 → 3 张、已裁剪的 3 张链 → 不动、
+> 幂等重跑 → 不动、单张自签证书 → 不动。
+
+---
+
+### 2.〔降延迟〕Xray 内置 DNS 按实测延迟重排
+
+**现象**：`dns.servers` 第一位是 `8.8.8.8`。
+
+**根因**：`freedom` 出站的 `targetStrategy: UseIPv4` 会让**每个新域名**都走一次内置 DNS，
+第一位是谁直接决定每条新连接的额外延迟。
+
+**验证命令**（随机不存在的子域，避开各级缓存）：
+
+```bash
+for s in 1.1.1.1 8.8.8.8 9.9.9.9; do
+  printf "%-10s " $s
+  for i in 1 2 3; do dig +tries=1 +time=2 @$s r$RANDOM$i.example.com A | grep 'Query time'; done
+done
+```
+
+**实测（本机 Oracle ARM）**：
+
+| 解析器 | 冷域名查询耗时 |
+|---|---|
+| **1.1.1.1** | **7 / 4 / 4 ms** |
+| 8.8.8.8 | 17 / 14 / 13 ms |
+| 9.9.9.9 | 16 / 14 / 14 ms |
+
+**修复方式**：`servers` 改为 `1.1.1.1 → 8.8.8.8 → localhost`。每条新连接省约 **10ms**。
+
+---
+
+### 3.〔最新特性〕TLS 下限一律提到 1.3
+
+三处 `tlsSettings.minVersion` 与 nginx 的 `ssl_protocols` 全部改为只谈 TLS 1.3。
+
+**注意：不能靠「删掉 `minVersion` 这行」来要最新特性**——删掉后 Xray 会退回它自己的
+默认下限（更低），方向正好相反。要最新就得**显式写死 `"1.3"`**。
+
+nginx 侧连带两处清理：
+
+- `ssl_ciphers` 在 TLSv1.3 下**不生效**（那是 1.2 及以下的旋钮），换成
+  `ssl_conf_command Ciphersuites ...`；`ssl_prefer_server_ciphers` 同理已无作用，删除。
+- `ssl_stapling` 改为显式 `off`：Let's Encrypt 自 2025 年起不再提供 OCSP，
+  本项目签发的证书里**没有 OCSP responder URL**，开着只会每次启动/重载打两条 warn。
+
+**验证命令**：
+
+```bash
+openssl x509 -in /etc/ssl/private/fullchain.cer -noout -ocsp_uri   # 输出为空 = 无 OCSP
+openssl s_client -connect 127.0.0.1:8003 -servername <你的直连域名> -tls1_2 </dev/null 2>&1 | grep -i alert
+# 期望：tlsv1 alert protocol version（1.2 被拒）
+openssl s_client -connect 127.0.0.1:8003 -servername <你的直连域名> -tls1_3 </dev/null 2>&1 | grep 'Verify return'
+# 期望：Verify return code: 0 (ok)
+```
+
+**实测**：改前 `nginx -t` 每次两条
+`"ssl_stapling" ignored, no OCSP responder URL in the certificate`，改后无告警；
+TLS 1.2 连接被 alert 70 拒绝，TLS 1.3 正常，13 节点回归全过。
+
+---
+
+### 4.〔实测后不采纳〕给 Reality 入站开 TCP Fast Open
+
+**没有改动。** Reality 入站的 `sockopt` 至今**不含** `tcpFastOpen`，这是 v4.7.x 起
+有意为之：部分运营商 / 移动网络会丢弃带数据的 SYN 包，表现为
+`failed to read client hello`。省下的那一个 RTT 换不来这种概率性的连不上。
+（XHTTP 入站与 `freedom` 出站的 TFO 照常开启，它们不面对这条路径。）
+
+---
+
+### 5.〔实测后不采纳〕把 sbbox 的 Reality 握手目标从 `gateway.icloud.com` 改到本机
+
+sbbox 那套的 Reality `handshake.server` 是远端的 `gateway.icloud.com:443`，
+本项目用的是 `127.0.0.1:8003`。原以为远端目标会给每次握手加一整个 RTT，实测不成立：
+
+```
+$ curl -s -o /dev/null -w "connect=%{time_connect} appconnect=%{time_appconnect}\n" https://gateway.icloud.com/
+connect=0.001609 appconnect=0.013412
+connect=0.001563 appconnect=0.012547
+```
+
+TCP 连接建立只要 **1.6ms**（Apple 边缘就在同区），换成本机也省不出可测的差值，
+反而要动客户端 SNI 和订阅。**未改动。**
+
+---
+
+## 九、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
