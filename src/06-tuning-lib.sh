@@ -113,12 +113,19 @@ apply_system_tuning() {
   PAGE_SIZE=$(getconf PAGESIZE 2>/dev/null || echo 4096)
   MEM_PAGES=$(awk -v ps="$PAGE_SIZE" '/^MemTotal:/{printf "%d", $2*1024/ps}' /proc/meminfo 2>/dev/null || echo 262144)
 
+  local SOCK_MEM_DEF UDP_MEM_MIN
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=262144
+    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    SOCK_MEM_DEF=2097152; UDP_MEM_MIN=131072
   elif [[ "$MEM_MB" -ge 4096 ]]; then
-    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    SOCK_MEM_DEF=1048576; UDP_MEM_MIN=65536
+  elif [[ "$MEM_MB" -ge 1536 ]]; then
+    TUNE_TIER="entry";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=8388608;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=65536; NETDEV_BUDGET=""; OPTMEM_MAX=65536
+    SOCK_MEM_DEF=524288; UDP_MEM_MIN=32768
   else
-    TUNE_TIER="small";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=16384; CONNTRACK_MAX=0; NETDEV_BUDGET=""; OPTMEM_MAX=65536
+    TUNE_TIER="small";  SOCK_MEM_MAX=4194304;  TCP_MEM_MAX=2097152;  NETDEV_BACKLOG=4096;  CONNTRACK_MAX=0; NETDEV_BUDGET=""; OPTMEM_MAX=65536
+    SOCK_MEM_DEF=262144; UDP_MEM_MIN=16384
   fi
 
   info "机型: ${CPU_CORES} 核 / ${MEM_MB} MB / ${ARCH} → 调优档位 ${TUNE_TIER}"
@@ -148,21 +155,14 @@ apply_system_tuning() {
   # ---------- 收发缓冲区（大带宽时延积链路 / 过 CDN 的关键项）----------
   try_sysctl net.core.rmem_max "$SOCK_MEM_MAX"
   try_sysctl net.core.wmem_max "$SOCK_MEM_MAX"
-  if [[ "$MEM_MB" -ge 4096 ]]; then
-    try_sysctl net.core.rmem_default 4194304
-    try_sysctl net.core.wmem_default 4194304
-    try_sysctl net.ipv4.udp_rmem_min 131072
-    try_sysctl net.ipv4.udp_wmem_min 131072
-  else
-    try_sysctl net.core.rmem_default 1048576
-    try_sysctl net.core.wmem_default 1048576
-    try_sysctl net.ipv4.udp_rmem_min 16384
-    try_sysctl net.ipv4.udp_wmem_min 16384
-  fi
+  try_sysctl net.core.rmem_default "$SOCK_MEM_DEF"
+  try_sysctl net.core.wmem_default "$SOCK_MEM_DEF"
+  try_sysctl net.ipv4.udp_rmem_min "$UDP_MEM_MIN"
+  try_sysctl net.ipv4.udp_wmem_min "$UDP_MEM_MIN"
   # 中间值是**初始**默认值，autotuning 会在 min~max 之间增长；调大它影响的是
   # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
-  try_sysctl net.ipv4.tcp_rmem "4096 262144 ${TCP_MEM_MAX}"
-  try_sysctl net.ipv4.tcp_wmem "4096 262144 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_rmem "4096 131072 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_wmem "4096 131072 ${TCP_MEM_MAX}"
   # 接收缓冲中留给协议开销的比例。设为 1（保留 50% 内存作为通告窗口），让 64MB/32MB
   # 缓冲能通告出 32MB/16MB 的接收窗口，突破跨境高延迟（200ms+）下的单流千兆吞吐瓶颈。
   try_sysctl net.ipv4.tcp_adv_win_scale 1
@@ -171,18 +171,19 @@ apply_system_tuning() {
   # 内核 6.x/7.x SACK 压缩，在跨境丢包路径上聚合压缩 SACK ACK，抑制 ACK 风暴
   try_sysctl net.ipv4.tcp_comp_sack_nr 44
   try_sysctl net.ipv4.tcp_comp_sack_delay_ns 1000000
-  # 按物理内存的 6% / 8% / 12% 推算（单位是页，已按 PAGESIZE 换算）
-  try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 12 / 100 ))"
+  # 按物理内存的 4% / 6% / 8% 推算（单位是页，已按 PAGESIZE 换算）
+  try_sysctl net.ipv4.tcp_mem "$(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 ))"
   # QUIC / HTTP3 / TLS 辅助缓冲扩容
   try_sysctl net.core.optmem_max "${OPTMEM_MAX:-65536}"
-  # udp_mem（v4.7.2）：全系统 UDP 内存池上限，单位是页。上面两项是**单个套接字**的
-  # 保底值，管不到这个总量；触顶后内核直接丢包且不回任何错误，表现为 h3-direct 与
-  # Hysteria2 在高并发下莫名丢包，而 TCP 节点一切正常——极难定位，因此显式设置。
-  # 针对 16GB+ 大内存机型提供 4%~16% 弹性缓冲池，避免高突发 UDP 丢包。
+  # udp_mem：全系统 UDP 内存池上限，全档位动态闭环覆盖
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 8 / 100 )) $(( MEM_PAGES * 16 / 100 ))"
-  elif [[ "$MEM_MB" -ge 1024 ]]; then
-    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 8 / 100 ))"
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 6 / 100 )) $(( MEM_PAGES * 8 / 100 ))"
+  elif [[ "$MEM_MB" -ge 4096 ]]; then
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 4 / 100 )) $(( MEM_PAGES * 6 / 100 ))"
+  elif [[ "$MEM_MB" -ge 1536 ]]; then
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 3 / 100 )) $(( MEM_PAGES * 5 / 100 ))"
+  else
+    try_sysctl net.ipv4.udp_mem "$(( MEM_PAGES * 1 / 100 )) $(( MEM_PAGES * 2 / 100 )) $(( MEM_PAGES * 3 / 100 ))"
   fi
 
   # ---------- 队列与并发 ----------
@@ -259,7 +260,11 @@ apply_system_tuning() {
     def_dev=$(echo "$def_route" | awk '{print $5}')
     if [[ -n "$def_dev" ]]; then
       ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
-      ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
+      local cur_mtu
+      cur_mtu=$(cat "/sys/class/net/$def_dev/mtu" 2>/dev/null || echo 1500)
+      if [[ "$cur_mtu" -lt 1480 && "$cur_mtu" -gt 0 ]]; then
+        ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
+      fi
     fi
   fi
 
