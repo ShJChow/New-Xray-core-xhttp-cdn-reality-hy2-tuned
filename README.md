@@ -32,7 +32,8 @@
 - [十、v4.9.2 换上 BBRv3 内核，与 tcp-brutal 的新内核 ABI 修复](#十v492-换上-bbrv3-内核与-tcp-brutal-的新内核-abi-修复)
 - [十一、v4.9.4 BBRv3 上的 25 样本回归基线](#十一v494-bbrv3-上的-25-样本回归基线)
 - [十二、v4.9.5 large 档 tcp_rmem/tcp_wmem 上限补齐到 64MB](#十二v495-large-档-tcp_rmemtcp_wmem-上限补齐到-64mb)
-- [十三、免责声明](#十三免责声明)
+- [十三、v4.9.6 MTU 全线回到 1500](#十三v496-mtu-全线回到-1500)
+- [十四、免责声明](#十四免责声明)
 
 ---
 
@@ -1441,7 +1442,43 @@ sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem
 
 ---
 
-## 十三、免责声明
+## 十三、v4.9.6 MTU 全线回到 1500
+
+服务器物理网卡与客户端 TUN 虚拟网卡的 MTU 都统一为 **1500**。
+
+**服务器侧**：此前 `xh tuning on` 会无条件把默认网卡压到 1480
+（v4.9.5 起改为"仅当当前 MTU < 1480 才设"，见 `src/06-tuning-lib.sh`）。
+若你的机器已被压过，用下面的方法验证链路能否跑满 1500 再改回：
+
+```bash
+DEV=$(ip route show default | awk '{print $5;exit}')
+GW=$(ip route show default | awk '{print $3;exit}')
+ip link set dev "$DEV" mtu 1500
+ping -c2 -M do -s 1472 "$GW" && ping -c2 -M do -s 1472 1.1.1.1   # 1500 字节不分片
+# 任一不通就 ip link set dev "$DEV" mtu 1480 回退
+```
+
+**持久化不在本项目手里**：MTU 若写死在 `/etc/netplan/*.yaml` 里，
+`ip link set` 只影响当前运行时，重启会被 netplan 改回去。检查：
+
+```bash
+grep -rn mtu /etc/netplan/
+```
+
+注意 `50-cloud-init.yaml` 由 cloud-init 在开机时重写，要覆盖它得靠序号更大的
+文件（如 `99-custom-mtu.yaml`，netplan 按文件名排序，后者胜）。
+
+**客户端侧**：`templates/mihomo-full.yaml.tmpl` 的 `tun.mtu` 由 1480 改为 1500。
+
+> **这一项有取舍，请按自己的网络判断。** TUN 是虚拟网卡，它的包还要再被
+> VLESS / Hysteria 封装一层才出物理网卡，1480 那 20 字节余量正是为了避免
+> 封装后超过物理 MTU 触发分片。**在 PPPoE（MTU 1492）、部分移动网络等
+> 物理 MTU 本就小于 1500 的链路上，1500 可能导致大包丢失、网页加载卡半截。**
+> 若遇到这类现象，把客户端配置里的 `tun.mtu` 改回 1480 即可，与服务端无关。
+
+---
+
+## 十四、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
