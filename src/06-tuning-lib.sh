@@ -115,7 +115,7 @@ apply_system_tuning() {
 
   local SOCK_MEM_DEF UDP_MEM_MIN
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=2097152; UDP_MEM_MIN=131072
   elif [[ "$MEM_MB" -ge 4096 ]]; then
     TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
@@ -568,7 +568,7 @@ show_sb_tuning() {
   echo "  - Hysteria2 带宽校准:  up_mbps: 100, down_mbps: 1000"
   echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
   echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"
-  echo "  - TUN 网卡极速优化:    mtu: 1500, stack: mixed, endpoint_independent_nat: true"
+  echo "  - TUN 网卡极速优化:    mtu: 1480, stack: mixed, endpoint_independent_nat: true"
   echo "  - 智能秒级故障转移:    urltest 测速周期 3m, connect_timeout: 3s"
   echo ""
   echo -e "${YELLOW}[+] 完整配置已保存在: /root/sbbox/sbox_client.json${NC}"
