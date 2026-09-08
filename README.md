@@ -31,7 +31,8 @@
 - [九、v4.9.1 CDN 延迟归因与 ECN](#九v491-cdn-延迟归因与-ecn)
 - [十、v4.9.2 换上 BBRv3 内核，与 tcp-brutal 的新内核 ABI 修复](#十v492-换上-bbrv3-内核与-tcp-brutal-的新内核-abi-修复)
 - [十一、v4.9.4 BBRv3 上的 25 样本回归基线](#十一v494-bbrv3-上的-25-样本回归基线)
-- [十二、免责声明](#十二免责声明)
+- [十二、v4.9.5 large 档 tcp_rmem/tcp_wmem 上限补齐到 64MB](#十二v495-large-档-tcp_rmemtcp_wmem-上限补齐到-64mb)
+- [十三、免责声明](#十三免责声明)
 
 ---
 
@@ -1406,7 +1407,41 @@ CDN 两条维持在 12.7 / 15.8ms —— 这是 v4.9.1 把 `scMinPostsIntervalMs
 
 ---
 
-## 十二、免责声明
+## 十二、v4.9.5 large 档 tcp_rmem/tcp_wmem 上限补齐到 64MB
+
+`docs/10.流控调优.md` 从一开始就写着 large 档的 `tcp_rmem` 上限是 **64MB**，
+但 `src/06-tuning-lib.sh` 里 large 档的 `TCP_MEM_MAX` 一直是 `33554432`（32MB）——
+**是代码没跟上文档**，不是文档写错。v4.9.5 把 large 档（内存 ≥ 16GB）补齐：
+
+```diff
+-TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; ...
++TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=67108864; ...
+```
+
+medium / entry / small 三档**不变**（它们的 `TCP_MEM_MAX` 本来就是各自 `SOCK_MEM_MAX` 的一半以下，
+在小内存机上把单条连接的缓冲上限提到和全局 `rmem_max` 齐平并不安全）。
+
+验证：
+
+```bash
+xh tuning on
+sysctl net.ipv4.tcp_rmem net.ipv4.tcp_wmem
+# 期望：4096  131072  67108864
+```
+
+**未采纳的两项**（来自社区流传的 "BBR Blast Smooth" 一键脚本）：
+
+| 该脚本的做法 | 为什么不采纳 |
+| --- | --- |
+| `net.ipv4.tcp_fin_timeout=8` | 本项目用 `15`。有 CDN 回源的部署里，8 秒的 FIN_WAIT2 会在回源侧长连接被中间设备静默半关时提前放走 socket，换来的内存节省在 24GB 机器上没有意义。 |
+| 把参数 `>>` 追加进 `/etc/sysctl.conf` | ① Ubuntu 24.04+ 默认**没有** `/etc/sysctl.conf`，脚本会新建它；systemd-sysctl 把 `/etc/sysctl.conf` 排在 `/etc/sysctl.d/*.conf` **之后**应用，于是它会静默盖掉 `xh tuning` 与 `sbbox tune` 的值，而 `xh tuning off` 只删自己的文件、**回滚不掉**。② `>>` 追加意味着重复执行会堆叠多份。本项目所有参数只写 `/etc/sysctl.d/99-xray-xhttp.conf` 一个文件，整文件覆盖、整文件删除。 |
+
+该脚本其余 10 项参数（`fq`/`bbr`、`rmem_max`/`wmem_max=64M`、`tcp_tw_reuse`、`tcp_no_metrics_save`
+以及内核本就默认开启的 `tcp_window_scaling`/`tcp_timestamps`/`tcp_sack`）本项目**均已包含**。
+
+---
+
+## 十三、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
