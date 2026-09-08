@@ -29,7 +29,8 @@
 - [七、v4.8.x 实测诊断与修复记录](#七v48x-实测诊断与修复记录)
 - [八、v4.9.0 握手提速与「全部采用最新特性」](#八v490-握手提速与全部采用最新特性)
 - [九、v4.9.1 CDN 延迟归因与 ECN](#九v491-cdn-延迟归因与-ecn)
-- [十、免责声明](#十免责声明)
+- [十、v4.9.2 换上 BBRv3 内核，与 tcp-brutal 的新内核 ABI 修复](#十v492-换上-bbrv3-内核与-tcp-brutal-的新内核-abi-修复)
+- [十一、免责声明](#十一免责声明)
 
 ---
 
@@ -1187,8 +1188,10 @@ ls /sys/module/tcp_bbr/parameters/   # 空
 ```
 
 **为什么暂时换不上**：本机是 **arm64**。archive 里所有 `linux-image-*` 都是同一套
-Ubuntu 7.0.0 内核，带的都是这份 BBRv1；常见的预编译 BBRv3 内核（XanMod 一类）
-**只出 x86_64，没有 arm64 构建**。
+Ubuntu 7.0.0 内核，带的都是这份 BBRv1；XanMod 一类的预编译 BBRv3 内核只出 x86_64。
+
+> ⚠️ **这段结论在 v4.9.2 被证伪**：`byJoey/Actions-bbr-v3` **有 arm64 构建**
+> （`arm64-*` tag 一直都在，是我漏查了）。v4.9.2 已实际换上，见第十节。
 
 剩下两条路，都需要单独决策，本版**未执行**：
 
@@ -1196,7 +1199,148 @@ Ubuntu 7.0.0 内核，带的都是这份 BBRv1；常见的预编译 BBRv3 内核
   显示已为两个内核版本各编译一份），工具链齐全、可回退，是风险最低的一条。
 - **自编 BBRv3 内核**：Oracle VPS 无带外控制台，自编内核启动失败等于失联。
 
-## 十、免责声明
+## 十、v4.9.2 换上 BBRv3 内核，与 tcp-brutal 的新内核 ABI 修复
+
+### 1.〔更正〕arm64 有预编译的 BBRv3 内核
+
+v4.9.1 写的「预编译 BBRv3 内核只出 x86_64，没有 arm64 构建」**是错的**。
+`byJoey/Actions-bbr-v3` 的 release 里 `arm64-*` tag 一直都有，是漏查了。
+本机已换到 `7.2.3-joeyblog-bbrv3`，原厂 `-oracle` 内核保留在 `/boot` 作回退。
+
+### 2.〔严重·会静默降级〕tcp-brutal 在内核 7.1+ 上编译失败
+
+**这一条与是否升级 BBRv3 无关，任何人把机器升到 7.1 以上都会踩到。**
+
+**现象**：`dkms` 编译 tcp-brutal 报
+
+```
+error: 'struct tcp_congestion_ops' has no member named 'min_tso_segs'; did you mean 'tso_segs'?
+```
+
+**根因**：内核改了拥塞控制的回调签名，上游 tcp-brutal 至今未适配：
+
+```c
+旧 (≤7.0): u32 (*min_tso_segs)(struct sock *sk);
+新 (7.1+): u32 (*tso_segs)(struct sock *sk, unsigned int mss_now);
+```
+
+**为什么危险**：本项目的 `sockopt` 里写着 `"tcpcongestion":"brutal"`。模块编不出来
+时安装流程只是 `|| true` 过去，**brutal 静默不可用**，你要到转发出问题才会发现。
+
+**验证命令**：
+
+```bash
+sysctl -n net.ipv4.tcp_available_congestion_control   # 期望含 brutal
+lsmod | grep brutal
+dkms status | grep tcp-brutal                          # 应为每个内核各一份 installed
+tail -20 /var/lib/dkms/tcp-brutal/*/build/make.log     # 失败时看这里
+```
+
+**修复方式**（v4.9.2 起自动执行）：安装流程改成先 `dkms ldtarball` 把源码摊到
+`/usr/src`，打完补丁再 `dkms install`——原来的 `dkms install <tarball>` 是
+「解包+编译」一步走，中间插不进补丁。补丁给回调加了条件编译，
+**判别式直接 grep 目标内核的 `include/net/tcp.h`**，不用 `LINUX_VERSION_CODE`
+猜版本边界（猜错会在别人的内核上静默走错分支）。
+
+写这个探测踩了三个坑，都写进注释了：
+
+1. Makefile 会被读**两次**——外层 make 有 `KERNEL_DIR`，内核 kbuild 重读时只有
+   `srctree`。只看 `KERNEL_DIR` 的话，真正编译那一遍路径为空，宏静默不定义。
+2. `$(shell ...)` 里不能用反斜杠续行。
+3. **make 匹配 `$(shell ...)` 的右括号时不认引号**——grep 模式里写
+   `'tso_segs)(struct sock...'` 会让 `$(shell)` 提前闭合，报
+   `/bin/sh: Syntax error: Unterminated quoted string`。判别式因此改用无括号的
+   `tso_segs.*mss_now`（旧内核 0 命中、新内核 1 命中）。
+
+**实测**：补丁后的源码对 `7.2.3-joeyblog-bbrv3` 与 `7.0.0-1010-oracle` **都能编出
+`brutal.ko`**，两个内核下 `brutal` 均在可用 CC 列表里。补丁函数幂等，重复执行不会二次插入。
+
+### 3.〔方法〕远程 VPS 换内核的四层防宕机
+
+无带外控制台的云主机换内核，四层缺一不可：
+
+| 故障 | 兜底 | 结果 |
+|---|---|---|
+| 内核 panic | `panic=10` | 10 秒自动重启 |
+| **initramfs 找不到根盘** | **`rd.shell=0 rd.emergency=reboot`** | 立即重启，而不是掉进 emergency shell 挂死 |
+| 能开机但网络不通 | systemd 死人开关（12 分钟未确认则重启） | 自动重启 |
+| 启动项本身 | `GRUB_DEFAULT=saved` + `grub-set-default 旧内核` + `grub-reboot 新内核` | 新内核只试一次 |
+
+第二层最容易漏：**`panic=10` 管不了 dracut 的 emergency shell**，那才是「开不了机又连不上」的典型形态。
+
+**踩过的坑**：保护措施必须在**装内核之前**就位。内核包的 postinst 会自己跑
+`update-grub`，若此时 `GRUB_DEFAULT=0` 仍在，默认启动项立刻变成新内核；
+我把保护排在装包之后，dkms 一失败脚本就中止，机器一度处于
+「下次重启进未验证内核且无任何回退」的状态。
+
+**换内核前必查**（本机根盘是 virtio_scsi，`cmdline` 里的 `netroot=iscsi` 是
+Oracle 镜像样板参数，不代表真走 iSCSI）：
+
+```bash
+mokutil --sb-state                     # Secure Boot 开着就装不了未签名内核
+iscsiadm -m session; ls /sys/firmware/ibft   # 确认根盘到底走不走 iSCSI
+# 拿新内核的 config 和「当前能开机的内核」逐项比对开机关键项
+for c in CONFIG_ACPI CONFIG_EFI CONFIG_SCSI_VIRTIO CONFIG_VIRTIO_NET \
+         CONFIG_ARM64_4K_PAGES CONFIG_SERIAL_AMBA_PL011_CONSOLE; do
+  echo "$c: $(grep -E "^$c=" /boot/config-旧) vs $(grep -E "^$c=" /boot/config-新)"
+done
+```
+
+本机 19 项全部一致（含 arm64 最容易翻车的页大小 4K），这是敢按下重启的依据。
+
+### 4.〔适配〕`xh` 状态输出新增 BBR 版本识别
+
+BBR 有 v1 / v3 两代，`sysctl net.ipv4.tcp_congestion_control` **两代都叫 `bbr`**，
+只看名字分不出来 —— 这正是 v4.9.1 里我误判的起点。`xh` 的状态输出现在多一行：
+
+```
+  net.ipv4.tcp_congestion_control  bbr
+    └─ BBR 版本                     v3
+```
+
+判据按可靠性排序，拿不到就报 `unknown`、不猜：
+
+1. `/proc/kallsyms` 里有 `bbr_start_bw_probe_down` / `bbr_is_inflight_too_high` /
+   `bbr_skb_marked_lost` → v3；有 `bbr_lt_bw_sampling` → v1（该符号 v3 已删除）
+2. 兜底看 `ss -tin` 的 `cwnd_gain`：v1 是 `2.88672`，v3 解耦后是 `2`
+   （需要当前有活跃 bbr 连接，所以只作兜底）
+
+### 5.〔实测〕BBRv3 上线后的回归与 ECN 复测
+
+13 节点全量回归 **13/13 PASS**。BBRv3 已确认接管：`bbr_lt_bw_sampling`（v1 专属）
+为 0，`bbr_start_bw_probe_down` / `bbr_skb_marked_lost` / `bbr_is_inflight_too_high`
+均在。**最快的版本指纹是 `ss -tin | grep -o 'bbr:([^)]*)'`**：
+
+```
+v1: bbr:(bw:...,mrtt:...,pacing_gain:2.88672,cwnd_gain:2.88672)
+v3: bbr:(bw:...,mrtt:...,pacing_gain:2.77344,cwnd_gain:2)
+```
+
+`cwnd_gain` 由 2.88672 变成 2，正是 v3 把 cwnd_gain 与 pacing_gain 解耦的 Headroom 改动。
+
+**ECN 复测：依然没有收益，但原因和 v4.9.1 说的不一样。** v4.9.1 归因为
+「BBRv1 不消费 ECN 标记」——那句没错，但不是全部原因。换上会消费 ECN 的 BBRv3 后
+仍无差异，真正的原因是**路径上压根没有标记**：
+
+```bash
+nstat -az | grep -iE 'DeliveredCE|InCEPkts'   # 自开机以来全为 0
+ss -tin | grep delivered_ce                    # 无该字段
+```
+
+BBRv3 下 A/B（各 12 轮交错，cachefly 10MB + gstatic/generate_204）：
+首字节中位 1.9ms vs 1.9ms，吞吐中位 2700 vs 2576 Mbps，差异都在噪声内。
+**判断 ECN 有没有用，要先量 CE 计数，而不是直接跑吞吐 A/B。**
+`tcp_ecn=1` 予以保留（零成本，路径上将来出现 L4S/AQM 时能立刻吃到）。
+
+> **测量口径警告**：`speed.cloudflare.com` 会对频繁测速返回 **HTTP 429**，
+> 此时 `%{speed_download}` 变成 0 而 **curl 退出码仍是 0**，极易被误读成
+> 「吞吐掉到 0 的严重回归」——我就这么误判过一次。做吞吐基准要用 cachefly
+> 一类不限流的源，并显式检查 `http_code` 与 `size_download`。
+> v4.9.1 那组 BBRv1 的吞吐数字（1212/1373 Mbps）就掺了 429，不可与本节数字直接相比。
+
+---
+
+## 十一、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

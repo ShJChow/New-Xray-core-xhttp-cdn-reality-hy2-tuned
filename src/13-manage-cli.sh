@@ -103,6 +103,9 @@ cmd_status() {
   echo -e "\n${CYAN}[+] 流控状态${NC}"
   printf '  %-32s %s\n' "net.core.default_qdisc"          "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.ipv4.tcp_congestion_control" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)"
+  # BBR 有 v1 / v3 两代，sysctl 里都叫 "bbr"，只看名字分不出来。
+  # v3 把 ECN 与丢包率纳入控制环、ProbeBW 改为轮次推进、并预留 ~15% Headroom。
+  printf '  %-32s %s\n' "  └─ BBR 版本" "$(detect_bbr_version)"
   printf '  %-32s %s\n' "net.core.rmem_max"               "$(sysctl -n net.core.rmem_max 2>/dev/null || echo n/a)"
   printf '  %-32s %s\n' "net.ipv4.tcp_fastopen"           "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo n/a)"
   # 机型/档位与 bufferSize 现场探测：这些变量只在 tuning_on 的流程里赋值，

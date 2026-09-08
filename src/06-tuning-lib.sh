@@ -657,6 +657,90 @@ get_default_brutal_speed_mbps() {
   echo "$target"
 }
 
+# 报告内核里的 bbr 到底是 v1 还是 v3。
+# 判据按可靠性排序：
+#   1) kallsyms 里的 bbr_lt_bw_sampling —— v1 专属，v3 已删除（最硬，但需要
+#      /proc/kallsyms 可读且未被 kptr_restrict 完全屏蔽）
+#   2) ss 的 bbr info 字段 cwnd_gain —— v1 是 2.88672，v3 解耦后是 2
+#      （需要当前有活跃的 bbr 连接，所以只作兜底）
+# 两者都拿不到就报 unknown，不猜。
+detect_bbr_version() {
+  local avail
+  avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
+  case "$avail" in *bbr*) ;; *) echo "not-available"; return ;; esac
+
+  if [ -r /proc/kallsyms ]; then
+    if grep -qE ' bbr_(start_bw_probe_down|is_inflight_too_high|skb_marked_lost)$' /proc/kallsyms 2>/dev/null; then
+      echo "v3"; return
+    fi
+    if grep -qE ' bbr_lt_bw_sampling$' /proc/kallsyms 2>/dev/null; then
+      echo "v1"; return
+    fi
+  fi
+  local g
+  g=$(ss -tin 2>/dev/null | grep -o 'cwnd_gain:[0-9.]*' | head -1 | cut -d: -f2)
+  case "$g" in
+    2)        echo "v3" ;;
+    2.88672)  echo "v1" ;;
+    *)        echo "unknown" ;;
+  esac
+}
+
+patch_tcp_brutal_tso_segs() {
+  # 内核 7.1 起 tcp_congestion_ops 把 min_tso_segs(sk) 改成 tso_segs(sk, mss_now)，
+  # 上游 tcp-brutal（HyNetworks/apernet）至今未适配：在 7.1+ 上 dkms 编译直接失败，
+  # 结果是 brutal 静默不可用，而本项目的 sockopt 里写着 tcpcongestion=brutal。
+  # 判别式直接 grep 目标内核头文件，不用 LINUX_VERSION_CODE 猜边界。
+  local src f mk
+  for src in /usr/src/tcp-brutal-*; do
+    [ -d "$src" ] || continue
+    f="$src/brutal_cc.c"; mk="$src/Makefile"
+    [ -f "$f" ] && [ -f "$mk" ] || continue
+    grep -q 'HAVE_TSO_SEGS_MSS' "$f" 2>/dev/null && continue   # 已打过，幂等
+
+    awk '
+      /^static u32 brutal_min_tso_segs\(struct sock \*sk\)$/ {
+        print "#ifdef HAVE_TSO_SEGS_MSS"
+        print "static u32 brutal_min_tso_segs(struct sock *sk, unsigned int mss_now)"
+        print "#else"
+        print $0
+        print "#endif"
+        next
+      }
+      /^[[:space:]]*\.min_tso_segs = brutal_min_tso_segs,$/ {
+        print "#ifdef HAVE_TSO_SEGS_MSS"
+        print "    .tso_segs = brutal_min_tso_segs,"
+        print "#else"
+        print $0
+        print "#endif"
+        next
+      }
+      { print }
+    ' "$f" > "$f.new" && mv "$f.new" "$f"
+
+    # Makefile 里加探测。三个坑：本文件会被 kbuild 二次读取（那时只有 srctree、
+    # 没有 KERNEL_DIR）；$(shell) 里不能用反斜杠续行；**make 找 $(shell ...) 的
+    # 右括号时不认引号**，所以 grep 模式里绝不能出现 ')'，用无括号的
+    # 'tso_segs.*mss_now' 代替（旧内核 0 命中、新内核 1 命中）。
+    awk '
+      /^ccflags-y := / && !done {
+        print $0
+        print "TSO_SEGS_HDR := $(firstword $(wildcard $(srctree)/include/net/tcp.h $(KERNEL_DIR)/include/net/tcp.h))"
+        print "TSO_SEGS_MSS := $(shell grep -c '\''tso_segs.*mss_now'\'' $(TSO_SEGS_HDR) 2>/dev/null)"
+        print "ifneq ($(TSO_SEGS_MSS),0)"
+        print "ccflags-y += -DHAVE_TSO_SEGS_MSS"
+        print "endif"
+        done=1
+        next
+      }
+      { print }
+    ' "$mk" > "$mk.new" && mv "$mk.new" "$mk"
+
+    info "已为新内核 ABI 修补 tcp-brutal（min_tso_segs → tso_segs）：$src" 2>/dev/null \
+      || echo "已为新内核 ABI 修补 tcp-brutal：$src"
+  done
+}
+
 install_tcp_brutal_module() {
   local avail
   avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
@@ -677,12 +761,25 @@ install_tcp_brutal_module() {
   local tmp_tar
   tmp_tar=$(mktemp --suffix=.tar.gz)
   if curl -fsSL https://github.com/HyNetworks/tcp-brutal/releases/latest/download/tcp-brutal.dkms.tar.gz -o "$tmp_tar" 2>/dev/null; then
-    dkms install "$tmp_tar" 2>/dev/null || true
+    # 先 ldtarball 把源码摊到 /usr/src，打完新内核 ABI 补丁再编译。
+    # 直接 dkms install <tarball> 会「解包+编译」一步完成，插不进补丁，
+    # 在 7.1+ 内核上必然编译失败。
+    if dkms ldtarball "$tmp_tar" >/dev/null 2>&1; then
+      patch_tcp_brutal_tso_segs
+      local _bv
+      _bv=$(basename "$(ls -d /usr/src/tcp-brutal-* 2>/dev/null | tail -1)" 2>/dev/null | sed 's/^tcp-brutal-//')
+      [[ -n "$_bv" ]] && dkms install "tcp-brutal/$_bv" 2>/dev/null || true
+    else
+      dkms install "$tmp_tar" 2>/dev/null || true
+    fi
     rm -f "$tmp_tar"
   fi
 
   if ! command -v brutalctl >/dev/null 2>&1; then
     bash <(curl -fsSL https://tcp.hy2.sh/) install 2>/dev/null || true
+    # 官方脚本同样不带新内核 ABI 补丁，补一次再重编。
+    patch_tcp_brutal_tso_segs
+    dkms autoinstall 2>/dev/null || true
   fi
 
   modprobe brutal 2>/dev/null || true
