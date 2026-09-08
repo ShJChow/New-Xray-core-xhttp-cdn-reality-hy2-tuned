@@ -30,7 +30,8 @@
 - [八、v4.9.0 握手提速与「全部采用最新特性」](#八v490-握手提速与全部采用最新特性)
 - [九、v4.9.1 CDN 延迟归因与 ECN](#九v491-cdn-延迟归因与-ecn)
 - [十、v4.9.2 换上 BBRv3 内核，与 tcp-brutal 的新内核 ABI 修复](#十v492-换上-bbrv3-内核与-tcp-brutal-的新内核-abi-修复)
-- [十一、免责声明](#十一免责声明)
+- [十一、v4.9.4 BBRv3 上的 25 样本回归基线](#十一v494-bbrv3-上的-25-样本回归基线)
+- [十二、免责声明](#十二免责声明)
 
 ---
 
@@ -1345,7 +1346,67 @@ BBRv3 下 A/B（各 12 轮交错，cachefly 10MB + gstatic/generate_204）：
 
 ---
 
-## 十一、免责声明
+## 十一、v4.9.4 BBRv3 上的 25 样本回归基线
+
+换到 `7.2.3-joeyblog-bbrv3` 后的完整回归，**每条节点 25 个样本**（`SAMPLES=25 python3 run_test.py`）。
+这组数字同时作为后续比对的基线 —— 以后改动前后对比，请对齐样本量再比。
+
+```
+每条 25 个样本（已预热）；抖动 = max ÷ 中位。基线是同一目标不走代理的耗时。
+Core     Node Tag                  Port    Status          中位      p95      抖动
+直连     (no-proxy baseline)       -       BASE         1.8ms    3.4ms    2.1x
+Xray     n0-h2-cdn                 10800   PASS        15.8ms   43.0ms    8.2x
+Xray     n1-h3-cdn                 10801   PASS        12.7ms   31.0ms    2.8x
+Xray     n2-h3-direct              10802   PASS         3.8ms   12.5ms    3.7x
+Xray     n3-hy2-obfs               10803   PASS         3.0ms    5.9ms    3.0x
+Xray     n4-reality-vision         10804   PASS         6.7ms   10.7ms    1.6x
+Xray     n5-reality-xhttp          10805   PASS         3.1ms    8.0ms    2.6x
+Xray     n6-reality-up-cdn-down    10806   PASS         3.8ms    7.9ms    2.1x
+sbbox    tuic                      11801   PASS         2.6ms    6.6ms    2.9x
+sbbox    hysteria2                 11802   PASS         2.9ms    6.8ms    4.5x
+sbbox    naive-h3                  11803   PASS         2.6ms    6.8ms   16.5x
+sbbox    naive-h2                  11804   PASS         3.9ms    7.2ms    2.7x
+sbbox    vless-reality             11805   PASS         7.3ms   15.9ms    8.1x
+Overall Result: 13/13 nodes passed verification (ALL PASS)
+```
+
+### 1.〔读法〕抖动倍率会随样本量变大，它不代表变差了
+
+**抖动 = max ÷ 中位。样本越多越容易抓到极端值，所以这一列必然随 n 增大而增大。**
+判断稳定性要看 **p95**，不要看抖动倍率。同一台机器同一配置，把样本量从 9 提到 25：
+
+| 节点 | n=9 的 p95 / 抖动 | n=25 的 p95 / 抖动 |
+|---|---|---|
+| tuic | 447.5ms / **153.7x** | 6.6ms / **2.9x** |
+| naive-h3 | 40.4ms / 12.2x | 6.8ms / 16.5x |
+| 直连基线 | 18.3ms / 9.6x | 3.4ms / 2.1x |
+
+`tuic` 在 n=9 时那个 153.7x 完全是单枪离群，样本量一上来就消失了；
+`naive-h3` 的倍率反而从 12.2x 涨到 16.5x，但 p95 从 40.4ms 降到 6.8ms —— 
+**倍率涨了而实际表现更稳**，这正说明倍率不能单独用来判断好坏。
+
+### 2.〔读法〕先看直连基线再看节点
+
+表里第一行是**不走代理**打同一目标的耗时。本轮基线 p95 3.4ms、抖动 2.1x，
+说明这一轮路径本身很稳，因此 `n0-h2-cdn` 的 p95 43ms 是 Cloudflare 边缘路径
+（见第九节），`naive-h3` / `vless-reality` 的高倍率是零星单次毛刺，
+都不是服务端问题。基线自己抖起来的时候（上一轮 n=9 基线 p95 就有 18.3ms），
+超出基线的部分才算节点的。
+
+### 3.〔结论〕换内核无回归
+
+中位延迟与 BBRv1 时期在同一量级，两轮之间也高度一致
+（tuic 2.9→2.6、naive-h3 3.3→2.6、n1-h3-cdn 12.9→12.7、n4 6.2→6.7），说明已收敛。
+CDN 两条维持在 12.7 / 15.8ms —— 这是 v4.9.1 把 `scMinPostsIntervalMs`
+从 30ms 降到 10ms 的收益（改之前是 21.7ms 量级），换内核没有把它吃掉。
+
+> **范围提醒**：13 条节点里多数是 QUIC（hy2 / tuic / naive-h3 / xhttp-h3），
+> 拥塞控制在**用户态**；Xray 隧道 socket 又写死了 `tcpcongestion: brutal`。
+> BBRv3 实际只作用于出站 TCP 直连与 naive-h2 那部分，**不要把整表的表现都归给它**。
+
+---
+
+## 十二、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
