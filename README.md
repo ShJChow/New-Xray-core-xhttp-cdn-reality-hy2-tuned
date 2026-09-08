@@ -1302,8 +1302,13 @@ BBR 有 v1 / v3 两代，`sysctl net.ipv4.tcp_congestion_control` **两代都叫
 
 1. `/proc/kallsyms` 里有 `bbr_start_bw_probe_down` / `bbr_is_inflight_too_high` /
    `bbr_skb_marked_lost` → v3；有 `bbr_lt_bw_sampling` → v1（该符号 v3 已删除）
-2. 兜底看 `ss -tin` 的 `cwnd_gain`：v1 是 `2.88672`，v3 解耦后是 `2`
-   （需要当前有活跃 bbr 连接，所以只作兜底）
+2. 兜底看 `ss -tin` 的 **`pacing_gain`**：v1 STARTUP 是 `2.88672`，v3 是 `2.77344`，
+   且只在拿不到 kallsyms 时才用，命中不了就报 `unknown`
+
+> **v4.9.3 更正**：v4.9.2 曾把 `cwnd_gain`（v1=2.88672、v3=2）写成版本指纹，**这是错的**。
+> **BBRv1 进入 PROBE_BW 后 `cwnd_gain` 同样是 2** —— 它区分的是连接所处的状态，
+> 不是 BBR 版本，拿它判长连接会给出错误答案。当时本机 42 条连接恰好全在 STARTUP
+> 期，才没暴露这个问题。判版本请以 kallsyms 符号为准。
 
 ### 5.〔实测〕BBRv3 上线后的回归与 ECN 复测
 

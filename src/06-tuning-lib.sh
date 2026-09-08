@@ -657,13 +657,18 @@ get_default_brutal_speed_mbps() {
   echo "$target"
 }
 
-# 报告内核里的 bbr 到底是 v1 还是 v3。
-# 判据按可靠性排序：
-#   1) kallsyms 里的 bbr_lt_bw_sampling —— v1 专属，v3 已删除（最硬，但需要
-#      /proc/kallsyms 可读且未被 kptr_restrict 完全屏蔽）
-#   2) ss 的 bbr info 字段 cwnd_gain —— v1 是 2.88672，v3 解耦后是 2
-#      （需要当前有活跃的 bbr 连接，所以只作兜底）
-# 两者都拿不到就报 unknown，不猜。
+# 报告内核里的 bbr 是 v1 还是 v3。
+#
+# 主判据：/proc/kallsyms 里的函数符号。v3 重写了 ProbeBW 状态机，引入
+# bbr_start_bw_probe_down / bbr_is_inflight_too_high / bbr_skb_marked_lost，
+# 同时删掉了 v1 专属的 bbr_lt_bw_sampling。即使 kptr_restrict=2 把地址清零，
+# 符号名仍在，所以这条判据几乎总是可用。
+#
+# 兜底判据只在拿不到 kallsyms 时才用，而且**只看 pacing_gain**：
+#   v1 STARTUP 的 high_gain = 2.88672；v3 STARTUP = 2.77344。
+# 注意不能用 cwnd_gain 判版本——**v1 在 PROBE_BW 阶段的 cwnd_gain 同样是 2**，
+# 它区分的是连接所处状态而不是 BBR 版本，长连接上会给出错误答案。
+# 而 pacing_gain 也只在 STARTUP 期有区分度，因此兜底命中不了就报 unknown，不猜。
 detect_bbr_version() {
   local avail
   avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
@@ -677,12 +682,10 @@ detect_bbr_version() {
       echo "v1"; return
     fi
   fi
-  local g
-  g=$(ss -tin 2>/dev/null | grep -o 'cwnd_gain:[0-9.]*' | head -1 | cut -d: -f2)
-  case "$g" in
-    2)        echo "v3" ;;
-    2.88672)  echo "v1" ;;
-    *)        echo "unknown" ;;
+  case "$(ss -tin 2>/dev/null | grep -o 'pacing_gain:[0-9.]*' | head -1 | cut -d: -f2)" in
+    2.88672) echo "v1?" ;;
+    2.77344) echo "v3?" ;;
+    *)       echo "unknown" ;;
   esac
 }
 
