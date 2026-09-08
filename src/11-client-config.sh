@@ -38,12 +38,30 @@ rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null
 #   hMaxRequestTimes: 600-900 → 避免 Nginx 单连接累计 1000 请求断开
 #   hMaxReusableSecs: 1800-3000 → 定期切换主连接消除特征
 #   hKeepAlivePeriod: 0    → h3 取 quic-go 默认、h2 取 Chrome 默认
+# ---------- XHTTP packet-up 的最小 POST 间隔（v4.9.1） ----------
+# CDN 两条节点必须走 packet-up（见下方 stream-up 的实测反证），packet-up 把上行
+# 切成一串 POST，两次 POST 之间有一个最小间隔。这个间隔就是 CDN 节点延迟的**主项**，
+# 不是 Cloudflare 边缘慢。实测（经 CF，socks 打 gstatic/generate_204，各 9 个样本）：
+#
+#   间隔 30ms（旧默认）  中位 21.7ms   p95 45.6ms
+#   间隔 10ms（现默认）  中位 12.2ms   p95 70.0ms
+#   间隔  1ms            中位 10.3ms   p95 38.8ms
+#
+# 20MB 下载吞吐三档无差别（328~546 Mbps，波动来自 CF 边缘本身），
+# 也就是说这一项是纯延迟收益、不用拿吞吐换。
+#
+# 取 10 而不是 1：间隔越小，单位时间内打给 CDN 的请求数越多——收益从 30→10 已经
+# 拿到大头（−9.5ms），10→1 只再省 1.9ms，不值得为此把请求速率再抬一个数量级
+# （请求数是 CDN 侧最容易做特征的维度之一）。
+# 需要时可用环境变量覆盖：XHTTP_SC_MIN_POSTS_MS=30 bash install.sh
+XHTTP_SC_MIN_POSTS_MS=${XHTTP_SC_MIN_POSTS_MS:-10}
+
 XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
 
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XPAD_FIELDS_ENC="%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
   XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
-  XPAD_CDN_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D"
 
   MIHOMO_XPADDING_XHTTP_BLOCK=$(cat <<EOF
 
@@ -66,7 +84,7 @@ EOF
 )
   MIHOMO_SC_MIN_POSTS_BLOCK=$(cat <<EOF
 
-      sc-min-posts-interval-ms: 30
+      sc-min-posts-interval-ms: ${XHTTP_SC_MIN_POSTS_MS}
 EOF
 )
   MIHOMO_REUSE_KEEPALIVE_XHTTP=$(cat <<EOF
@@ -82,7 +100,7 @@ EOF
 else
   XPAD_FIELDS_ENC=""
   XPAD_EXTRA_ENC="%7B${XMUX_ENC}%7D"
-  XPAD_CDN_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D"
   MIHOMO_XPADDING_XHTTP_BLOCK=""
   MIHOMO_XPADDING_DOWNLOAD_BLOCK=""
   MIHOMO_SC_MIN_POSTS_BLOCK=""
@@ -96,13 +114,13 @@ else
   DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
 fi
 if [[ "$FEATURE_XPADDING" == true ]]; then
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
-  XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
+  XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 else
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
-  XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A30%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
+  XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then

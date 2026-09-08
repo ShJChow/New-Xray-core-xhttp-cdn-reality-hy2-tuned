@@ -216,7 +216,26 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_notsent_lowat 262144
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
-  try_sysctl net.ipv4.tcp_ecn 2
+  # tcp_ecn = 1（v4.9.1）：主动发起 ECN 协商，而不是只被动应答（旧值 2）。
+  # 实测本机对 7 个对端发起协商（tcpdump 看 SYN 的 [SEW] 与 SYN-ACK 的 [S.E]，
+  # 按对端 IP 过滤，避免把自己作为服务端回的 SYN-ACK 误判成对端接受）：
+  #   接受：Cloudflare / GitHub / Bing / Microsoft / 1.1.1.1 / 9.9.9.9  共 6 个
+  #   拒绝：Google（gstatic）
+  # 无一例连接失败，tcp_ecn_fallback=1 也仍然兜着黑洞路径。
+  #
+  # **但要说清楚：在本机当前内核上它并不提速。** 本机 tcp_congestion_control=bbr，
+  # 而这个 bbr 是 **BBRv1**（kallsyms 里有 v1 专属的 bbr_lt_bw_sampling，且
+  # ss 打印的是 v1 的 info 字段 bw/mrtt/pacing_gain/cwnd_gain；没有任何 v3 符号）。
+  # BBRv1 的控制环路**不消费 ECN 标记**。实测 A/B（12 轮交错，speed.cloudflare.com）：
+  #   tcp_ecn=2  首字节中位 44.8ms  吞吐中位 1212 Mbps
+  #   tcp_ecn=1  首字节中位 47.5ms  吞吐中位 1373 Mbps
+  # 两组差异完全落在 CF 边缘本身的波动里（两组各有 4/12 次传输直接失败），
+  # 结论是**无可测差异**——这正是理论预期。
+  #
+  # 之所以仍然设成 1：它是无成本的前置条件。等哪天换上 ECN 敏感的拥塞控制
+  # （BBRv3 / DCTCP），协商能力得提前就位，否则那时才发现对端早就支持、
+  # 只是我们从来没问过。
+  try_sysctl net.ipv4.tcp_ecn 1
   try_sysctl net.ipv4.tcp_ecn_fallback 1
   # tcp_no_metrics_save = 1（v4.7.2）：不把连接结束时的 cwnd / ssthresh 缓存进路由表。
   # 默认行为（0）在同质网络里是优化，在代理机上是负担：对端遍布全球，线路质量差异

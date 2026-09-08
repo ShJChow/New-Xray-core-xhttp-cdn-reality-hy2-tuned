@@ -28,7 +28,8 @@
 - [六、常见问题与排错](#六常见问题与排错)
 - [七、v4.8.x 实测诊断与修复记录](#七v48x-实测诊断与修复记录)
 - [八、v4.9.0 握手提速与「全部采用最新特性」](#八v490-握手提速与全部采用最新特性)
-- [九、免责声明](#九免责声明)
+- [九、v4.9.1 CDN 延迟归因与 ECN](#九v491-cdn-延迟归因与-ecn)
+- [十、免责声明](#十免责声明)
 
 ---
 
@@ -1081,7 +1082,121 @@ TCP 连接建立只要 **1.6ms**（Apple 边缘就在同区），换成本机也
 
 ---
 
-## 九、免责声明
+## 九、v4.9.1 CDN 延迟归因与 ECN
+
+### 1.〔提速〕CDN 两条节点的延迟主因是 packet-up 的最小 POST 间隔，不是 Cloudflare
+
+**现象**：`Vless-xhttp-h2-cdn` / `h3-cdn` 的延迟常年是直连节点的 3~8 倍，
+很容易归咎于「Cloudflare 边缘路径慢」。
+
+**排查过程里两次走错，都记下来**：
+
+1. 先怀疑 VPS 到边缘的距离。实测 `ping` 边缘 IP **0.85ms**，`cf-ray` 显示落在
+   **SJC**，与 VPS 同区——不是距离问题。
+2. 再拿 `curl https://cdn.<域名>/` 分层测，量到「源站 11~35ms」。**这个数是错的**：
+   nginx 的 `location /` 是伪装反代，打的是 stanford.edu，量的是伪装站的响应时间，
+   跟隧道路径毫无关系。**测 CDN 节点必须打隧道路径，不能打 `/`。**
+
+**根因**：CDN 节点必须走 `packet-up`（`stream-up` 经 Cloudflare 会让 CDN-TLS 吞吐
+掉到 0、CDN-H3 超时，见第七节）。packet-up 把上行切成一串 POST，两次 POST 之间有
+一个最小间隔 `scMinPostsIntervalMs`，本项目此前显式写死 **30ms**。这个间隔就是延迟主项。
+
+**验证命令**（同一条 CDN 出站，只改这一个字段）：
+
+```bash
+# 分别用 scMinPostsIntervalMs = 默认 / 10 / 1 建三条 socks 入站，各打 9 次
+curl -s -o /dev/null -w '%{time_total}\n' --socks5-hostname 127.0.0.1:<port> \
+  http://www.gstatic.com/generate_204
+# 订阅里当前下发的值：
+grep -o 'scMinPostsIntervalMs%22%3A[0-9]*' /usr/local/nginx/html/sub/*/v2rayn-raw.txt | sort -u
+```
+
+**实测前后对照**（经 Cloudflare，各 9 个样本）：
+
+| `scMinPostsIntervalMs` | 中位 | p95 | 20MB 下载吞吐 |
+|---|---|---|---|
+| 内置默认（≈30ms，旧） | 21.7ms | 45.6ms | 328~509 Mbps |
+| **10ms（现默认）** | **12.2ms** | 70.0ms | 414~546 Mbps |
+| 1ms | 10.3ms | 38.8ms | 371~520 Mbps |
+
+**吞吐三档无差别**——这一项是纯延迟收益，不用拿吞吐换。
+
+**取 10 而不是 1**：30→10 已经拿到大头（−9.5ms），10→1 只再省 1.9ms，
+不值得为此把打给 CDN 的请求速率再抬一个数量级（请求数是 CDN 侧最容易做特征的维度）。
+需要时可覆盖：`XHTTP_SC_MIN_POSTS_MS=30 bash install.sh`。
+
+**全量回归前后**（13 节点，各 9 样本中位）：
+
+| 节点 | 改前 | 改后 |
+|---|---|---|
+| n0-h2-cdn | 24.9ms | **11.9ms** |
+| n1-h3-cdn | 15.4ms | **10.6ms** |
+
+> **顺带修了测试口径**：`run_test.py` 自己拼的 CDN 出站原本**不带**
+> `scMinPostsIntervalMs`，量到的是 Xray 内置默认而不是订阅真正下发的值，
+> 跟用户实际体验对不上。现已同步。
+
+---
+
+### 2.〔已开启，但当前内核上无提速〕`tcp_ecn` 2 → 1
+
+**改动**：`net.ipv4.tcp_ecn` 从 `2`（只被动应答）改为 `1`（主动发起协商）。
+
+**验证命令**（关键是**按对端 IP 过滤**，否则会把自己作为服务端回的 SYN-ACK
+误判成「对端接受」——我第一次就是这么误判的）：
+
+```bash
+IP=$(getent ahostsv4 speed.cloudflare.com | awk 'NR==1{print $1}')
+tcpdump -i <网卡> -n "host $IP and tcp port 443 and tcp[tcpflags] & tcp-syn != 0" -w /tmp/e.pcap &
+curl -s -o /dev/null --resolve "speed.cloudflare.com:443:$IP" https://speed.cloudflare.com/
+tcpdump -r /tmp/e.pcap -n | grep 'Flags \[S'
+# 我方 SYN 应为 [SEW]；对端 SYN-ACK 带 E（[S.E]）= 接受，不带 = 拒绝
+```
+
+**实测 7 个对端**：Cloudflare / GitHub / Bing / Microsoft / 1.1.1.1 / 9.9.9.9 **接受**，
+Google（gstatic）**拒绝**；**无一例连接失败**。
+
+**但必须说清楚：它在当前内核上不提速。** 本机 `tcp_congestion_control=bbr`，
+而这个 `bbr` 是 **BBRv1**（见下一条），BBRv1 的控制环路**不消费 ECN 标记**。
+A/B 实测（12 轮交错，`speed.cloudflare.com`）：
+
+| | 首字节中位 | 吞吐中位 |
+|---|---|---|
+| `tcp_ecn=2` | 44.8ms | 1212 Mbps |
+| `tcp_ecn=1` | 47.5ms | 1373 Mbps |
+
+差异完全落在 CF 边缘本身的波动里（两组各有 4/12 次传输直接失败），**无可测差异**——
+这正是理论预期。设成 1 是无成本的前置条件：等换上 ECN 敏感的拥塞控制再补就晚了。
+
+---
+
+### 3.〔查明·当前做不到〕内核里的 `bbr` 是 BBRv1，不是 BBRv3
+
+BBRv3 相对 v1 的四项改动（ECN/丢包进入控制环路、ProbeBW 改为
+DOWN/CRUISE/REFILL/UP 的轮次推进、15% Headroom、平滑的 ProbeRTT）
+**在本机内核上一项都不存在**，也没有任何 sysctl 能把 v1 变成 v3。
+
+**判据**：
+
+```bash
+grep -i ' bbr' /proc/kallsyms | awk '{print $3}'
+# 出现 bbr_lt_bw_sampling → v1 专属（v3 已移除）；无任何 v3 状态机符号
+ss -tin | grep -o 'bbr:([^)]*)'
+# bbr:(bw:...,mrtt:...,pacing_gain:...,cwnd_gain:...) → v1 的 info 字段布局
+ls /sys/module/tcp_bbr/parameters/   # 空
+```
+
+**为什么暂时换不上**：本机是 **arm64**。archive 里所有 `linux-image-*` 都是同一套
+Ubuntu 7.0.0 内核，带的都是这份 BBRv1；常见的预编译 BBRv3 内核（XanMod 一类）
+**只出 x86_64，没有 arm64 构建**。
+
+剩下两条路，都需要单独决策，本版**未执行**：
+
+- **DKMS 外挂 `tcp_bbr3` 模块**：本机 `tcp_brutal` 就是这么装的（`dkms status`
+  显示已为两个内核版本各编译一份），工具链齐全、可回退，是风险最低的一条。
+- **自编 BBRv3 内核**：Oracle VPS 无带外控制台，自编内核启动失败等于失联。
+
+## 十、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
