@@ -3,7 +3,7 @@
         "loglevel": "warning"
     },
     "dns": {
-        // 服务器顺序即优先级。freedom 出站的 targetStrategy=UseIPv4 会让每个
+        // 服务器顺序即优先级。freedom 出站的 sockopt.domainStrategy=UseIPv4 会让每个
         // 新域名都走一次这里，所以第一位是谁直接决定每条新连接的额外延迟。
         // 本机实测（dig +tries=1，随机不存在的子域以避开各级缓存）：
         // 1.1.1.1 约 4ms、8.8.8.8 约 14ms、9.9.9.9 约 14ms。
@@ -144,8 +144,6 @@
             "protocol": "freedom",
             "tag": "direct",
             "settings": {
-                // targetStrategy 是 domainStrategy 的新名字（旧名仍兼容）。
-                "targetStrategy": "UseIPv4",
                 // finalRules 在「域名解析成 IP 之后」再判一次，拦住解析到
                 // 内网/云元数据地址的域名。routing 里的 ip 规则在
                 // domainStrategy=AsIs 时拿不到解析结果，两者互补，缺一不可。
@@ -155,6 +153,8 @@
             },
             "streamSettings": {
                 "sockopt": {
+                    // Xray 26.9+ 弃用 freedom.settings.domainStrategy / targetStrategy，迁移至 sockopt.domainStrategy
+                    "domainStrategy": "UseIPv4",
                     "tcpFastOpen": true,
                     "tcpcongestion": "bbr",
                     "tcpKeepAliveIdle": 30,
@@ -165,7 +165,12 @@
         },
         {
             "protocol": "blackhole",
-            "tag": "block"
+            "tag": "block",
+            "settings": {
+                "response": {
+                    "type": "http"
+                }
+            }
         }
     ]
 }

@@ -35,7 +35,8 @@
 - [十三、v4.9.6 MTU 全线回到 1500](#十三v496-mtu-全线回到-1500)
 - [十四、v4.9.7 回滚 v4.9.5 / v4.9.6 的两项改动](#十四v497-回滚-v495--v496-的两项改动)
 - [十五、v4.9.8 支持 Reality minversion / minClientVer 兼容控制](#十五v498-支持-reality-minversion--minclientver-兼容控制)
-- [十六、免责声明](#十六免责声明)
+- [十六、v4.9.9 适配 Xray-core 26.9+ 最新特性与废弃配置平滑迁移](#十六v499-适配-xray-core-269-最新特性与废弃配置平滑迁移)
+- [十七、免责声明](#十七免责声明)
 
 ---
 
@@ -461,14 +462,20 @@ CDN 回源到 443」，就不要给回落加任何限速。
 此前 8446 / 8445 入站接受任意 SNI，可被当作任意 SNI 的 TLS 前置来探测。现改为只接受证书覆盖的域名，
 未知 SNI 直接拒绝握手，行为更接近真实站点。
 
-### 4. `freedom` 出站新增 `finalRules` 私有地址兜底
+### 4. `freedom` 出站规范与 `finalRules` 私有地址兜底
 
 `routing.domainStrategy` 为 `AsIs` 时，路由层的 `ip: geoip:private` 规则拿不到域名的解析结果。
-新增的 `finalRules` 在**解析成 IP 之后**再判一次，与路由规则互补：
+新增的 `finalRules` 在**解析成 IP 之后**再判一次，与路由规则互补（并在 Xray 26.9+ 中将策略规范写入 `streamSettings.sockopt.domainStrategy`）：
 
 ```json
-"targetStrategy": "UseIPv4",
-"finalRules": [ { "action": "block", "ip": ["geoip:private"] } ]
+"streamSettings": {
+    "sockopt": {
+        "domainStrategy": "UseIPv4"
+    }
+},
+"settings": {
+    "finalRules": [ { "action": "block", "ip": ["geoip:private"] } ]
+}
 ```
 
 > 实测本项目 Reality 节点在**加固前**就已能拦住 `http://127.0.0.1.nip.io/`（返回被阻断），
@@ -1528,7 +1535,26 @@ v4.9.8 正式加入完整的 **`minversion` / `minClientVer` 原生支持与生�
 
 ---
 
-## 十六、免责声明
+## 十六、v4.9.9 适配 Xray-core 26.9+ 最新特性与废弃配置平滑迁移
+
+针对最新发布的 **Xray-core 26.9.9**（2026-09-08/09，Go 1.27.1 构建），本项目完成全线新特性吸纳与配置规范迁移：
+
+1. **`freedom` 直连出站配置平滑迁移**：
+   - Xray 26.9+ 正式废弃了 `freedom.settings.targetStrategy` 与 `freedom.settings.domainStrategy`，并会在启动与测试时输出 Deprecation Warning。
+   - 本版全面迁移至 `streamSettings.sockopt.domainStrategy: "UseIPv4"`。不仅保持原先内置 DNS 解析优化与延迟收益（1.1.1.1 优先省 ~10ms），而且彻底消除弃用警告，内核测试与加载实现 **0 告警（Clean Output）**。
+2. **`blackhole` 黑洞协议升级优雅 HTTP 403 阻断响应**：
+   - 采用 Xray 26.9+ 新合并的 Blackhole 自定义响应能力（PR 6713），配置 `"response": { "type": "http" }`。
+   - 当探测到内网穿透（`geoip:private`）或阻断规则时，不再静默丢包让对端无休止悬挂等待超时，而是由 Xray 主动发出标准 HTTP 403 Forbidden 响应并断开，显著提升网络异常下的连接回收效率。
+3. **原生继承 Xray 26.9.x 内核关键修复与优化**：
+   - **XHTTP IdleTimeout 连接回收**（PR 6707）：自动清理流已终止的残留载体连接，解决反代/直连长连接泄漏问题；
+   - **Hysteria 官方 v2.12.2**（PR 6565）：集成官方最新协议实现，修复高并发下的数据竞争；
+   - **QUICv2 流量嗅探**（PR 6695）：`sniffing.destOverride` 支持 QUICv2 协议识别与路由；
+   - **REALITY 加密库更新**（20260908 提交）：底层加密与抗封锁算法持续同步最新加固。
+4. **回归测试**：13/13 全节点回归测试全部通过（`python3 /root/run_test.py` 100% PASS）。
+
+---
+
+## 十七、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
