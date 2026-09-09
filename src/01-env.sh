@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.7"
+PROJECT_VERSION="4.9.8"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
@@ -96,6 +96,12 @@ FEATURE_PORT_HOPPING=${FEATURE_PORT_HOPPING:-false}
 FEATURE_BRUTAL=${FEATURE_BRUTAL:-true}
 BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-auto}
 
+# REALITY_MIN_CLIENT_VER：Reality 客户端最低兼容版本（默认 1.8.0）。
+# 设为 1.8.0 可让 mihomo / Clash Meta / sing-box 客户端正常握手；
+# 设为 none 或 default 则不写 minClientVer，回到 Xray 内核最新默认版本（严格模式）。
+# 兼容别名：MIN_CLIENT_VER、MINVERSION、MIN_VERSION。
+REALITY_MIN_CLIENT_VER="${REALITY_MIN_CLIENT_VER:-${MIN_CLIENT_VER:-${MINVERSION:-${MIN_VERSION:-1.8.0}}}}"
+
 
 # ==================================================
 # 未识别环境变量检查（v4.7.10）
@@ -121,7 +127,7 @@ check_unknown_env_vars() {
   # 只看长得像本项目参数的变量，避免把系统里成百上千的环境变量全扫一遍
   while IFS= read -r name; do
     grep -q "\b${name}\b" <<< "$code" || unknown+=("$name")
-  done < <(compgen -v | grep -E '^(AUTO|FEATURE_|CDN_|REALITY_|XHTTP_|HY2_|OBFS_|H2_|H3_|IP_CHOICE|FALLBACK_|VISION_|KEEP_|NODE_|XRAY_)')
+  done < <(compgen -v | grep -E '^(AUTO|FEATURE_|CDN_|REALITY_|XHTTP_|HY2_|OBFS_|H2_|H3_|IP_CHOICE|FALLBACK_|VISION_|KEEP_|NODE_|XRAY_|MIN_CLIENT_VER|MINVERSION|MIN_VERSION)')
 
   [[ ${#unknown[@]} -eq 0 ]] && return 0
   warn "以下环境变量本脚本不认识，已被忽略（通常是拼写或版本差异）："

@@ -75,6 +75,16 @@ svc_active() {
   fi
 }
 
+update_node_env() {
+  local key="$1" val="$2"
+  [[ -f "$NODE_ENV_FILE" ]] || return 0
+  if grep -q "^${key}=" "$NODE_ENV_FILE"; then
+    sed -i -E "s|^${key}=.*|${key}='${val}'|" "$NODE_ENV_FILE"
+  else
+    printf '%s=%q\n' "$key" "$val" >> "$NODE_ENV_FILE"
+  fi
+}
+
 # ---------------- 子命令 ----------------
 
 cmd_status() {
@@ -158,6 +168,13 @@ cmd_info() {
   [[ "${FEATURE_XPADDING:-false}" == true ]] && \
     echo "  xpadding 字段:   header=${XHTTP_PADDING_HEADER} key=${XHTTP_PADDING_KEY}"
   echo "  CDN ECH:         ${CDN_ECH_ENABLED:-false}"
+  local cur_minver
+  cur_minver=$(grep -o '"minClientVer"[[:space:]]*:[[:space:]]*"[^"]*"' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "")
+  if [[ -n "$cur_minver" ]]; then
+    echo "  minClientVer:    ${cur_minver}（兼容模式：支持 mihomo/Clash/sing-box）"
+  else
+    echo "  minClientVer:    未设置（严格模式：Xray 内核默认）"
+  fi
   echo ""
   echo -e "${CYAN}[+] 直连 UDP 节点${NC}"
   if [[ "${FEATURE_H3_DIRECT:-false}" == true ]]; then
@@ -944,6 +961,121 @@ cmd_autoupdate() {
   esac
 }
 
+cmd_minversion() {
+  local action="${1:-show}"
+  local target_ver="${2:-1.8.0}"
+  case "$action" in
+    show|status)
+      local cur_minver
+      cur_minver=$(grep -o '"minClientVer"[[:space:]]*:[[:space:]]*"[^"]*"' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "")
+      echo ""
+      echo -e "${CYAN}=== Reality minClientVer (minversion) 状态 ===${NC}"
+      if [[ -n "$cur_minver" ]]; then
+        echo -e "  当前状态:       ${GREEN}${cur_minver}${NC} (兼容模式：允许 mihomo / Clash / sing-box 客户端握手)"
+      else
+        echo -e "  当前状态:       ${YELLOW}未设置${NC} (严格模式：使用 Xray-core 内核默认版本)"
+      fi
+      local env_ver="${REALITY_MIN_CLIENT_VER:-}"
+      [[ -n "$env_ver" ]] && echo -e "  node.env 设定:  ${env_ver}"
+      echo ""
+      echo -e "说明："
+      echo -e "  • 开启兼容（1.8.0）：支持 mihomo、Clash Meta、sing-box 等非 Xray 官方客户端正常握手。"
+      echo -e "  • 关闭兼容（off / default）：恢复内核最新默认限制，非同代 Xray 客户端将握手失败。"
+      echo -e "  • 快捷命令:"
+      echo -e "      ${MANAGE_CMD} minversion on [版本号]     # 开启兼容模式（默认 1.8.0）"
+      echo -e "      ${MANAGE_CMD} minversion off            # 切换为严格模式（内核默认）"
+      echo -e "      ${MANAGE_CMD} minversion set <版本号>   # 指定具体最低版本"
+      echo ""
+      ;;
+    on|set)
+      local ver="$target_ver"
+      [[ -z "$ver" || "$ver" == "on" ]] && ver="1.8.0"
+      [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
+
+      local bak="${XRAY_CONF}.bak-minver"
+      cp -a "$XRAY_CONF" "$bak"
+
+      python3 -c "
+import re, sys
+
+cfg = '$XRAY_CONF'
+ver = '$ver'
+with open(cfg, 'r', encoding='utf-8') as f:
+    text = f.read()
+
+if re.search(r'\"minClientVer\"\s*:', text):
+    text = re.sub(r'(\"minClientVer\"\s*:\s*)\"[^\"]*\"', lambda m: f'{m.group(1)}\"{ver}\"', text, count=1)
+else:
+    m = re.search(r'(\"shortIds\"\s*:\s*\[[^\]]*\])', text)
+    if m:
+        text = text[:m.end()] + f',\n                    \"minClientVer\": \"{ver}\"' + text[m.end():]
+    else:
+        sys.exit(1)
+
+with open(cfg, 'w', encoding='utf-8') as f:
+    f.write(text)
+" 2>/dev/null || {
+        if grep -q '"minClientVer"' "$XRAY_CONF"; then
+          sed -i -E "s/\"minClientVer\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"minClientVer\": \"${ver}\"/" "$XRAY_CONF"
+        fi
+      }
+
+      if "$XRAY_BIN" run -test -c "$XRAY_CONF" >/dev/null 2>&1; then
+        rm -f "$bak"
+        svc restart xray
+        update_node_env "REALITY_MIN_CLIENT_VER" "$ver"
+        info "已成功开启 Reality 兼容模式，minClientVer 设为: ${ver}，并重启 xray 服务"
+      else
+        warn "Xray 配置文件测试失败，正在回滚..."
+        mv -f "$bak" "$XRAY_CONF"
+        fail "配置测试失败，已自动恢复原配置"
+      fi
+      ;;
+    off|default|none)
+      [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
+
+      local bak="${XRAY_CONF}.bak-minver"
+      cp -a "$XRAY_CONF" "$bak"
+
+      python3 -c "
+import re, sys
+
+cfg = '$XRAY_CONF'
+with open(cfg, 'r', encoding='utf-8') as f:
+    text = f.read()
+
+text = re.sub(r',\s*(//[^\n]*\n\s*)?\"minClientVer\"\s*:\s*\"[^\"]*\"', '', text, count=1)
+text = re.sub(r'\"minClientVer\"\s*:\s*\"[^\"]*\"\s*,?', '', text, count=1)
+
+with open(cfg, 'w', encoding='utf-8') as f:
+    f.write(text)
+" 2>/dev/null || true
+
+      if "$XRAY_BIN" run -test -c "$XRAY_CONF" >/dev/null 2>&1; then
+        rm -f "$bak"
+        svc restart xray
+        update_node_env "REALITY_MIN_CLIENT_VER" "default"
+        info "已关闭 minClientVer，已恢复为 Xray-core 内核默认版本（严格模式），并重启 xray 服务"
+      else
+        warn "Xray 配置文件测试失败，正在回滚..."
+        mv -f "$bak" "$XRAY_CONF"
+        fail "配置测试失败，已自动恢复原配置"
+      fi
+      ;;
+    *)
+      if [[ "$action" =~ ^[0-9]+ ]]; then
+        cmd_minversion set "$action"
+      else
+        echo "用法: ${MANAGE_CMD} minversion [show|on|off|set <ver>|<ver>]"
+        echo "  ${MANAGE_CMD} minversion show        查看当前 minClientVer 配置状态"
+        echo "  ${MANAGE_CMD} minversion on          开启兼容模式（设为 1.8.0，支持 mihomo/Clash）"
+        echo "  ${MANAGE_CMD} minversion off         恢复内核默认（严格模式）"
+        echo "  ${MANAGE_CMD} minversion 1.8.0       设为指定版本"
+      fi
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   echo -e "${RED}[!] 将删除 Xray / Nginx / ACME / Hysteria2 及本项目的配置、证书、订阅文件${NC}"
   read -rp "确认卸载？输入 yes 继续: " reply
@@ -1042,7 +1174,8 @@ cmd_menu() {
     echo " 10) 内核自动更新开关"
     echo " 11) UDP 节点自检 (diag)"
     echo " 12) sysctl 冲突检测 (conflict)"
-    echo " 13) 卸载"
+    echo " 13) Reality 兼容模式 / minversion (minClientVer)"
+    echo " 14) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -1058,7 +1191,8 @@ cmd_menu() {
       10) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
       11) cmd_diag ;;
       12) cmd_conflict ;;
-      13) cmd_uninstall; break ;;
+      13) read -rp "  show / on / off / 版本号(默认1.8.0): " a; cmd_minversion "${a:-show}" ;;
+      14) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -1078,6 +1212,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [--auto]    更新 Xray-core（自检失败自动回滚）
+  xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节
   xh keepalive [on|off|show]
@@ -1101,6 +1236,7 @@ case "${1:-menu}" in
   stop)       cmd_stop ;;
   restart)    cmd_restart ;;
   update)     shift; cmd_update "$@" ;;
+  minversion|minver) shift; cmd_minversion "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;

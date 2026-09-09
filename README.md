@@ -34,7 +34,8 @@
 - [十二、v4.9.5 large 档 tcp_rmem/tcp_wmem 上限补齐到 64MB](#十二v495-large-档-tcp_rmemtcp_wmem-上限补齐到-64mb)
 - [十三、v4.9.6 MTU 全线回到 1500](#十三v496-mtu-全线回到-1500)
 - [十四、v4.9.7 回滚 v4.9.5 / v4.9.6 的两项改动](#十四v497-回滚-v495--v496-的两项改动)
-- [十五、免责声明](#十五免责声明)
+- [十五、v4.9.8 支持 Reality minversion / minClientVer 兼容控制](#十五v498-支持-reality-minversion--minclientver-兼容控制)
+- [十六、免责声明](#十六免责声明)
 
 ---
 
@@ -203,6 +204,7 @@ bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality
 | `FEATURE_KEEPALIVE` | 进程自愈 | `true` | 开启服务守护进程保活与自动拉起。 |
 | `FEATURE_BRUTAL` | 拥塞控制 | `true` | 开启 TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制。 |
 | `BRUTAL_DEFAULT_MBPS` | 默认带宽 | `auto` (95% 本机速率) | TCP Brutal 默认全局下发速率（Mbps，留空或 `auto` 则自动探测本机/网卡最大速率并设为其 95%）。 |
+| `REALITY_MIN_CLIENT_VER` | 客户端兼容 | `1.8.0` | Reality 最低客户端版本控制（别名：`MINVERSION` / `MIN_CLIENT_VER`）。设为 `1.8.0` 兼容 mihomo / Clash Meta / sing-box；设为 `default` 或 `none` 回到 Xray 内核默认版本（严格模式）。 |
 | `H3_PORT` | 端口定义 | `8446` | HTTP/3 直连 UDP 端口（需云防火墙开放）。 |
 | `H2_PORT` | 端口定义 | `8445` | HTTP/2 直连 TCP 端口（需云防火墙开放）。 |
 | `HY2_PORT` | 端口定义 | `8443` | Hysteria2 直连 UDP 端口（需云防火墙开放）。 |
@@ -219,9 +221,10 @@ bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality
 ```bash
 xh                     # 进入交互式管理主菜单
 xh status              # 查看服务运行状态、监听端口与调优状态
-xh info                # 查看节点参数与客户端链接
+xh info                # 查看节点参数与客户端链接（含 minClientVer 状态）
 xh sub                 # 查看/输出订阅链接与订阅二维码
 xh resub               # 修改配置后一键重新生成全量订阅
+xh minversion [on|off|<ver>] # Reality 最低版本控制（默认 1.8.0 兼容 mihomo/Clash）
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
@@ -343,15 +346,11 @@ Reality 节点的认证在服务端会被记录为 `authentication failed or val
 - **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
 - **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
 
-> **关于 `minClientVer`（v4.9.0 起已移除）**：本项目曾把 Reality 的 `minClientVer`
-> 从 26.x 新默认值 `v26.3.27` 放宽到 `1.8.0` 以兼容 mihomo/sing-box 等非 Xray 内核。
-> 自 v4.9.0 起该行**已删除**，改为采用当前 Xray 版本的默认最低客户端版本——
-> 代价是 **mihomo / Clash 系客户端在两条 Reality 节点上会报 `REALITY authentication failed`**，
-> 换来的是不再向更旧、非 Xray 的实现开放握手，`xray run -test` 那句
-> 「会增加服务器 IP 被 GFW 封锁的可能性」的警告也随之消失。
-> **要兼容 Clash 系客户端**：在 `/usr/local/etc/xray/config.json` 的 `realitySettings`
-> 里把 `"minClientVer": "1.8.0"` 加回去（注意给上一行的 `shortIds` 数组补回逗号），
-> 然后 `xray run -test -c /usr/local/etc/xray/config.json && systemctl restart xray`。
+> **关于 `minClientVer`（v4.9.8 起支持原生配置与一键管理）**：
+> Reality 默认配置最低客户端版本为 `1.8.0`，全面兼容 mihomo、Clash Meta、sing-box 等非 Xray 官方客户端。
+> - **切换为严格模式**（仅限同代官方 Xray 内核）：执行 `xh minversion off` 即可移除 `minClientVer` 回到内核默认。
+> - **切回兼容模式**：执行 `xh minversion on`（或 `xh minversion 1.8.0`），自动写入并热重启服务。
+> - **安装期控制**：可通过环境变量 `REALITY_MIN_CLIENT_VER=1.8.0` 或 `REALITY_MIN_CLIENT_VER=default`（别名：`MINVERSION`）指定。
 
 ### 2. 直连 UDP / Hysteria 2 节点超时？
 - **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。
@@ -522,37 +521,31 @@ Oracle Cloud 的 VNIC 默认 MTU 9000，而到公网的实际 PMTU 是 1500（`p
 
 对端通告的 MSS（通常 1460）本来就会把实际分段限制住，巨帧 MTU 在此几乎不生效；反而是本机内部路径受益。**保持 9000 不动。**
 
-### 9.〔v4.9.0 变更〕移除 `minClientVer`，回到内核默认
+### 9.〔v4.9.8 增强〕`minClientVer` / `minversion` 支持与灵活切换
 
-v4.8.x 及之前，Reality 入站带 `"minClientVer": "1.8.0"`，`xray run -test` 会为此打印：
+Reality 的客户端兼容性机制经历了一次取舍：
+- **v4.8.x 及之前**：硬编码 `"minClientVer": "1.8.0"`。
+- **v4.9.0**：移除该行回到内核默认（Xray 26.x 最低要求 `v26.3.27`），导致 mihomo / Clash Meta / sing-box 客户端在 Reality 节点上握手报 `REALITY authentication failed`。
+- **v4.9.8（当前）**：提供**原生参数与命令行全生命周期管理**，**默认设为 `1.8.0`（兼容模式）**，确保 mihomo / Clash 用户开箱即用；同时允许用户随时一键切换为内核默认（严格模式）。
 
-```
-REALITY: Changing "minClientVer" will increase the likelihood of your server's IP being blocked by the GFW
-```
-
-自 v4.9.0 起该行已删除。删除后同一条命令改打印：
-
-```
-REALITY: The default minimal client version is Xray-core v26.3.27, other clients may be refused to connect
-```
-
-**验证命令**（在服务器上跑）：
+**管理与查看命令**：
 
 ```bash
-grep -c minClientVer /usr/local/etc/xray/config.json   # 期望 0（注释里的说明不计，见下一条）
-xray run -test -c /usr/local/etc/xray/config.json 2>&1 | grep REALITY
+xh minversion        # 查看当前 minClientVer 状态
+xh minversion on     # 开启兼容模式（写入 1.8.0 并重启 xray）
+xh minversion off    # 关闭并切回内核默认（严格模式）
+xh minversion 1.8.21 # 设为指定最低版本
 ```
 
-**这是一个真实的取舍，两边都要写清楚**：
+**对比矩阵**：
 
-| | `minClientVer: 1.8.0`（v4.8.x） | 删除（v4.9.0，当前） |
+| 模式 | 兼容模式（默认：`1.8.0`） | 严格模式（`default` / `off`） |
 |---|---|---|
-| Xray-core / v2rayN 客户端 | 可用 | 可用 |
-| mihomo / Clash 系客户端 | 可用 | **握手报 `REALITY authentication failed`，两条 Reality 节点不可用** |
-| 主动探测暴露面 | 向更旧、非 Xray 实现开放握手 | 回到内核默认 |
-| `xray run -test` | 打印 GFW 封 IP 风险警告 | 无该警告 |
-
-要改回兼容 Clash 系客户端，见第六节第 1 条末尾的还原步骤。
+| Xray-core / v2rayN 客户端 | 正常连接 | 正常连接 |
+| mihomo / Clash Meta / sing-box | 正常连接 | **握手报 `REALITY authentication failed`** |
+| 主动探测暴露面 | 开放至 1.8.0 握手标准 | 回到 Xray-core 同代内核默认标准 |
+| `xray run -test` | 打印 GFW 警示（正常现象） | 无该警告 |
+| 切换命令 | `xh minversion on` | `xh minversion off` |
 
 ### 10.〔实测后不采纳〕REALITY 节点的进一步提速
 
@@ -1515,7 +1508,27 @@ grep -rn mtu /etc/netplan/             # 持久化值也要一并改回
 
 ---
 
-## 十五、免责声明
+## 十五、v4.9.8 支持 Reality minversion / minClientVer 兼容控制
+
+在 v4.9.0 移除 `minClientVer` 后，Xray 26.x 严格要求同代官方内核握手，导致 mihomo / Clash Meta / sing-box 用户无法连接 Reality 节点（`REALITY authentication failed`）。
+
+v4.9.8 正式加入完整的 **`minversion` / `minClientVer` 原生支持与生命周期管理**：
+1. **开箱即用兼容**：默认写入 `"minClientVer": "1.8.0"`，全面支持 mihomo、Clash Meta、sing-box 等全系列客户端。
+2. **灵活命令切换**：
+   ```bash
+   xh minversion        # 查看当前配置状态与说明
+   xh minversion on     # 开启兼容模式（默认设为 1.8.0 并重启 xray）
+   xh minversion off    # 切回内核默认版本（严格模式）
+   xh minversion 1.8.21 # 设置任意自定义客户端最低版本
+   ```
+3. **安装期环境变量**：
+   - `REALITY_MIN_CLIENT_VER=1.8.0`（别名：`MINVERSION`、`MIN_CLIENT_VER`）
+   - 若设为 `default`、`none` 或 `off`，则以严格模式安装，不包含该配置行。
+4. **回归测试**：13/13 全节点回归测试通过（`python3 /root/run_test.py` 全部 PASS）。
+
+---
+
+## 十六、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

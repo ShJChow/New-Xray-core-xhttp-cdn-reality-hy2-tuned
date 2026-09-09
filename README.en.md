@@ -236,18 +236,13 @@ re-run the installer to pick them up.
 
 | v4.9.7 | **Reverts both changes from v4.9.5 and v4.9.6 — they measurably slowed connections down.** Back to v4.9.4 behaviour: `large`-tier `tcp_rmem`/`tcp_wmem` ceiling returns to **32MB** (was 64MB), client `tun.mtu` returns to **1480** (was 1500), and the server NIC MTU should go back to **1480**. **Lesson: the v4.9.5/4.9.6 verification was inadequate.** It only confirmed the values had been *written* (`sysctl` read-back, a `ping -M do` probe at 1500 bytes) and never compared throughput or latency before and after. A parameter being set is not the same as it being faster, and a 1500-byte DF probe only proves the path MTU on **one server-to-internet hop** — not the client's real path, and certainly not that the packet still fits after tunnel encapsulation. To roll back if you installed v4.9.5/4.9.6: rerun `xh tuning off && xh tuning on` with the v4.9.7 CLI (expect `4096 131072 33554432`); reset the NIC with `ip link set dev <dev> mtu 1480` and fix any pinned value in `/etc/netplan/`; and re-fetch the subscription (or set `tun.mtu` back to 1480 by hand) on clients. **Tuning changes in this project will no longer be accepted without before/after measurements** — the bar is a throughput/latency comparison on the same host and config (`SAMPLES=25 python3 run_test.py`), not whether the parameter was written successfully. |
 
-> **Note on `minClientVer` (removed in v4.9.0)**: this project used to relax
-> Reality's `minClientVer` to `1.8.0` for mihomo/sing-box compatibility. As of
-> v4.9.0 the line is **gone** and the core's own default applies. The trade-off
-> runs the other way now: **mihomo / Clash-family clients fail both Reality
-> nodes with `REALITY authentication failed`**, in exchange for no longer
-> opening Reality to older, non-Xray implementations — and Xray's
-> "will increase the likelihood of your server's IP being blocked by the GFW"
-> warning is gone from `xray run -test`. To restore Clash compatibility, put
-> `"minClientVer": "1.8.0"` back into `realitySettings` in
-> `/usr/local/etc/xray/config.json` (remember to re-add the comma after the
-> `shortIds` array), then
-> `xray run -test -c /usr/local/etc/xray/config.json && systemctl restart xray`.
+| v4.9.8 | **Native `minversion` / `minClientVer` support and management CLI.** In v4.9.0, removing `minClientVer` caused mihomo / Clash Meta / sing-box clients to fail handshake with `REALITY authentication failed`. v4.9.8 restores `minClientVer: "1.8.0"` as the default for full client compatibility, and adds full lifecycle management via `xh minversion [show|on|off|<ver>]` and environment variable `REALITY_MIN_CLIENT_VER` (aliases: `MINVERSION`, `MIN_CLIENT_VER`). Switch to strict mode anytime with `xh minversion off`, or re-enable with `xh minversion on`. Regression: 13/13 nodes pass (`run_test.py`). |
+
+> **Note on `minClientVer` / `minversion` (supported in v4.9.8)**:
+> Reality now defaults to `"minClientVer": "1.8.0"`, providing out-of-the-box compatibility for mihomo, Clash Meta, and sing-box clients.
+> - To toggle strict mode (Xray core default version only): run `xh minversion off`.
+> - To re-enable compatibility mode: run `xh minversion on` (or `xh minversion 1.8.0`).
+> - During installation, customize via `REALITY_MIN_CLIENT_VER=1.8.0` or `REALITY_MIN_CLIENT_VER=default`.
 
 ---
 

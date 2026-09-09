@@ -76,16 +76,10 @@
                     "privateKey": "${PRIVATE_KEY}",
                     "shortIds": [
                         "${SHORT_ID}"
-                    ]
-                    // 不设 minClientVer：采用当前 Xray 版本的默认最低客户端版本，
-                    // 只接受与本内核同代的 Reality 实现。这是 v4.9.0 起的取舍——
-                    // 代价是 mihomo / Clash 系客户端会在握手时报
-                    // REALITY authentication failed，两条 Reality 节点在这类客户端
-                    // 下不可用；换来的是不再向更旧、非 Xray 的实现开放握手，
-                    // 主动探测的暴露面回到默认水平，xray run -test 那句
-                    // "Changing minClientVer will increase the likelihood of your
-                    // server's IP being blocked by the GFW" 警告也随之消失。
-                    // 要兼容 Clash 系客户端就把 "minClientVer": "1.8.0" 加回来。
+                    ]${REALITY_MIN_CLIENT_VER_JSON}
+                    // minClientVer：客户端最低版本控制（默认 1.8.0 兼容 mihomo/Clash/sing-box）。
+                    // 可通过环境变量 REALITY_MIN_CLIENT_VER 或 xh minversion 管理。
+                    // 若设为 none 或 default 则不包含该行，使用 Xray-core 内核默认版本（严格模式）。
                 }${REALITY_SOCKOPT_JSON}
             },
             "sniffing": {

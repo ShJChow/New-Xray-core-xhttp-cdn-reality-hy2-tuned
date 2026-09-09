@@ -109,6 +109,16 @@ else
   REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi
 
+# Reality minClientVer 控制：
+# 若 REALITY_MIN_CLIENT_VER 设定且不为 none / default / off，注入 minClientVer 配置
+if [[ -n "$REALITY_MIN_CLIENT_VER" && "$REALITY_MIN_CLIENT_VER" != "none" && "$REALITY_MIN_CLIENT_VER" != "default" && "$REALITY_MIN_CLIENT_VER" != "off" ]]; then
+  REALITY_MIN_CLIENT_VER_JSON=$',\n                    "minClientVer": "'"${REALITY_MIN_CLIENT_VER}"'"'
+  info "Reality 最低客户端版本设为: ${REALITY_MIN_CLIENT_VER}（兼容模式：支持 mihomo/Clash/sing-box）"
+else
+  REALITY_MIN_CLIENT_VER_JSON=""
+  info "Reality 最低客户端版本: 未指定（严格模式：使用 Xray 内核默认版本）"
+fi
+
 # ==================================================
 # 直连 UDP inbound（v4.0.0）
 # --------------------------------------------------
@@ -373,6 +383,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'VLESSENC_ENCRYPTION=%q\n' "$VLESSENC_ENCRYPTION"
   printf 'VLESSENC_DECRYPTION=%q\n' "$VLESSENC_DECRYPTION"
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
+  printf 'REALITY_MIN_CLIENT_VER=%q\n' "${REALITY_MIN_CLIENT_VER:-1.8.0}"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
   if [[ "$FEATURE_XPADDING" == true ]]; then
