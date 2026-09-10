@@ -19,12 +19,28 @@ base64 "$USER_HOME/client-config.txt" | tr -d '\n' > "$SUB_DIR/v2rayn.txt"
 cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
+# Shadowrocket 专属订阅（只包含小火箭完全兼容的 REALITY 与 Hy2 节点）
+grep -E 'Vless-reality-vision|Hysteria2-obfs' "$USER_HOME/client-config.txt" > "$SUB_DIR/shadowrocket-raw.txt" || true
+if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
+  base64 "$SUB_DIR/shadowrocket-raw.txt" | tr -d '\n' > "$SUB_DIR/shadowrocket.txt"
+fi
+
+# v2rayN TUN 优化订阅（排除在 TUN 模式下会导致 UDP 53 DNS 丢包超时的纯 CDN 节点）
+grep -vE -- '-cdn-' "$USER_HOME/client-config.txt" > "$SUB_DIR/v2rayn-tun-raw.txt" || true
+if [[ -s "$SUB_DIR/v2rayn-tun-raw.txt" ]]; then
+  base64 "$SUB_DIR/v2rayn-tun-raw.txt" | tr -d '\n' > "$SUB_DIR/v2rayn-tun.txt"
+fi
+
 V2RAYN_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/v2rayn.txt"
 V2RAYN_RAW_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/v2rayn-raw.txt"
+V2RAYN_TUN_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/v2rayn-tun.txt"
+SHADOWROCKET_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/shadowrocket.txt"
 MIHOMO_FULL_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/mihomo-full.yaml"
 MIHOMO_NODES_SUB_URL="https://${REALITY_DOMAIN}/sub/${SUB_TOKEN}/mihomo-nodes.yaml"
 
 V2RAYN_QR_FILE="${USER_HOME}/subscription-v2rayn.png"
+V2RAYN_TUN_QR_FILE="${USER_HOME}/subscription-v2rayn-tun.png"
+SHADOWROCKET_QR_FILE="${USER_HOME}/subscription-shadowrocket.png"
 MIHOMO_FULL_QR_FILE="${USER_HOME}/subscription-mihomo-full.png"
 MIHOMO_NODES_QR_FILE="${USER_HOME}/subscription-mihomo-nodes.png"
 SUB_LINKS_FILE="${USER_HOME}/subscription-links.txt"
@@ -46,6 +62,8 @@ check_subscription() {
 info "验证订阅链接..."
 check_subscription "/sub/${SUB_TOKEN}/v2rayn.txt" "$SUB_DIR/v2rayn.txt"
 check_subscription "/sub/${SUB_TOKEN}/v2rayn-raw.txt" "$SUB_DIR/v2rayn-raw.txt"
+[[ -f "$SUB_DIR/shadowrocket.txt" ]] && check_subscription "/sub/${SUB_TOKEN}/shadowrocket.txt" "$SUB_DIR/shadowrocket.txt"
+[[ -f "$SUB_DIR/v2rayn-tun.txt" ]] && check_subscription "/sub/${SUB_TOKEN}/v2rayn-tun.txt" "$SUB_DIR/v2rayn-tun.txt"
 check_subscription "/sub/${SUB_TOKEN}/mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 check_subscription "/sub/${SUB_TOKEN}/mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 info "订阅链接自检通过"
@@ -65,6 +83,12 @@ cat > "$SUB_LINKS_FILE" << SUBLINKEOF
 V2RayN 订阅 (base64):
 $V2RAYN_SUB_URL
 
+V2RayN TUN 模式优化订阅 (排除纯 CDN 节点):
+$V2RAYN_TUN_SUB_URL
+
+Shadowrocket 专属订阅 (仅保留完全兼容节点):
+$SHADOWROCKET_SUB_URL
+
 明文节点订阅（Shadowrocket / onexray 等对 base64 挑剔时改用这个）:
 ${V2RAYN_RAW_SUB_URL}
 
@@ -75,7 +99,9 @@ Mihomo 纯节点订阅:
 $MIHOMO_NODES_SUB_URL
 
 二维码 PNG 文件:
-V2RayN / Shadowrocket: $V2RAYN_QR_FILE
+V2RayN 全量: $V2RAYN_QR_FILE
+V2RayN TUN 优化: $V2RAYN_TUN_QR_FILE
+Shadowrocket 专属: $SHADOWROCKET_QR_FILE
 Mihomo 完整分流: $MIHOMO_FULL_QR_FILE
 Mihomo 纯节点: $MIHOMO_NODES_QR_FILE
 SUBLINKEOF
