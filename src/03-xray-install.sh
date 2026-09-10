@@ -165,11 +165,11 @@ install_xray() {
     if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
       if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
         warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
+        local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
         if [[ "$OS_ID" != "alpine" ]]; then
-          # --beta：Xray 自 v26.4.25 起把正式版 release 全部标记为 GitHub prerelease，
-          # releases/latest 只返回非 prerelease 的旧版。--beta 让官方脚本取
-          # PRE_RELEASE_LATEST（releases 列表里第一条有 Linux zip 资产的新版）。
-          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root \
+          local install_flag="--beta"
+          [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
+          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root \
             || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
           info "升级后版本: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
         else
@@ -199,8 +199,11 @@ install_xray() {
         info "残留进程已清理"
       fi
     fi
-    # --beta：同上面的说明——Xray 正式版全被标记为 prerelease，不加 --beta 会装到旧版
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root
+    # 默认安装稳定兼容版（26.7.28），避免 v26.9.8+ 强制 MLKEM768 导致第三方客户端 REALITY 握手断联
+    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
+    local install_flag="--beta"
+    [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root
     return
   fi
 
@@ -214,17 +217,21 @@ install_xray() {
 
   command -v unzip >/dev/null 2>&1 || pkg_install unzip
   tmpdir=$(mktemp -d)
-  # releases/latest/download 只指向最后一个非 prerelease（旧版）。先用 releases?per_page=1
-  # 取真实最新 tag（不论 prerelease 与否），再按 tag 下载；API 失败时退回 releases/latest。
+  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
   local latest_tag asset_url
-  latest_tag=$(curl -fsSL --max-time 15 \
-    "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
-    | grep -m1 '"tag_name"' | cut -d'"' -f4)
-  if [[ -n "$latest_tag" ]]; then
+  if [[ -n "$target_ver" && "$target_ver" != "latest" ]]; then
+    latest_tag="v${target_ver#v}"
     asset_url="https://github.com/XTLS/Xray-core/releases/download/${latest_tag}/${asset}"
   else
-    warn "无法获取最新 Xray 版本，改用 releases/latest 下载"
-    asset_url="https://github.com/XTLS/Xray-core/releases/latest/download/${asset}"
+    latest_tag=$(curl -fsSL --max-time 15 \
+      "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
+      | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    if [[ -n "$latest_tag" ]]; then
+      asset_url="https://github.com/XTLS/Xray-core/releases/download/${latest_tag}/${asset}"
+    else
+      warn "无法获取最新 Xray 版本，改用 releases/latest 下载"
+      asset_url="https://github.com/XTLS/Xray-core/releases/latest/download/${asset}"
+    fi
   fi
   curl -fL "$asset_url" -o "${tmpdir}/xray.zip"
   unzip -q "${tmpdir}/xray.zip" -d "$tmpdir"

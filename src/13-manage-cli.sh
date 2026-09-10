@@ -19,6 +19,13 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 fail()  { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+ver_ge() {
+  [[ "$1" == "$2" ]] && return 0
+  local lowest
+  lowest=$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)
+  [[ "$lowest" == "$2" ]]
+}
+
 # 本脚本自身的版本，由安装时的 sed 从占位符替换而来（见本文件末尾）。
 # 不能直接写 ${PROJECT_VERSION}：外层 heredoc 是 quoted 的，不做变量展开。
 #
@@ -655,31 +662,62 @@ cmd_start() { for s in xray nginx; do svc start "$s" || warn "${s} 启动失败"
 cmd_stop()  { for s in xray nginx; do svc stop  "$s" || warn "${s} 停止失败"; done; }
 
 # 更新 Xray-core：先备份，配置自检失败自动回滚
+# 用法: xh update [<版本号>] [--auto]
 cmd_update() {
-  local auto=0
-  [[ "${1:-}" == "--auto" ]] && auto=1
+  local auto=0 target_ver=""
+  for arg in "$@"; do
+    case "$arg" in
+      --auto) auto=1 ;;
+      *) [[ -z "$target_ver" ]] && target_ver="$arg" ;;
+    esac
+  done
 
   [[ -x "$XRAY_BIN" ]] || fail "未找到 ${XRAY_BIN}"
   local current latest backup
   current=$("$XRAY_BIN" version 2>/dev/null | head -1 | awk '{print $2}')
-  # Xray 自 v26.4.25 起把正式版 release 全标记为 GitHub prerelease，releases/latest
-  # 只返回最后一个非 prerelease 的旧版。releases?per_page=1 取最新一条（不论 prerelease），
-  # 返回格式 [{...}] 与旧端点的 {tag_name:...} 对 grep 提取兼容，无需改解析。
-  latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
-    | grep -m1 '"tag_name"' | cut -d'"' -f4)
-  latest="${latest#v}"
+  current="${current#v}"
+
+  if [[ -n "$target_ver" ]]; then
+    latest="${target_ver#v}"
+  else
+    # Xray 自 v26.4.25 起把正式版 release 全标记为 GitHub prerelease，releases/latest
+    # 只返回最后一个非 prerelease 的旧版。releases?per_page=1 取最新一条（不论 prerelease），
+    # 返回格式 [{...}] 与旧端点的 {tag_name:...} 对 grep 提取兼容，无需改解析。
+    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
+      | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    latest="${latest#v}"
+  fi
 
   if [[ -z "$latest" ]]; then
-    warn "无法获取 Xray-core 最新版本号，跳过本次更新"
+    warn "无法获取 Xray-core 目标版本号，跳过本次更新"
     return 0
   fi
-  info "当前版本: ${current:-未知}  最新版本: ${latest}"
+  info "当前版本: ${current:-未知}  目标版本: ${latest}"
   if [[ "$current" == "$latest" ]]; then
-    info "已是最新版本，无需更新"
+    info "已是目标版本 (${latest})，无需更新"
     return 0
   fi
+
+  # 兼容性警示：v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 X25519MLKEM768
+  if ver_ge "$latest" "26.9.8"; then
+    echo ""
+    warn "============================================================"
+    warn "⚠️ 兼容性警告：目标版本 v${latest} (>= 26.9.8) 在 REALITY 协议中"
+    warn "   强制要求后量子密钥 (X25519MLKEM768)。"
+    warn "   这会导致 Shadowrocket、sing-box、Clash Meta / Mihomo"
+    warn "   等第三方客户端因未支持该算法而握手失败 (reality verification failed)！"
+    warn "   如需保持第三方客户端兼容，强烈建议保留或指定 v26.7.28："
+    warn "     ${MANAGE_CMD} update 26.7.28"
+    warn "============================================================"
+    echo ""
+    if [[ $auto -eq 1 ]]; then
+      info "自动更新跳过破坏第三方客户端 REALITY 兼容性的版本 (${latest})"
+      return 0
+    fi
+  fi
+
   if [[ $auto -eq 0 ]]; then
-    read -rp "确认更新到 ${latest}? [y/N]: " reply
+    read -rp "确认安装/更新到 ${latest}? [y/N]: " reply
     [[ "${reply,,}" == "y" ]] || { info "已取消"; return 0; }
   fi
 
@@ -689,9 +727,7 @@ cmd_update() {
 
   local ok=0
   if [[ "${OS_ID:-}" != "alpine" ]]; then
-    # --beta：不加的话官方脚本会装 RELEASE_LATEST（最后一个非 prerelease 的旧版），
-    # 即使上面检测到新版本也会被装回旧版——必须与检测逻辑同一套。
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --beta -u root && ok=1
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --version "v${latest}" -u root && ok=1
   else
     local arch asset tmpdir
     arch=$(uname -m)
@@ -977,6 +1013,17 @@ cmd_minversion() {
       fi
       local env_ver="${REALITY_MIN_CLIENT_VER:-}"
       [[ -n "$env_ver" ]] && echo -e "  node.env 设定:  ${env_ver}"
+      local cur_core_ver
+      cur_core_ver=$("$XRAY_BIN" version 2>/dev/null | head -1 | awk '{print $2}')
+      cur_core_ver="${cur_core_ver#v}"
+      [[ -n "$cur_core_ver" ]] && echo -e "  Xray 内核版本:  ${cur_core_ver}"
+      if [[ -n "$cur_core_ver" ]] && ver_ge "$cur_core_ver" "26.9.8"; then
+        echo ""
+        echo -e "  ${RED}⚠️ 注意：当前 Xray 内核为 v${cur_core_ver} (>= 26.9.8)${NC}"
+        echo -e "  该版本在 REALITY 中强制要求后量子密钥 (X25519MLKEM768)，"
+        echo -e "  即便开启 minClientVer，第三方客户端（Shadowrocket/sing-box/Clash）仍会握手失败！"
+        echo -e "  建议降级至兼容稳定版：${MANAGE_CMD} update 26.7.28"
+      fi
       echo ""
       echo -e "说明："
       echo -e "  • 开启兼容（1.8.0）：支持 mihomo、Clash Meta、sing-box 等非 Xray 官方客户端正常握手。"
@@ -1184,7 +1231,7 @@ cmd_menu() {
       3) cmd_sub ;;
       4) cmd_restart ;;
       5) cmd_log xray ;;
-      6) cmd_update ;;
+      6) read -rp "  直接回车更新最新版，或输入指定版本 (如 26.7.28): " a; cmd_update "${a}" ;;
       7) read -rp "  show / on / off / client: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  show / on / off / speed: " a; cmd_brutal "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
@@ -1211,7 +1258,7 @@ xray-xhttp 管理命令
   xh diag               UDP / HTTP3 节点连不上时的服务端侧自检
   xh log [xray|nginx] [行数]
   xh start | stop | restart
-  xh update [--auto]    更新 Xray-core（自检失败自动回滚）
+  xh update [<ver>] [--auto] 更新或指定 Xray-core 版本（自检失败自动回滚）
   xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节

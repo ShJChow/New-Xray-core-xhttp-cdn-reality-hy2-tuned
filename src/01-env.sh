@@ -26,8 +26,13 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.9"
+PROJECT_VERSION="4.9.10"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
+# 默认推荐的 Xray-core 稳定兼容版本。
+# Xray v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 (X25519MLKEM768)，
+# 会导致 Shadowrocket / sing-box / Clash Meta 等第三方客户端报 reality verification failed。
+# v26.7.28 为目前兼顾 minClientVer、UDP 直连且全平台客户端 100% 兼容的推荐版本。
+XRAY_DEFAULT_VERSION="26.7.28"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
 STATE_DIR="/etc/xhttp-cdn"
@@ -38,7 +43,7 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 # ==================================================
 # 功能开关（均可用环境变量覆盖）
 #   FEATURE_KEEPALIVE   保活自愈与开机自启
-#   FEATURE_AUTOUPDATE  每周自动更新 Xray-core
+#   FEATURE_AUTOUPDATE  每周自动更新 Xray-core（默认关闭，防止上游破坏性更新导致断网）
 #   AUTO=1              非交互一键部署
 #
 # v2.0.0：安装期不再做任何参数优化。渲染出的 xray-config.json 与上游
@@ -47,7 +52,7 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 # ==================================================
 
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
-FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
+FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-false}
 AUTO=${AUTO:-0}
 
 # ==================================================

@@ -36,7 +36,8 @@
 - [十四、v4.9.7 回滚 v4.9.5 / v4.9.6 的两项改动](#十四v497-回滚-v495--v496-的两项改动)
 - [十五、v4.9.8 支持 Reality minversion / minClientVer 兼容控制](#十五v498-支持-reality-minversion--minclientver-兼容控制)
 - [十六、v4.9.9 适配 Xray-core 26.9+ 最新特性与废弃配置平滑迁移](#十六v499-适配-xray-core-269-最新特性与废弃配置平滑迁移)
-- [十七、免责声明](#十七免责声明)
+- [十七、v4.9.10 修复 REALITY 在 Shadowrocket / sing-box / Clash Meta 的握手阻断与版本锁定](#十七v4910-修复-reality-在-shadowrocket--sing-box--clash-meta-的握手阻断与版本锁定)
+- [十八、免责声明](#十八免责声明)
 
 ---
 
@@ -1554,7 +1555,33 @@ v4.9.8 正式加入完整的 **`minversion` / `minClientVer` 原生支持与生�
 
 ---
 
-## 十七、免责声明
+## 十七、v4.9.10 修复 REALITY 在 Shadowrocket / sing-box / Clash Meta 的握手阻断与版本锁定
+
+### 1. 故障根因分析：XTLS REALITY 引入后量子密钥硬性卡控
+在 Xray-core v26.9.8 / v26.9.9 中，`xtls/reality` 引入了一条强制检查（XTLS/Xray-core#6714）：
+```go
+if peerPub2 == nil {
+    break // reject outdated/strange Client Hello that doesn't have X25519MLKEM768 before optional X25519
+}
+```
+* **机理**：服务端在 TLS 握手层强行要求客户端 ClientHello 的 `key_shares` 中必须携带后量子算法 `X25519MLKEM768`（0x11ec）。
+* **影响**：当前所有的主流第三方客户端（**Shadowrocket / sing-box / Clash Meta (Mihomo) / Loon / Surge**）在 TLS 握手中只支持经典 `X25519`。当连接 Xray 26.9.8+ 服务端时，服务端在 REALITY 握手阶段判定为非法连接并直接丢弃，客户端全部报错 **`reality verification failed`**。
+* 此问题即便配置 `minClientVer: 1.8.0` 也无法绕过，因为阻断发生在最底层的 TLS 握手协商阶段。
+
+### 2. 解决方案与工程落地
+本项目在 v4.9.10 做出以下保护与升级：
+1. **默认锁定稳定兼容版本 `v26.7.28`**：
+   安装与升级默认锁定 `v26.7.28`。该版本完整支持 `xtls-rprx-vision`、Hysteria2、H3-Direct，且全平台客户端（Shadowrocket、sing-box、Mihomo 等）可 100% 顺畅建立 REALITY 连接。
+2. **`xh update [<版本号>]` 支持指定版本**：
+   用户可通过 `xh update 26.7.28` 随时无损降级回兼容版；或在官方未来修复该问题后通过 `xh update` 升级。
+3. **升级风险预警与自动规避**：
+   在检测到目标内核为 `>= 26.9.8` 时输出明显的兼容性风险警告；`--auto` 自动更新模式下会自动跳过破坏性版本，杜绝定时任务导致节点意外断连。
+4. **`FEATURE_AUTOUPDATE` 默认安全关闭**：
+   避免无人值守时上游破坏性更新导致生产节点失联。
+
+---
+
+## 十八、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
