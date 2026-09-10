@@ -155,6 +155,25 @@ proxies:
       public-key: ${PUBLIC_KEY}
       short-id: ${SHORT_ID}
 
+  - name: Vless-raw-reality-vision-${HOSTNAME_TAG}
+    type: vless
+    server: ${VPS_IP}
+    port: 443
+    uuid: ${UUID1}
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    encryption: "none"
+    network: tcp
+    alpn:
+      - h2
+      - http/1.1
+    servername: ${REALITY_DOMAIN}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: ${PUBLIC_KEY}
+      short-id: ${SHORT_ID}
+
   - name: Vless-xhttp-reality-${HOSTNAME_TAG}
     type: vless
     server: ${VPS_IP}

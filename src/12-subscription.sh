@@ -20,7 +20,7 @@ cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
 # Shadowrocket 专属订阅（只包含小火箭完全兼容的 REALITY 与 Hy2 节点）
-grep -E 'Vless-reality-vision|Hysteria2-obfs' "$USER_HOME/client-config.txt" > "$SUB_DIR/shadowrocket-raw.txt" || true
+grep -E 'Vless-.*reality-vision|Hysteria2-obfs' "$USER_HOME/client-config.txt" > "$SUB_DIR/shadowrocket-raw.txt" || true
 if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
   base64 "$SUB_DIR/shadowrocket-raw.txt" | tr -d '\n' > "$SUB_DIR/shadowrocket.txt"
 fi

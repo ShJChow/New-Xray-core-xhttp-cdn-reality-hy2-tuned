@@ -89,7 +89,23 @@ n2 = {
         "xhttpSettings": xh_opts("", "stream-up")
     }
 }
+# Node 4: Vless-reality-vision (TCP)
 n4 = {
+    "protocol": "vless",
+    "settings": {"vnext": [vless(VPS_IP, 443, UUID1, "none", "xtls-rprx-vision")]},
+    "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+            "serverName": REALITY_DOMAIN,
+            "fingerprint": "chrome",
+            "publicKey": PUBLIC_KEY,
+            "shortId": SHORT_ID
+        }
+    }
+}
+# Node 4-raw: VLESS + RAW + Reality + Vision
+n4_raw = {
     "protocol": "vless",
     "settings": {"vnext": [vless(VPS_IP, 443, UUID1, "none", "xtls-rprx-vision")]},
     "streamSettings": {
@@ -134,6 +150,7 @@ xray_nodes = [
     ("n1-h3-cdn", n1, 10801),
     ("n2-h3-direct", n2, 10802),
     ("n4-reality-vision", n4, 10804),
+    ("n4-raw-reality-vision", n4_raw, 10807),
     ("n5-reality-xhttp", n5, 10805),
     ("n6-reality-up-cdn-down", n6, 10806),
 ]
@@ -253,6 +270,7 @@ try:
         ("Xray", "n2-h3-direct", 10802, "QUIC/H3 + VLESS Direct"),
         ("Xray", "n3-hy2-obfs", 10803, "Hysteria 2 + Salamander"),
         ("Xray", "n4-reality-vision", 10804, "VLESS + Reality + Vision"),
+        ("Xray", "n4-raw-reality-vision", 10807, "VLESS + RAW + Reality + Vision"),
         ("Xray", "n5-reality-xhttp", 10805, "VLESS + Reality + XHTTP"),
         ("Xray", "n6-reality-up-cdn-down", 10806, "Reality Up + CDN Down"),
         ("sbbox", "tuic", 11801, "TUIC v5 + BBR"),

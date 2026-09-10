@@ -253,7 +253,7 @@ cmd_resub() {
   [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
 
   # 重新生成 Shadowrocket 专属与 v2rayN TUN 优化订阅
-  grep -E 'Vless-reality-vision|Hysteria2-obfs' "${home}/client-config.txt" > "${subdir}/shadowrocket-raw.txt" || true
+  grep -E 'Vless-.*reality-vision|Hysteria2-obfs' "${home}/client-config.txt" > "${subdir}/shadowrocket-raw.txt" || true
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
     base64 "${subdir}/shadowrocket-raw.txt" | tr -d '\n' > "${subdir}/shadowrocket.txt"
   fi
