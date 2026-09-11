@@ -108,6 +108,7 @@ EOF
 
   if [[ -n "$XHTTP_EXTRA" ]]; then
     cat <<EOF
+      x-padding-bytes: "100-1000"
       x-padding-obfs-mode: true
       x-padding-key: "${XHTTP_PADDING_KEY}"
       x-padding-header: "${XHTTP_PADDING_HEADER}"
@@ -150,6 +151,7 @@ EOF
 
     if [[ -n "$XHTTP_EXTRA" ]]; then
       cat <<EOF
+        x-padding-bytes: "100-1000"
         x-padding-obfs-mode: true
         x-padding-key: "${XHTTP_PADDING_KEY}"
         x-padding-header: "${XHTTP_PADDING_HEADER}"

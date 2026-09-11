@@ -65,6 +65,7 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
 
   MIHOMO_XPADDING_XHTTP_BLOCK=$(cat <<EOF
 
+      x-padding-bytes: "100-1000"
       x-padding-obfs-mode: true
       x-padding-key: "${XHTTP_PADDING_KEY}"
       x-padding-header: "${XHTTP_PADDING_HEADER}"
@@ -75,6 +76,7 @@ EOF
   # 上下行分离节点的 download-settings 比 xhttp-opts 深一级，缩进各 +2
   MIHOMO_XPADDING_DOWNLOAD_BLOCK=$(cat <<EOF
 
+          x-padding-bytes: "100-1000"
           x-padding-obfs-mode: true
           x-padding-key: "${XHTTP_PADDING_KEY}"
           x-padding-header: "${XHTTP_PADDING_HEADER}"
