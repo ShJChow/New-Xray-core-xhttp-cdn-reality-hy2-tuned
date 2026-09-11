@@ -101,12 +101,12 @@ elif [[ "$AVAIL" == *bbr* ]]; then
 fi
 
 if [[ -n "$XRAY_TCP_CC" ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 else
   warn "BBR / Brutal 均不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi
 
 # Reality minClientVer 控制：
@@ -177,6 +177,8 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                     // 删掉后 Xray 会退回它自己的默认下限（更低），
                     // 所以这里显式写死 1.3。
                     "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,
@@ -233,6 +235,8 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
                     // 删掉后 Xray 会退回它自己的默认下限（更低），
                     // 所以这里显式写死 1.3。
                     "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
                     "certificates": [
                         {
                             "certificateFile": "${CERT_FILE}",
@@ -283,6 +287,8 @@ if [[ "$FEATURE_HY2" == true ]]; then
                     // 删掉后 Xray 会退回它自己的默认下限（更低），
                     // 所以这里显式写死 1.3。
                     "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
                     // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
                     // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
                     "rejectUnknownSni": true,

@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.13"
+PROJECT_VERSION="4.9.15"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 稳定兼容版本。
 # Xray v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 (X25519MLKEM768)，
