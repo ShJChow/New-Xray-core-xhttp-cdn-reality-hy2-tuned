@@ -127,7 +127,7 @@ http {
 
     # 默认 SSL 丢弃服务：未匹配 SNI / 直接 IP 探测在 TLS 握手阶段直接断开，防止证书/域名泄露
     server {
-        listen       8003 ssl default_server reuseport backlog=65535;
+        listen       8003 ssl default_server reuseport fastopen=256 backlog=65535;
         server_name  _;
         ssl_reject_handshake on;
     }
