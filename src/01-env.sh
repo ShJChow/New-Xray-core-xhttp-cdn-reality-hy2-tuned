@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.12"
+PROJECT_VERSION="4.9.13"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 稳定兼容版本。
 # Xray v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 (X25519MLKEM768)，
@@ -62,7 +62,7 @@ AUTO=${AUTO:-0}
 #   2. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
 #   3. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
 #   4. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
-#   5. Vless-reality-vision  直连 TCP 443，Vision
+#   5. Vless-raw-reality-vision 直连 TCP 443，Vision (RAW)
 #   6. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
 #   7. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
 #

@@ -39,6 +39,7 @@ H3_PORT = int(env.get("H3_PORT", 8446))
 HY2_PORT = int(env.get("HY2_PORT", 8443))
 
 XP = {
+    "xPaddingBytes": "100-1000",
     "xPaddingObfsMode": True,
     "xPaddingMethod": env.get("XHTTP_PADDING_METHOD", "tokenish"),
     "xPaddingPlacement": env.get("XHTTP_PADDING_PLACEMENT", "queryInHeader"),
@@ -89,21 +90,6 @@ n2 = {
         "xhttpSettings": xh_opts("", "stream-up")
     }
 }
-# Node 4: Vless-reality-vision (TCP)
-n4 = {
-    "protocol": "vless",
-    "settings": {"vnext": [vless(VPS_IP, 443, UUID1, "none", "xtls-rprx-vision")]},
-    "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-            "serverName": REALITY_DOMAIN,
-            "fingerprint": "chrome",
-            "publicKey": PUBLIC_KEY,
-            "shortId": SHORT_ID
-        }
-    }
-}
 # Node 4-raw: VLESS + RAW + Reality + Vision
 n4_raw = {
     "protocol": "vless",
@@ -131,7 +117,7 @@ n5 = {
             "publicKey": PUBLIC_KEY,
             "shortId": SHORT_ID
         },
-        "xhttpSettings": xh_opts("", "stream-up")
+        "xhttpSettings": xh_opts("", "auto")
     }
 }
 dl = {
@@ -149,8 +135,7 @@ xray_nodes = [
     ("n0-h2-cdn", n0, 10800),
     ("n1-h3-cdn", n1, 10801),
     ("n2-h3-direct", n2, 10802),
-    ("n4-reality-vision", n4, 10804),
-    ("n4-raw-reality-vision", n4_raw, 10807),
+    ("n4-raw-reality-vision", n4_raw, 10804),
     ("n5-reality-xhttp", n5, 10805),
     ("n6-reality-up-cdn-down", n6, 10806),
 ]
@@ -269,8 +254,7 @@ try:
         ("Xray", "n1-h3-cdn", 10801, "QUIC/H3 + Cloudflare CDN"),
         ("Xray", "n2-h3-direct", 10802, "QUIC/H3 + VLESS Direct"),
         ("Xray", "n3-hy2-obfs", 10803, "Hysteria 2 + Salamander"),
-        ("Xray", "n4-reality-vision", 10804, "VLESS + Reality + Vision"),
-        ("Xray", "n4-raw-reality-vision", 10807, "VLESS + RAW + Reality + Vision"),
+        ("Xray", "n4-raw-reality-vision", 10804, "VLESS + RAW + Reality + Vision"),
         ("Xray", "n5-reality-xhttp", 10805, "VLESS + Reality + XHTTP"),
         ("Xray", "n6-reality-up-cdn-down", 10806, "Reality Up + CDN Down"),
         ("sbbox", "tuic", 11801, "TUIC v5 + BBR"),

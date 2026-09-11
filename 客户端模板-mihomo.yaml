@@ -62,7 +62,7 @@ dns:
       - https://doh.pub/dns-query
 
 proxies:
-  - name: Vless-reality-vision-YOUR_HOST
+  - name: Vless-raw-reality-vision-YOUR_HOST
     type: vless
     server: YOUR_VPS_IP
     port: 443
