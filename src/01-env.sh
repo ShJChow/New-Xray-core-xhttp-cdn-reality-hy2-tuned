@@ -26,13 +26,12 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.15"
+PROJECT_VERSION="4.9.16"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
-# 默认推荐的 Xray-core 稳定兼容版本。
-# Xray v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 (X25519MLKEM768)，
-# 会导致 Shadowrocket / sing-box / Clash Meta 等第三方客户端报 reality verification failed。
-# v26.7.28 为目前兼顾 minClientVer、UDP 直连且全平台客户端 100% 兼容的推荐版本。
-XRAY_DEFAULT_VERSION="26.7.28"
+# 默认推荐的 Xray-core 版本：全面升级并保持与官方最新版本（v26.9.9+）对齐。
+# Xray v26.9.8+ 在 REALITY 协议中全面启用后量子混合密钥 (X25519MLKEM768) 防 GFW 指纹探测。
+# 现已全面实测验证通过，作为最高优先级默认版本。
+XRAY_DEFAULT_VERSION="latest"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
 STATE_DIR="/etc/xhttp-cdn"

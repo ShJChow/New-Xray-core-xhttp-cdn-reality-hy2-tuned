@@ -165,7 +165,7 @@ install_xray() {
     if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
       if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
         warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
-        local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
+        local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
         if [[ "$OS_ID" != "alpine" ]]; then
           local install_flag="--beta"
           [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
@@ -199,8 +199,8 @@ install_xray() {
         info "残留进程已清理"
       fi
     fi
-    # 默认安装稳定兼容版（26.7.28），避免 v26.9.8+ 强制 MLKEM768 导致第三方客户端 REALITY 握手断联
-    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
+    # 默认安装最新版，全面启用后量子防探测特性
+    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
     local install_flag="--beta"
     [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root
@@ -217,7 +217,7 @@ install_xray() {
 
   command -v unzip >/dev/null 2>&1 || pkg_install unzip
   tmpdir=$(mktemp -d)
-  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.7.28}}"
+  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
   local latest_tag asset_url
   if [[ -n "$target_ver" && "$target_ver" != "latest" ]]; then
     latest_tag="v${target_ver#v}"

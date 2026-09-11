@@ -709,22 +709,16 @@ cmd_update() {
     return 0
   fi
 
-  # 兼容性警示：v26.9.8+ 在 REALITY 协议中强制要求后量子密钥 X25519MLKEM768
+  # 特性说明：v26.9.8+ 在 REALITY 协议中启用后量子混合密钥 X25519MLKEM768 强校验防 GFW 探测
   if ver_ge "$latest" "26.9.8"; then
     echo ""
-    warn "============================================================"
-    warn "⚠️ 兼容性警告：目标版本 v${latest} (>= 26.9.8) 在 REALITY 协议中"
-    warn "   强制要求后量子密钥 (X25519MLKEM768)。"
-    warn "   这会导致 Shadowrocket、sing-box、Clash Meta / Mihomo"
-    warn "   等第三方客户端因未支持该算法而握手失败 (reality verification failed)！"
-    warn "   如需保持第三方客户端兼容，强烈建议保留或指定 v26.7.28："
-    warn "     ${MANAGE_CMD} update 26.7.28"
-    warn "============================================================"
+    info "============================================================"
+    info "ℹ️ 后量子安全特性：目标版本 v${latest} (>= 26.9.8) 在 REALITY 协议中"
+    info "   启用了后量子混合密钥 (X25519MLKEM768) 握手强校验防 GFW 指纹识别。"
+    info "   客户端若使用 REALITY 需支持后量子混合算法；"
+    info "   未支持后量子的客户端建议使用订阅中的 XHTTP / H3 / H2 / Hysteria2 节点。"
+    info "============================================================"
     echo ""
-    if [[ $auto -eq 1 ]]; then
-      info "自动更新跳过破坏第三方客户端 REALITY 兼容性的版本 (${latest})"
-      return 0
-    fi
   fi
 
   if [[ $auto -eq 0 ]]; then
@@ -1030,10 +1024,9 @@ cmd_minversion() {
       [[ -n "$cur_core_ver" ]] && echo -e "  Xray 内核版本:  ${cur_core_ver}"
       if [[ -n "$cur_core_ver" ]] && ver_ge "$cur_core_ver" "26.9.8"; then
         echo ""
-        echo -e "  ${RED}⚠️ 注意：当前 Xray 内核为 v${cur_core_ver} (>= 26.9.8)${NC}"
-        echo -e "  该版本在 REALITY 中强制要求后量子密钥 (X25519MLKEM768)，"
-        echo -e "  即便开启 minClientVer，第三方客户端（Shadowrocket/sing-box/Clash）仍会握手失败！"
-        echo -e "  建议降级至兼容稳定版：${MANAGE_CMD} update 26.7.28"
+        echo -e "  ${YELLOW}ℹ️ 提示：当前 Xray 内核为 v${cur_core_ver} (>= 26.9.8)${NC}"
+        echo -e "  该版本在 REALITY 中启用了后量子混合密钥 (X25519MLKEM768) 握手强校验防 GFW 探测。"
+        echo -e "  客户端若使用 REALITY 需支持后量子混合算法；或使用订阅中的 XHTTP / H3 / H2 / Hysteria2 节点。"
       fi
       echo ""
       echo -e "说明："
