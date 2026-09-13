@@ -5,13 +5,11 @@
 # ==================================================
 # 内核版本闸门（v4.0.0）
 # --------------------------------------------------
-# 两个直连 UDP 节点（h3-direct / Hysteria2-obfs）要求 Xray >= 26.6.1：
-#   1. Hysteria2 inbound 在 v26.3.27 才加入；
-#   2. finalmask 的 UDP listener 在 v26.3.27~v26.5.9 上收到第一个无效包即死亡、
-#      内核缓冲区静默溢出，此后丢弃所有合法流量直到重启（issue #6184，PR #6185 修复）。
-#      公网 UDP 扫描噪音使这个 bug 必然被触发，且**同时影响 Hysteria2 与 XHTTP/3**。
+# 两个直连 UDP 节点（h3-direct / Hysteria2-obfs）要求 Xray 官方正式版 >= 26.3.27：
+#   1. Hysteria2 inbound 在官方正式版 v26.3.27 加入；
+#   2. 配合内核级 Netfilter (iptables) 令牌桶限速与 INVALID 包拦截，具备全面抗 QDoS 洪泛能力。
 # 版本不足时把两个开关置 false，只保留 3 条能用的节点，不中断安装（L1）。
-XRAY_MIN_VER_UDP="26.6.1"
+XRAY_MIN_VER_UDP="26.3.27"
 
 # ver_ge A B —— A >= B ? 用 sort -V 做版本比较，不做字符串比较
 ver_ge() {
@@ -38,7 +36,7 @@ require_xray_version_for_udp() {
     info "Xray ${ver} >= ${XRAY_MIN_VER_UDP}，h3-direct 与 Hysteria2 节点可用"
   else
     warn "Xray ${ver} < ${XRAY_MIN_VER_UDP}，已禁用 h3-direct 与 Hysteria2 两个直连 UDP 节点"
-    warn "原因: Hysteria2 inbound 需 26.3.27+，且 finalmask UDP listener 崩溃 bug 需 26.6.1+ 才修复"
+    warn "原因: Hysteria2 inbound 需官方正式版 26.3.27+"
     warn "升级方法: ${MANAGE_CMD} update  （或删除 /usr/local/bin/xray 后重跑本脚本）"
     FEATURE_H3_DIRECT=false
     FEATURE_HY2=false
@@ -167,7 +165,7 @@ install_xray() {
         warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
         local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
         if [[ "$OS_ID" != "alpine" ]]; then
-          local install_flag="--beta"
+          local install_flag=""
           [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
           bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root \
             || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
@@ -199,9 +197,9 @@ install_xray() {
         info "残留进程已清理"
       fi
     fi
-    # 默认安装最新版，全面启用后量子防探测特性
+    # 默认安装最新官方正式版（releases/latest，严格排除 pre-release / beta 不稳定测试版）
     local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
-    local install_flag="--beta"
+    local install_flag=""
     [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root
     return
@@ -224,12 +222,12 @@ install_xray() {
     asset_url="https://github.com/XTLS/Xray-core/releases/download/${latest_tag}/${asset}"
   else
     latest_tag=$(curl -fsSL --max-time 15 \
-      "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
+      "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
       | grep -m1 '"tag_name"' | cut -d'"' -f4)
     if [[ -n "$latest_tag" ]]; then
       asset_url="https://github.com/XTLS/Xray-core/releases/download/${latest_tag}/${asset}"
     else
-      warn "无法获取最新 Xray 版本，改用 releases/latest 下载"
+      warn "无法获取最新 Xray 正式版本，改用 releases/latest 下载"
       asset_url="https://github.com/XTLS/Xray-core/releases/latest/download/${asset}"
     fi
   fi

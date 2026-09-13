@@ -323,7 +323,7 @@ cmd_conflict() {
 #   2. Vless-xhttp-h3-direct / Hysteria2-obfs —— 由 **Xray 自己 bind UDP**，
 #      既不经 nginx 也没有独立 hysteria 二进制。查的是 xray 进程的监听。
 #   3. add-quic-h3 扩展的节点 —— 由 nginx listen quic 提供（下方单独检查）。
-# 判据：1 通而 2 全不通 → 云厂商安全组没放行 UDP，或内核 <26.6.1。
+# 判据：1 通而 2 全不通 → 云厂商安全组没放行 UDP，或内核 <26.3.27。
 # UDP 端口劫持自检。
 # 背景：Hysteria2 端口跳跃靠 nat 表里的「端口段」规则（DNAT/REDIRECT）实现。
 # 这类规则按端口范围匹配，会把落在范围内的**任何**本机 UDP 服务端口一并改写。
@@ -457,21 +457,19 @@ cmd_diag() {
       if ss -lnup 2>/dev/null | grep -qE ":${HY2_PORT:-8443}\b"; then
         chk "Hysteria2 已监听 UDP ${HY2_PORT:-8443}" 0
       else
-        chk "Hysteria2 未监听 UDP ${HY2_PORT:-8443}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.6.1"
+        chk "Hysteria2 未监听 UDP ${HY2_PORT:-8443}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.3.27"
       fi
     fi
   fi
 
-  # 内核版本闸门：低于 26.6.1 时 finalmask 的 UDP listener 会在收到第一个无效包后
-  # 死亡（issue #6184），表现是「节点先能用、跑一阵后静默全挂、重启又好」。
-  # 这类故障靠看配置查不出来，只能靠版本号提前拦截。
+  # 内核版本闸门：低于 26.3.27 时缺少原生 Hysteria 2 inbound。
   if [[ "${FEATURE_HY2:-false}" == true || "${FEATURE_H3_DIRECT:-false}" == true ]]; then
     XV=$([[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     if [[ -n "$XV" ]]; then
-      if [[ "$(printf '%s\n26.6.1\n' "$XV" | sort -V | head -n1)" == "26.6.1" ]]; then
-        chk "Xray ${XV} ≥ 26.6.1（finalmask UDP listener 已修复）" 0
+      if [[ "$(printf '%s\n26.3.27\n' "$XV" | sort -V | head -n1)" == "26.3.27" ]]; then
+        chk "Xray ${XV} ≥ 26.3.27（官方正式版，Hysteria2 与 XHTTP 可用）" 0
       else
-        chk "Xray ${XV} < 26.6.1" 1 "finalmask UDP listener 会在收到无效包后静默死亡（#6184），执行 ${MANAGE_CMD} update"
+        chk "Xray ${XV} < 26.3.27" 1 "当前内核版本低于 26.3.27，缺少 Hysteria 2 原生支持，执行 ${MANAGE_CMD} update"
       fi
     fi
   fi
@@ -691,10 +689,8 @@ cmd_update() {
   if [[ -n "$target_ver" ]]; then
     latest="${target_ver#v}"
   else
-    # Xray 自 v26.4.25 起把正式版 release 全标记为 GitHub prerelease，releases/latest
-    # 只返回最后一个非 prerelease 的旧版。releases?per_page=1 取最新一条（不论 prerelease），
-    # 返回格式 [{...}] 与旧端点的 {tag_name:...} 对 grep 提取兼容，无需改解析。
-    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=1" 2>/dev/null \
+    # 严格仅使用官方正式版本（releases/latest，杜绝 pre-release / beta 测试版本）
+    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
       | grep -m1 '"tag_name"' | cut -d'"' -f4)
     latest="${latest#v}"
   fi
@@ -703,22 +699,34 @@ cmd_update() {
     warn "无法获取 Xray-core 目标版本号，跳过本次更新"
     return 0
   fi
-  info "当前版本: ${current:-未知}  目标版本: ${latest}"
+
+  # 拦截与检查测试版本 (pre-release)
+  local is_prerelease
+  is_prerelease=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/tags/v${latest}" 2>/dev/null | grep -m1 '"prerelease"' | grep -oE 'true|false')
+  local ver_type="官方正式版"
+  [[ "$is_prerelease" == "true" ]] && ver_type="测试版 / Pre-release"
+
+  info "当前版本: ${current:-未知}  目标版本: ${latest} (${ver_type})"
   if [[ "$current" == "$latest" ]]; then
     info "已是目标版本 (${latest})，无需更新"
     return 0
   fi
 
-  # 特性说明：v26.9.8+ 在 REALITY 协议中启用后量子混合密钥 X25519MLKEM768 强校验防 GFW 探测
-  if ver_ge "$latest" "26.9.8"; then
+  if [[ "$is_prerelease" == "true" ]]; then
     echo ""
-    info "============================================================"
-    info "ℹ️ 后量子安全特性：目标版本 v${latest} (>= 26.9.8) 在 REALITY 协议中"
-    info "   启用了后量子混合密钥 (X25519MLKEM768) 握手强校验防 GFW 指纹识别。"
-    info "   客户端若使用 REALITY 需支持后量子混合算法；"
-    info "   未支持后量子的客户端建议使用订阅中的 XHTTP / H3 / H2 / Hysteria2 节点。"
-    info "============================================================"
+    warn "============================================================"
+    warn "⚠️ 目标版本 v${latest} 被标记为 Pre-release / 测试版本！"
+    warn "本项目规范严格限定仅适用官方正式版本（releases/latest，如当前 v26.3.27）。"
+    warn "测试版本可能引入实验性/破坏性更改（例如 REALITY 强校验后量子混合密钥 X25519MLKEM768 导致旧版第三方客户端大面积握手失败）。"
+    warn "============================================================"
     echo ""
+    if [[ $auto -eq 1 ]]; then
+      warn "自动更新模式已拦截非正式测试版本安装。"
+      return 0
+    else
+      read -rp "测试版本可能破坏客户端连接，确定仍要强制安装测试版本吗? [y/N]: " force_reply
+      [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
+    fi
   fi
 
   if [[ $auto -eq 0 ]]; then

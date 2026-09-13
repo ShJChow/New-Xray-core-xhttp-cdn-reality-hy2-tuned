@@ -26,11 +26,10 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.17"
+PROJECT_VERSION="4.9.18"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
-# 默认推荐的 Xray-core 版本：全面升级并保持与官方最新版本（v26.9.9+）对齐。
-# Xray v26.9.8+ 在 REALITY 协议中全面启用后量子混合密钥 (X25519MLKEM768) 防 GFW 指纹探测。
-# 现已全面实测验证通过，作为最高优先级默认版本。
+# 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
+# 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
 XRAY_DEFAULT_VERSION="latest"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"

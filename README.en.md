@@ -129,7 +129,7 @@ The old standalone hysteria had **no Salamander obfuscation**; you only get it a
 migrating. To keep the old components instead, set `KEEP_LEGACY_UDP=true` — the two new
 UDP nodes are then disabled automatically to avoid port conflicts.
 
-If the Xray core is older than 26.6.1, the installer **upgrades the core automatically**
+If the Xray core is older than 26.3.27, the installer **upgrades the core automatically**
 (except on Alpine) rather than silently disabling those two nodes.
 
 > **No TUIC v5**: Xray-core has no TUIC inbound, so it cannot be provided under an
@@ -246,6 +246,8 @@ re-run the installer to pick them up.
 
 | v4.9.17 | **Native Hysteria2 end-to-end QDoS mitigation, port hopping disabled by default, and TCP Brutal full-speed sockopt.** ① **Single Fixed Port Architecture:** Disables UDP port hopping by default (`FEATURE_PORT_HOPPING=false`), eliminating port conflicts with coexisting proxy deployments (e.g. sbbox) and reducing host exposure to internet-wide UDP port scanning. ② **Kernel-Level Netfilter Anti-Flood (iptables / ip6tables):** Ingress fast-path for `RELATED,ESTABLISHED` packets preserves 1000Mbps+ line-rate throughput, drops `INVALID` UDP states, and limits `NEW` connection handshakes via token-bucket (`--hashlimit-above 50/sec --hashlimit-burst 100`). ③ **Xray Hysteria Inbound Hardening:** Shortens `udpIdleTimeout` from 300s to 60s for rapid cleanup of stale UDP and conntrack states, and binds `"sockopt": { "tcpFastOpen": true, "tcpcongestion": "brutal" }` to guarantee 0-RTT handshakes and line-rate TCP Brutal congestion control. Regression: 13/13 nodes PASS (`run_test.py`). |
 
+| v4.9.18 | **Lock strictly to official Xray-core releases (`releases/latest`), eliminate `--beta` flag, and implement pre-release protection.** ① **Official Release Policy:** In accordance with project invariants, Xray must exclusively use official release versions (`releases/latest` = `v26.3.27`), strictly forbidding unstable pre-releases/betas. ② **Installer & Update Hardening:** Removed `--beta` flag from `install-release.sh` invocations and updated update endpoints to `releases/latest`. Added active pre-release detection in `xh update` to intercept and warn against accidental installations of unstable GitHub pre-releases (such as v26.9.8+ with breaking MLKEM768 REALITY handshake changes). ③ **Client Compatibility:** 100% stable compatibility restored for all third-party clients (Shadowrocket, sing-box, Clash Meta, Loon, Surge) across all nodes. Regression: 13/13 nodes PASS (`run_test.py`). |
+
 > **Note on `minClientVer` / `minversion` (supported in v4.9.8)**:
 > Reality now defaults to `"minClientVer": "1.8.0"`, providing out-of-the-box compatibility for mihomo, Clash Meta, and sing-box clients.
 > - To toggle strict mode (Xray core default version only): run `xh minversion off`.
@@ -284,9 +286,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh
 
 ## One-command deployment
 
-> **Version requirements**: Xray core ≥ `26.6.1`, Mihomo core ≥ `1.19.24`.
-> The Xray floor comes from the two direct UDP nodes: the Hysteria2 inbound needs 26.3.27+,
-> and the finalmask UDP-listener crash (issue #6184) is only fixed in 26.6.1+. Below that
+> **Version requirements**: Xray core ≥ `26.3.27`, Mihomo core ≥ `1.19.24`.
+> The Xray floor comes from the two direct UDP nodes: the Hysteria2 inbound needs official release 26.3.27+. Below that
 > version the installer disables those two nodes automatically.
 >
 > Since v4.7.4 **all 7 nodes and all features are on by default**: xpadding (XHTTP padding

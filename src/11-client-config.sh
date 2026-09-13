@@ -146,7 +146,7 @@ else
 fi
 
 # v4.0.0 节点集：3 条 QUIC/h3 + 2 条 TCP 兜底，全部由 Xray 单核心提供。
-# 两条直连 UDP 节点（h3-direct / Hysteria2）依赖 Xray ≥26.6.1，低版本时
+# 两条直连 UDP 节点（h3-direct / Hysteria2）依赖 Xray 官方正式版 ≥26.3.27，低版本时
 # FEATURE_H3_DIRECT / FEATURE_HY2 会在 03-xray-install.sh 里被置 false，
 # 此处渲染为空行，随后的 sed 删掉——空行若进了 base64 订阅会变成一条空节点。
 # L19：同一节点的 URI 版与 mihomo 版是两处独立代码，必须同时处理。
