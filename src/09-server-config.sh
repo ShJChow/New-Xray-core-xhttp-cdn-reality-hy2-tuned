@@ -301,13 +301,17 @@ if [[ "$FEATURE_HY2" == true ]]; then
                 },
                 "hysteriaSettings": {
                     "version": 2,
-                    "udpIdleTimeout": 300,
+                    "udpIdleTimeout": 60,
                     "masquerade": {
                         "type": "proxy",
                         "url": "https://127.0.0.1:8003",
                         "rewriteHost": false,
                         "insecure": true
                     }
+                },
+                "sockopt": {
+                    "tcpFastOpen": true,
+                    "tcpcongestion": "brutal"
                 },
                 "finalmask": {
                     "udp": [

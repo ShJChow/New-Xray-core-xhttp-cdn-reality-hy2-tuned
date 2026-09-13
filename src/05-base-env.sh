@@ -54,12 +54,26 @@ ensure_firewall_ports() {
       iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || true
       iptables -C INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || true
     done
+    # QDoS (QUIC Denial of Service / UDP Flooding) 防护: 针对 Hysteria2 端口 (8443)
+    iptables -C INPUT -p udp --dport 8443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+      iptables -I INPUT 1 -p udp --dport 8443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    iptables -C INPUT -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || \
+      iptables -I INPUT 2 -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+    iptables -C INPUT -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_8443 -j DROP 2>/dev/null || \
+      iptables -I INPUT 3 -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_8443 -j DROP 2>/dev/null || true
   fi
   if command -v ip6tables >/dev/null 2>&1; then
     for port in 80 443 8443 8445 8446; do
       ip6tables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || true
       ip6tables -C INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || ip6tables -I INPUT -p udp --dport "$port" -j ACCEPT 2>/dev/null || true
     done
+    # QDoS (QUIC Denial of Service / UDP Flooding) 防护: 针对 Hysteria2 端口 (8443)
+    ip6tables -C INPUT -p udp --dport 8443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+      ip6tables -I INPUT 1 -p udp --dport 8443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    ip6tables -C INPUT -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || \
+      ip6tables -I INPUT 2 -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+    ip6tables -C INPUT -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_8443 -j DROP 2>/dev/null || \
+      ip6tables -I INPUT 3 -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_8443 -j DROP 2>/dev/null || true
   fi
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
     ufw allow 80/tcp >/dev/null 2>&1 || true
@@ -69,6 +83,12 @@ ensure_firewall_ports() {
     ufw allow 8443/udp >/dev/null 2>&1 || true
     ufw allow 8445/tcp >/dev/null 2>&1 || true
     ufw allow 8446/udp >/dev/null 2>&1 || true
+  fi
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  elif [[ -x "$(command -v iptables-save 2>/dev/null)" ]] && [[ -d /etc/iptables ]]; then
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
   fi
 }
 ensure_firewall_ports

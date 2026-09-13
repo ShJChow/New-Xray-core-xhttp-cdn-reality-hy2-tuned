@@ -258,10 +258,10 @@ try:
         ("Xray", "n5-reality-xhttp", 10805, "VLESS + Reality + XHTTP"),
         ("Xray", "n6-reality-up-cdn-down", 10806, "Reality Up + CDN Down"),
         ("sbbox", "tuic", 11801, "TUIC v5 + BBR"),
-        ("sbbox", "hysteria2", 11802, "Hysteria 2 + Hop + Brutal"),
+        ("sbbox", "hysteria2", 11802, "Hysteria 2 + Fixed Port + Brutal"),
         ("sbbox", "naive-h3", 11803, "NaiveProxy + QUIC/H3 + BBR"),
         ("sbbox", "naive-h2", 11804, "NaiveProxy + TCP/H2 TLS"),
-        ("sbbox", "vless-reality", 11805, "VLESS + Reality + Vision"),
+        ("sbbox", "anytls", 11805, "AnyTLS + TLS 1.3"),
     ]
     if sudoku_link:
         all_tests.append(("Sudoku", "sudoku-native", 10233, "SUDOKU-ASCII v0.5.0 + ChaCha20"))
