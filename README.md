@@ -40,7 +40,8 @@
 - [十九、v4.9.17 原生 Hysteria2 协议全链路 QDoS 攻防加固与固定单端口架构](#十九v4917-原生-hysteria2-协议全链路-qdos-攻防加固与固定单端口架构)
 - [二十、v4.9.18 锁定 Xray-core 官方正式版本（releases/latest）规范与测试版防护](#二十v4918-锁定-xray-core-官方正式版本releaseslatest规范与测试版防护)
 - [二十一、v4.9.19 彻底攻克 Mihomo / Clash 上下行分离节点（REALITY 认证失败）与全订阅默认启用](#二十一v4919-彻底攻克-mihomo--clash-上下行分离节点reality-认证失败与全订阅默认启用)
-- [二十二、免责声明](#二十二免责声明)
+- [二十二、v4.9.20 原生支持 ECH (加密 SNI) 与 TCP ECN 全栈自愈管理](#二十二v4920-原生支持-ech-加密-sni-与-tcp-ecn-全栈自愈管理)
+- [二十三、免责声明](#二十三免责声明)
 
 ---
 
@@ -265,6 +266,8 @@ xh info                # 查看节点参数与客户端链接（含 minClientVer
 xh sub                 # 查看/输出订阅链接与订阅二维码
 xh resub               # 修改配置后一键重新生成全量订阅
 xh minversion [on|off|<ver>] # Reality 最低版本控制（默认 1.8.0 兼容 mihomo/Clash）
+xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
+xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
@@ -1818,7 +1821,36 @@ func (r *RealityOptions) Parse() (*reality.Config, error) {
 
 ---
 
-## 二十二、免责声明
+## 二十二、v4.9.20 原生支持 ECH (加密 SNI) 与 TCP ECN 全栈自愈管理
+
+在 **v4.9.20** 中，全面落地了 **Cloudflare CDN ECH (Encrypted Client Hello)** 与 **TCP ECN (Explicit Congestion Notification)** 的全协议栈管理与自动化支持：
+
+### 1. Cloudflare CDN ECH (Encrypted Client Hello) 深度防封体系
+- **攻防痛点**：传统 TLS 1.3 握手时，客户端 ClientHello 中的 `server_name`（SNI）为明文传输（如 `cdn.example.com`）。审查系统（GFW/ISP 审计设备）即便无法解密 TLS 密文，也能通过明文 SNI 关键字精准匹配并实施针对性阻断或封锁。
+- **ECH 防护机理**：
+  - 客户端通过 DoH（如 AliDNS `223.5.5.5` 或 Cloudflare `1.1.1.1`）预先获取目标域名的 HTTPS DNS 记录中包含的 ECHConfig 公钥；
+  - 客户端使用该公钥将真实的 ClientHello（含真实 SNI）加密为 Inner ClientHello，外层包裹一个假装连接 `cloudflare-ech.com` 的 Outer ClientHello；
+  - 中间链路审查设备只能看到无害且公共的 `cloudflare-ech.com`，完全无法探测用户真实的 CDN 二级域名；Cloudflare 边缘反向代理节点接收后用私钥解密并路由至真实源站。
+- **多客户端全协议适配**：
+  - **Xray-core / v2rayN**：原生节点 URI 自动注入 `&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query`，流控设置 `tlsSettings.ech` 完整生效；
+  - **Mihomo / Clash Meta**：节点配置自动注入 `ech-opts: { enable: true, query-server-name: cloudflare-ech.com }`，并在 7 号上下行分离节点的 `download-settings` 中完美同步嵌套；
+- **常驻管理与状态检测**：
+  - 随时运行 `xh ech on` / `xh ech off` 即可一键开关 ECH，并全自动重新生成同步所有平台订阅（v2rayN、Mihomo 全量/节点、Shadowrocket、v2rayN-TUN）；
+  - `xh ech status` 实时查询本地配置状态与 Cloudflare 边缘 DNS HTTPS 记录的发布情况。
+
+### 2. TCP ECN (Explicit Congestion Notification) 双向协商与 BBRv3 协同
+- **核心价值**：传统网络拥塞依赖「丢包触发重传」来进行拥塞判断，易引发吞吐断崖式下跌与 RTT 抖动。ECN 允许网络路径上的支持 AQM（如 CoDel / RED）路由器在队列尚未打满前，向数据包首部注入 CE（Congestion Experienced）标记。
+- **双向协商与自动保护**：
+  - 系统内核与两个代理项目统一维持 `net.ipv4.tcp_ecn = 1`（主动发起双向 ECN 协商）；
+  - 配套维持 `net.ipv4.tcp_ecn_fallback = 1`，在遭遇不支持 ECN 的畸形网络设备或中间盒时，内核自动无缝回退到普通 TCP 握手，绝不断网；
+  - 配合主机的最新 `7.2.5-joeyblog-bbrv3` 内核，原生支持消费 CE 标记并实时平滑调整拥塞窗口。
+- **常驻管理与 CE 标记监控**：
+  - 提供 `xh ecn on` / `xh ecn off` / `xh ecn show`，一键管理 sysctl 配置并在多项目中保持一致；
+  - 实时输出 `nstat` 统计的 CE 标记与接收包计数。
+
+---
+
+## 二十三、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

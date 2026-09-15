@@ -1135,6 +1135,212 @@ with open(cfg, 'w', encoding='utf-8') as f:
   esac
 }
 
+sync_client_configs_ech() {
+  local enable="$1"
+  local query="${2:-cloudflare-ech.com+https://223.5.5.5/dns-query}"
+  python3 -c "
+import os, sys, re, urllib.parse, json, yaml
+
+enable = ('$enable' == 'true')
+query = '$query'
+ech_query_enc = urllib.parse.quote(query, safe='')
+user_homes = ['${USER_HOME:-/home/ubuntu}', '/home/ubuntu', '/home/opc', '/root']
+seen = set()
+
+for home in user_homes:
+    if not home or home in seen or not os.path.isdir(home):
+        continue
+    seen.add(home)
+    txt_file = os.path.join(home, 'client-config.txt')
+    nodes_file = os.path.join(home, 'client-config-mihomo-nodes.yaml')
+    full_file = os.path.join(home, 'client-config-mihomo-full.yaml')
+
+    if os.path.isfile(txt_file):
+        with open(txt_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        new_lines = []
+        for line in lines:
+            line_str = re.sub(r'\s*([&?])\s*', r'\1', line.strip())
+            if not line_str:
+                continue
+            if ('-cdn-' in line_str or 'cdn.' in line_str) and 'reality-up-cdn-down' not in line_str:
+                if enable:
+                    if '&ech=' in line_str:
+                        line_str = re.sub(r'&ech=[^&#]*', f'&ech={ech_query_enc}', line_str)
+                    else:
+                        line_str = re.sub(r'(&security=tls)', f'\\g<1>&ech={ech_query_enc}', line_str)
+                else:
+                    line_str = re.sub(r'&ech=[^&#]*', '', line_str)
+            elif 'reality-up-cdn-down' in line_str:
+                m = re.search(r'&extra=([^#]+)', line_str)
+                if m:
+                    try:
+                        extra_json = json.loads(urllib.parse.unquote(m.group(1)))
+                        ds_tls = extra_json.get('downloadSettings', {}).get('tlsSettings', {})
+                        if enable:
+                            ds_tls['ech'] = ech_query_enc
+                        else:
+                            ds_tls.pop('ech', None)
+                        new_extra_enc = urllib.parse.quote(json.dumps(extra_json, separators=(',', ':')), safe='')
+                        line_str = line_str[:m.start()] + f'&extra={new_extra_enc}' + line_str[m.end():]
+                    except Exception:
+                        pass
+            line_str = re.sub(r'\s+&', '&', line_str)
+            line_str = re.sub(r'&\s+', '&', line_str)
+            new_lines.append(line_str.strip() + '\n')
+        with open(txt_file, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+
+    for yfile in [nodes_file, full_file]:
+        if os.path.isfile(yfile):
+            with open(yfile, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            if not isinstance(cfg, dict):
+                continue
+            for p in cfg.get('proxies', []):
+                name = p.get('name', '')
+                if '-cdn-' in name and 'reality-up-cdn-down' not in name:
+                    if enable:
+                        p['ech-opts'] = {'enable': True, 'query-server-name': 'cloudflare-ech.com'}
+                    else:
+                        p.pop('ech-opts', None)
+                elif 'reality-up-cdn-down' in name:
+                    xopts = p.get('xhttp-opts', {})
+                    ds = xopts.get('download-settings', {})
+                    if enable:
+                        ds['ech-opts'] = {'enable': True, 'query-server-name': 'cloudflare-ech.com'}
+                    else:
+                        ds.pop('ech-opts', None)
+            with open(yfile, 'w', encoding='utf-8') as f:
+                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+" 2>/dev/null || true
+  cmd_resub
+}
+
+cmd_ech() {
+  local action="${1:-show}"
+  case "$action" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== Cloudflare CDN ECH (Encrypted Client Hello) 状态 ===${NC}"
+      local cur_ech="${CDN_ECH_ENABLED:-false}"
+      if [[ "$cur_ech" == "true" ]]; then
+        echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
+        echo -e "  DoH 查询端点:   ${CDN_ECH_QUERY:-cloudflare-ech.com+https://223.5.5.5/dns-query}"
+      else
+        echo -e "  当前状态:       ${YELLOW}未开启 (Disabled)${NC}"
+      fi
+      local cdn_domain="${CDN_DOMAIN:-cdn.example.com}"
+      echo -e "  CDN 域名:       ${cdn_domain}"
+      
+      echo -n "  Cloudflare 记录: "
+      local ech_probe=""
+      if command -v dig >/dev/null 2>&1; then
+        ech_probe=$(dig +short HTTPS "$cdn_domain" @1.1.1.1 2>/dev/null | grep -o 'ech=[^ ]*' || true)
+      fi
+      if [[ -n "$ech_probe" ]]; then
+        echo -e "${GREEN}检测到有效 ECH 记录${NC} (${ech_probe:0:32}...)"
+      else
+        echo -e "${YELLOW}未检测到 ECH 记录 (请在 Cloudflare SSL/TLS 边缘证书中开启 ECH)${NC}"
+      fi
+      echo ""
+      echo -e "说明："
+      echo -e "  • ECH 加密 TLS ClientHello 中的 SNI，将真实 CDN 域名隐藏在 cloudflare-ech.com 之后。"
+      echo -e "  • 开启后自动更新全套客户端配置与订阅 (v2rayN / Mihomo / Clash / v2rayNG)。"
+      echo -e "  • 快捷命令:"
+      echo -e "      ${MANAGE_CMD} ech on       # 开启 CDN ECH 并同步更新订阅"
+      echo -e "      ${MANAGE_CMD} ech off      # 关闭 CDN ECH 并恢复标准 TLS 订阅"
+      echo ""
+      ;;
+    on)
+      info "正在开启 CDN ECH..."
+      local cdn_query="${2:-cloudflare-ech.com+https://223.5.5.5/dns-query}"
+      update_node_env "FEATURE_CDN_ECH" "true"
+      update_node_env "CDN_ECH_ENABLED" "true"
+      update_node_env "CDN_ECH_QUERY" "$cdn_query"
+      export FEATURE_CDN_ECH=true
+      export CDN_ECH_ENABLED=true
+      export CDN_ECH_QUERY="$cdn_query"
+      sync_client_configs_ech "true" "$cdn_query"
+      info "CDN ECH 已成功开启并同步更新订阅！"
+      ;;
+    off)
+      info "正在关闭 CDN ECH..."
+      update_node_env "FEATURE_CDN_ECH" "true"
+      update_node_env "CDN_ECH_ENABLED" "false"
+      update_node_env "CDN_ECH_QUERY" ""
+      export FEATURE_CDN_ECH=true
+      export CDN_ECH_ENABLED=false
+      export CDN_ECH_QUERY=""
+      sync_client_configs_ech "false" ""
+      info "CDN ECH 已成功关闭并恢复标准订阅！"
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} ech [show|on|off]"
+      ;;
+  esac
+}
+
+cmd_ecn() {
+  local action="${1:-show}"
+  case "$action" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== TCP ECN (Explicit Congestion Notification) 状态 ===${NC}"
+      local cur_ecn cur_fallback
+      cur_ecn=$(sysctl -n net.ipv4.tcp_ecn 2>/dev/null || echo "n/a")
+      cur_fallback=$(sysctl -n net.ipv4.tcp_ecn_fallback 2>/dev/null || echo "n/a")
+      if [[ "$cur_ecn" == "1" ]]; then
+        echo -e "  当前状态:       ${GREEN}已开启 (1 - 主动双向协商)${NC}"
+      elif [[ "$cur_ecn" == "2" ]]; then
+        echo -e "  当前状态:       ${YELLOW}被动协商 (2 - 仅响应对端 ECN 请求)${NC}"
+      else
+        echo -e "  当前状态:       ${RED}已关闭 (0)${NC}"
+      fi
+      echo -e "  自动回退黑洞:   ${cur_fallback} (1=开启，遇到不支持 ECN 的坏中间盒自动回退)"
+      local ce_stat
+      ce_stat=$(nstat -az 2>/dev/null | grep -iE 'DeliveredCE|InCEPkts' | awk '{printf "%s: %s  ", $1, $2}')
+      echo -e "  路径 CE 标记:   ${ce_stat:-无记录或0}"
+      echo ""
+      echo -e "说明："
+      echo -e "  • ECN 允许网络路由器在缓冲区打满前向 TCP 端点标记拥塞（CE 标记），避免直接丢包。"
+      echo -e "  • 配合当前主机的 BBRv3 内核，可实现极低抖动拥塞控制响应。"
+      echo -e "  • 快捷命令:"
+      echo -e "      ${MANAGE_CMD} ecn on       # 开启主动双向 ECN 协商 (tcp_ecn=1)"
+      echo -e "      ${MANAGE_CMD} ecn off      # 关闭 ECN 协商 (tcp_ecn=0)"
+      echo ""
+      ;;
+    on)
+      info "正在开启 TCP ECN..."
+      try_sysctl net.ipv4.tcp_ecn 1
+      try_sysctl net.ipv4.tcp_ecn_fallback 1
+      if [[ -f "$SYSCTL_CONF" ]]; then
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 1/' "$SYSCTL_CONF" 2>/dev/null || true
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn_fallback[[:space:]]*=.*/net.ipv4.tcp_ecn_fallback = 1/' "$SYSCTL_CONF" 2>/dev/null || true
+      fi
+      if [[ -f "/etc/sysctl.d/99-sbbox.conf" ]]; then
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 1/' "/etc/sysctl.d/99-sbbox.conf" 2>/dev/null || true
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn_fallback[[:space:]]*=.*/net.ipv4.tcp_ecn_fallback = 1/' "/etc/sysctl.d/99-sbbox.conf" 2>/dev/null || true
+      fi
+      info "TCP ECN 已成功开启 (net.ipv4.tcp_ecn=1, tcp_ecn_fallback=1)！"
+      ;;
+    off)
+      info "正在关闭 TCP ECN..."
+      try_sysctl net.ipv4.tcp_ecn 0
+      if [[ -f "$SYSCTL_CONF" ]]; then
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 0/' "$SYSCTL_CONF" 2>/dev/null || true
+      fi
+      if [[ -f "/etc/sysctl.d/99-sbbox.conf" ]]; then
+        sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 0/' "/etc/sysctl.d/99-sbbox.conf" 2>/dev/null || true
+      fi
+      info "TCP ECN 已关闭 (net.ipv4.tcp_ecn=0)！"
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} ecn [show|on|off]"
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   echo -e "${RED}[!] 将删除 Xray / Nginx / ACME / Hysteria2 及本项目的配置、证书、订阅文件${NC}"
   read -rp "确认卸载？输入 yes 继续: " reply
@@ -1234,7 +1440,9 @@ cmd_menu() {
     echo " 11) UDP 节点自检 (diag)"
     echo " 12) sysctl 冲突检测 (conflict)"
     echo " 13) Reality 兼容模式 / minversion (minClientVer)"
-    echo " 14) 卸载"
+    echo " 14) CDN ECH 加密 SNI 开关 (show / on / off)"
+    echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
+    echo " 16) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -1251,7 +1459,9 @@ cmd_menu() {
       11) cmd_diag ;;
       12) cmd_conflict ;;
       13) read -rp "  show / on / off / 版本号(默认1.8.0): " a; cmd_minversion "${a:-show}" ;;
-      14) cmd_uninstall; break ;;
+      14) read -rp "  show / on / off: " a; cmd_ech "${a:-show}" ;;
+      15) read -rp "  show / on / off: " a; cmd_ecn "${a:-show}" ;;
+      16) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -1272,6 +1482,8 @@ xray-xhttp 管理命令
   xh start | stop | restart
   xh update [<ver>] [--auto] 更新或指定 Xray-core 版本（自检失败自动回滚）
   xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
+  xh ech [show|on|off]              Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
+  xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节
   xh keepalive [on|off|show]
@@ -1296,6 +1508,8 @@ case "${1:-menu}" in
   restart)    cmd_restart ;;
   update)     shift; cmd_update "$@" ;;
   minversion|minver) shift; cmd_minversion "$@" ;;
+  ech)        shift; cmd_ech "$@" ;;
+  ecn)        shift; cmd_ecn "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;

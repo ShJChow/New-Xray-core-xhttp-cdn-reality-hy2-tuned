@@ -135,9 +135,9 @@ EOF
 )
   MIHOMO_ECH_DOWNLOAD_BLOCK=$(cat <<EOF
 
-        ech-opts:
-          enable: true
-          query-server-name: cloudflare-ech.com
+      ech-opts:
+        enable: true
+        query-server-name: cloudflare-ech.com
 EOF
 )
 else

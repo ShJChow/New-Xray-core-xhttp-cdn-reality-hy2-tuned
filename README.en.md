@@ -249,6 +249,7 @@ re-run the installer to pick them up.
 | v4.9.18 | **Lock strictly to official Xray-core releases (`releases/latest`), eliminate `--beta` flag, and implement pre-release protection.** ① **Official Release Policy:** In accordance with project invariants, Xray must exclusively use official release versions (`releases/latest` = `v26.3.27`), strictly forbidding unstable pre-releases/betas. ② **Installer & Update Hardening:** Removed `--beta` flag from `install-release.sh` invocations and updated update endpoints to `releases/latest`. Added active pre-release detection in `xh update` to intercept and warn against accidental installations of unstable GitHub pre-releases (such as v26.9.8+ with breaking MLKEM768 REALITY handshake changes). ③ **Client Compatibility:** 100% stable compatibility restored for all third-party clients (Shadowrocket, sing-box, Clash Meta, Loon, Surge) across all nodes. Regression: 13/13 nodes PASS (`run_test.py`). |
 
 | v4.9.19 | **Completely resolve Mihomo / Clash split upload/download node (REALITY authentication failed) and enable across all subscriptions by default.** ① **Deep Source Code Root Cause Analysis:** Under `MetaCubeX/mihomo` source (`adapter/outbound/vless.go` line 764 and `reality.go`), `downloadRealityCfg` defaults to inheriting the parent node's `v.realityConfig`. When connecting to the downlink CDN domain (`cdn.example.com:443` on Cloudflare), Mihomo attempted a REALITY handshake against Cloudflare, causing TLS verification failure. Mihomo wrapped the error using `v.addr` (the VPS IP `<VPS_IP>:443`), creating the deceptive appearance that the uplink REALITY handshake failed. ② **The Elegant Fix:** In `adapter/outbound/reality.go`, `RealityOptions.Parse()` returns `(nil, nil)` when `PublicKey == ""`. Specifying `reality-opts: { public-key: "" }` inside `download-settings` forces Mihomo to clear `downloadRealityCfg` back to `nil`, restoring clean, standard TLS 1.3 for the CDN downlink. Also flattened `path`, `host`, and `reuse-settings` directly under `download-settings`. ③ **Live Mihomo Verification & Default Delivery:** Set `FEATURE_UP_CDN_DOWN_MIHOMO=true` by default. Real Mihomo binary test downloaded 10MB in **0.37s** (**27.0 MB/s / 216 Mbps**) with 100% alive health checks (4~10ms latency). Regression: 13/13 nodes PASS (`run_test.py`). |
+| v4.9.20 | **Native Cloudflare CDN ECH (Encrypted Client Hello) & TCP ECN full-stack management and auto-sync.** ① **Cloudflare CDN ECH Anti-Censorship:** In TLS 1.3, plaintext SNI exposes target domains to SNI-based filtering. ECH encrypts the inner ClientHello with the CDN's public key (fetched via HTTPS DNS records), masking user traffic behind the public outer SNI `cloudflare-ech.com`. Full native client adaptation: V2rayN/Xray automatically injects `&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query`, and Mihomo injects `ech-opts: { enable: true, query-server-name: cloudflare-ech.com }` (nested inside `download-settings` for split upload/download nodes). One-click management with `xh ech [show|on|off]`. ② **TCP ECN Dual-Stack & BBRv3 Synergy:** Enables bidirectional ECN negotiation (`net.ipv4.tcp_ecn = 1`) with safe fallback (`net.ipv4.tcp_ecn_fallback = 1`) across sysctl and coexisting projects, allowing BBRv3 to react to router Congestion Experienced (CE) marks before packet loss occurs. Managed via `xh ecn [show|on|off]`. Regression: 13/13 nodes PASS (`run_test.py`). |
 
 > **Note on `minClientVer` / `minversion` (supported in v4.9.8)**:
 > Reality now defaults to `"minClientVer": "1.8.0"`, providing out-of-the-box compatibility for mihomo, Clash Meta, and sing-box clients.
@@ -491,6 +492,8 @@ xh sub                  Subscription links and QR codes
 xh log [xray|nginx]     Follow the logs
 xh start|stop|restart   Service control
 xh update [--auto]      Update Xray-core (automatic rollback if the self-test fails)
+xh ech [show|on|off]   Cloudflare CDN ECH (encrypted SNI) toggle and auto-sync
+xh ecn [show|on|off]   TCP ECN (Explicit Congestion Notification) toggle & stats
 xh tuning [show|on|off] Show / enable / roll back the system-level tuning
 xh diag                 Server-side self-check for when a node will not connect
 xh conflict             Detect other files in /etc/sysctl.d/ that override this project's parameters
@@ -572,6 +575,32 @@ bash ~/install.sh
 ```
 
 Pushing a `v*` tag makes GitHub Actions build and publish a Release automatically.
+
+---
+
+## Native Cloudflare CDN ECH (Encrypted Client Hello) & TCP ECN Management (v4.9.20)
+
+In **v4.9.20**, full-stack automation and management for **Cloudflare CDN ECH (Encrypted Client Hello)** and **TCP ECN (Explicit Congestion Notification)** are fully integrated:
+
+### 1. Cloudflare CDN ECH (Encrypted Client Hello) Deep Defense
+- **The Censorship Problem**: Standard TLS 1.3 handshakes send the `server_name` (SNI) in plaintext in the ClientHello (e.g. `cdn.example.com`). Deep Packet Inspection (DPI) firewalls can easily detect and selectively block these domain names even without decrypting TLS payload.
+- **How ECH Solves It**:
+  - The client queries the HTTPS DNS record of the target domain via DoH (e.g., AliDNS `223.5.5.5` or Cloudflare `1.1.1.1`) to retrieve the public ECHConfig keys;
+  - The client encrypts the Inner ClientHello containing the real SNI, and wraps it with an Outer ClientHello addressed to the benign public `cloudflare-ech.com`;
+  - Middleboxes only observe connections to `cloudflare-ech.com` and cannot inspect the real subdomain; Cloudflare edge servers decrypt the inner ClientHello and forward traffic to your origin.
+- **Client & Subscription Support**:
+  - **Xray-core / v2rayN**: Automatically injects `&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query` into URI subscriptions and configures `tlsSettings.ech`;
+  - **Mihomo / Clash Meta**: Automatically injects `ech-opts: { enable: true, query-server-name: cloudflare-ech.com }` into CDN nodes and nested inside `download-settings` for split upload/download nodes;
+  - Manage anytime with `xh ech on` / `xh ech off` / `xh ech show` to toggle and automatically regenerate all subscription formats.
+
+### 2. TCP ECN (Explicit Congestion Notification) & BBRv3 Synergy
+- **Core Value**: Traditional congestion control relies on packet loss to detect network congestion. ECN enables network routers equipped with AQM (e.g. CoDel/RED) to mark packet headers with CE (Congestion Experienced) bits before queues overflow.
+- **Bidirectional Negotiation & Safe Fallback**:
+  - Both proxy environments maintain `net.ipv4.tcp_ecn = 1` for active ECN negotiation;
+  - `net.ipv4.tcp_ecn_fallback = 1` ensures that if middleboxes or peers do not support ECN, the TCP stack immediately and transparently falls back to standard TCP handshakes without connection drops;
+  - Fully compatible with the host's `7.2.5-joeyblog-bbrv3` kernel.
+- **Management CLI**:
+  - Run `xh ecn on` / `xh ecn off` / `xh ecn show` to manage sysctl parameters and inspect kernel CE counters.
 
 ---
 

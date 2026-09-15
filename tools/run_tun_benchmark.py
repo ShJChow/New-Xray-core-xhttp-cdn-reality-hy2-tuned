@@ -24,9 +24,9 @@ if os.path.isfile("/etc/xhttp-cdn/node.env"):
                 k, v = line.split("=", 1)
                 env[k] = v.strip('"').strip("'")
 
-CDN_DOMAIN = env.get("CDN_DOMAIN", "cdn.example.com")
-REALITY_DOMAIN = env.get("REALITY_DOMAIN", "reality.example.com")
-VPS_IP = env.get("VPS_IP", "<VPS_IP>")
+CDN_DOMAIN = env.get("CDN_DOMAIN", "")
+REALITY_DOMAIN = env.get("REALITY_DOMAIN", "")
+VPS_IP = env.get("VPS_IP", "")
 UUID1 = env.get("UUID1", "")
 UUID2 = env.get("UUID2", "")
 PUBLIC_KEY = env.get("PUBLIC_KEY", "")
@@ -219,18 +219,6 @@ try:
     p3 = subprocess.Popen(["/root/sbbox/sing-box", "run", "-c", f"{SCRATCH}/test_tun_sb_diag.json"], stdout=open(f"{SCRATCH}/sb_diag.log", "w"), stderr=subprocess.STDOUT)
     procs.append(p3)
 
-    sudoku_link = None
-    sudoku_env = "/etc/sudoku/export-state.env"
-    if os.path.isfile(sudoku_env) and os.path.isfile("/usr/local/bin/sudoku"):
-        with open(sudoku_env) as f:
-            for line in f:
-                if line.startswith("SHORT_LINK="):
-                    sudoku_link = line.split("=", 1)[1].strip().strip("'").strip('"')
-                    break
-        if sudoku_link:
-            p4 = subprocess.Popen(["/usr/local/bin/sudoku", "-link", sudoku_link], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            procs.append(p4)
-
     # 2. Setup isolated network namespace tuntest
     print("2. 创建隔离网络命名空间 tuntest 与 veth 虚拟链路...", flush=True)
     subprocess.run(["ip", "netns", "del", "tuntest"], stderr=subprocess.DEVNULL)
@@ -263,8 +251,6 @@ try:
         ("sbbox", "naive-h2", 11804, "NaiveProxy + TCP/H2 TLS"),
         ("sbbox", "anytls", 11805, "AnyTLS + TLS 1.3"),
     ]
-    if sudoku_link:
-        all_tests.append(("Sudoku", "sudoku-native", 10233, "SUDOKU-ASCII v0.5.0 + ChaCha20"))
 
     # Wait for inbounds to be ready
     print("等待所有本地代理端口就绪...", flush=True)
