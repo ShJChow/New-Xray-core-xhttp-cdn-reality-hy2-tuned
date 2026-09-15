@@ -188,7 +188,7 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                             "keyFile": "${CERT_KEY}"
                         }
                     ]
-                },
+                }${XRAY_SOCKOPT_JSON},
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",

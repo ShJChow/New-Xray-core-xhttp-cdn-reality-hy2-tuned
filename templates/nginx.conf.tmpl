@@ -1,5 +1,7 @@
 user root;
 worker_processes auto;
+# 自动绑定 Nginx 工作进程到物理 CPU 核心，适配 AMD64 与 ARM64 任意核心数，避免跨核缓存抖动
+worker_cpu_affinity auto;
 # 与下面的 worker_connections 成对：只提高 worker_connections 而不抬句柄上限，
 # nginx 会报 "worker_connections exceed open file resource limit"，实际上限
 # 仍是 systemd unit 的默认值。安装期不写 systemd drop-in（那是 xh tuning on
@@ -59,6 +61,10 @@ http {
     real_ip_header        X-Real-IP;
 
     sendfile              on;
+    open_file_cache       max=10000 inactive=60s;
+    open_file_cache_valid 120s;
+    open_file_cache_min_uses 2;
+    open_file_cache_errors on;
     server_tokens         off;
     tcp_nodelay           on;
     tcp_nopush            on;
