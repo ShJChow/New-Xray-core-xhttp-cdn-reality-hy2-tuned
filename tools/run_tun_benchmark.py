@@ -24,9 +24,9 @@ if os.path.isfile("/etc/xhttp-cdn/node.env"):
                 k, v = line.split("=", 1)
                 env[k] = v.strip('"').strip("'")
 
-CDN_DOMAIN = env.get("CDN_DOMAIN", "cdn.cch.us.kg")
-REALITY_DOMAIN = env.get("REALITY_DOMAIN", "reality.cch.us.kg")
-VPS_IP = env.get("VPS_IP", "192.9.145.231")
+CDN_DOMAIN = env.get("CDN_DOMAIN", "cdn.example.com")
+REALITY_DOMAIN = env.get("REALITY_DOMAIN", "reality.example.com")
+VPS_IP = env.get("VPS_IP", "<VPS_IP>")
 UUID1 = env.get("UUID1", "")
 UUID2 = env.get("UUID2", "")
 PUBLIC_KEY = env.get("PUBLIC_KEY", "")

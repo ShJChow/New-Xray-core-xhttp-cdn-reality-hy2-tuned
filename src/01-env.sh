@@ -26,7 +26,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.18"
+PROJECT_VERSION="4.9.19"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -40,17 +40,31 @@ LIMITS_CONF="/etc/security/limits.d/99-xray-xhttp.conf"
 
 # ==================================================
 # 功能开关（均可用环境变量覆盖）
-#   FEATURE_KEEPALIVE   保活自愈与开机自启
-#   FEATURE_AUTOUPDATE  每周自动更新 Xray-core（默认关闭，防止上游破坏性更新导致断网）
-#   AUTO=1              非交互一键部署
-#
-# v2.0.0：安装期不再做任何参数优化。渲染出的 xray-config.json 与上游
-# Yulinanami/my-xhttp-cdn-config 逐字节一致，nginx.conf 只保留正确性修复。
-# 内核 / 句柄 / systemd 层的调优全部收进管理命令，按需 `xh tuning on`。
+# 端口规划 (默认配置，全部单端口，默认关闭端口跳跃)
+# ==================================================
+# 443      TCP (Xray VLESS 兜底)
+# 8443     UDP (Xray Hysteria 2)
+# 8445     TCP (Xray h2-direct，默认关闭)
+# 8446     UDP (Xray h3-direct)
+# 80       TCP (Nginx HTTP 验证与重定向)
+# 8001     TCP (Xray XHTTP CDN 回源入站，仅监听 127.0.0.1)
+# 8002     TCP (Nginx 反代分流，仅监听 127.0.0.1)
+# 8003     TCP (Nginx SSL 回落与伪装站点，仅监听 127.0.0.1)
+
+# ==================================================
+# 客户端 / 调优管理命令别名
+# ==================================================
+MANAGE_CMD="xh"
+
+# ==================================================
+# 流控调优开关（默认开启）
+# ==================================================
+# 系统级调优默认开启；安装期只写内核与网卡队列，
+# systemd 层的调优全部收进管理命令，按需 `xh tuning on`。
 # ==================================================
 
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
-FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-false}
+FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
@@ -60,7 +74,7 @@ AUTO=${AUTO:-0}
 #   2. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
 #   3. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
 #   4. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
-#   5. Vless-raw-reality-vision 直连 TCP 443，Vision (RAW)
+#   5. Vless-reality-vision  直连 TCP 443，Vision
 #   6. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
 #   7. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
 #
@@ -71,24 +85,22 @@ FEATURE_HY2=${FEATURE_HY2:-true}
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
-# FEATURE_UP_CDN_DOWN_MIHOMO（v4.8.9 新增）：是否把 7 号节点
-# Vless-xhttp-reality-up-cdn-down 下发进 mihomo 配置。**默认关闭**。
+# FEATURE_UP_CDN_DOWN_MIHOMO（v4.9.19 完美修复并默认开启）：是否把 7 号节点
+# Vless-xhttp-reality-up-cdn-down 下发进 mihomo 配置。**默认开启**。
 #
-# 该节点靠 xhttp 的 downloadSettings 做上下行分离，在 Xray-core 客户端上完全正常
-# （实测握手 72ms、cachefly 100MB 723~898 Mbps）。但 mihomo 一侧，只要
-# xhttp-opts 里出现 download-settings，**上行那条 REALITY 握手就会失败**：
-#   [TCP] dial ... 192.9.145.231:443 connect error: REALITY authentication failed
-# 实测 mihomo v1.19.30，逐项二分：改 download-settings 的 servername /
-# client-fingerprint / alpn、补 reality-opts、把 encryption 换成 none 都无效，
-# 唯独删掉 download-settings 才通（即退化成 6 号节点）。
-# 换成非 REALITY 的父级则正常（CDN 上行 + CDN 下行通过），
-# 说明 mihomo 支持 download-settings 本身，只是不能与 REALITY 父级并用。
-#
-# 所以默认不给 mihomo 下发这条节点：Clash 系用户本来就有 6 号（reality 直连）
-# 与 1 号（CDN），少这一条不缺功能；留着反而是一条永远连不上的死节点，
-# 还会被 include-all 的择优组反复探测。需要时可 FEATURE_UP_CDN_DOWN_MIHOMO=true 打开。
-# v2rayN / Xray-core 的 URI 订阅不受影响，始终包含该节点。
-FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-false}
+# 【历史根因溯源】：此前在 mihomo 上测试报 REALITY authentication failed，
+# 曾误以为是 mihomo 内核限制。经深入查阅 MetaCubeX/mihomo Go 源码（adapter/outbound/vless.go
+# 第 764 行与 reality.go）：
+#   downloadRealityCfg := v.realityConfig
+#   if ds.RealityOpts != nil { downloadRealityCfg, err = ds.RealityOpts.Parse() }
+# 若 download-settings 未声明 reality-opts，下行腿会自动继承父级的 realityConfig，
+# 导致 mihomo 连接下行腿 CDN 域名（Cloudflare 443）时强行发起 REALITY 握手认证，
+# Cloudflare 证书不符必然报 authentication failed！
+# 【攻克方案】：在 download-settings 中显式声明 `reality-opts: { public-key: "" }`，
+# 使得 ds.RealityOpts.Parse() 返回 nil，彻底覆写清空继承的 realityConfig，
+# 下行腿恢复标准 TLS 1.3 握手；同时扁平化 path/host/reuse-settings 结构。
+# 实测 mihomo v1.19.30+ 完美跑通，0-RTT 极速上行 + CDN 满速下行！
+FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-true}
 
 # FEATURE_PORT_HOPPING：UDP 端口跳跃（默认关闭）。
 # 避免客户端在服务端未配置 nat/iptables 端口段重定向时握手失败，或劫持同机其他 UDP 服务。

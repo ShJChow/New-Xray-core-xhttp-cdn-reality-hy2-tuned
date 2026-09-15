@@ -96,7 +96,7 @@ EOF
 )
   MIHOMO_REUSE_KEEPALIVE_DOWNLOAD=$(cat <<EOF
 
-            h-keep-alive-period: 0
+          h-keep-alive-period: 0
 EOF
 )
 else

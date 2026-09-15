@@ -212,21 +212,20 @@ proxies:
       download-settings:
         server: ${CDN_DOMAIN}
         port: 443
-        network: xhttp
         tls: true
         alpn:
           - h2
           - http/1.1
         servername: ${CDN_DOMAIN}
         client-fingerprint: chrome${MIHOMO_ECH_DOWNLOAD_BLOCK}
-        xhttp-opts:
-          host: ${CDN_DOMAIN}
-          path: ${XHTTP_PATH}
-          mode: auto${MIHOMO_XPADDING_DOWNLOAD_BLOCK}
-          reuse-settings:
-            max-concurrency: "16-32"
-            c-max-reuse-times: "0"
-            h-max-request-times: "600-900"
-            h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+        reality-opts:
+          public-key: ""
+        path: ${XHTTP_PATH}
+        host: ${CDN_DOMAIN}
+        reuse-settings:
+          max-concurrency: "16-32"
+          c-max-reuse-times: "0"
+          h-max-request-times: "600-900"
+          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
   #>>FEATURE_UP_CDN_DOWN_MIHOMO
 

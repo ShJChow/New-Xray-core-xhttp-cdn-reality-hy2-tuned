@@ -197,21 +197,20 @@ proxies:
       download-settings:
         server: YOUR_CDN_DOMAIN
         port: 443
-        network: xhttp
         tls: true
         alpn:
           - h2
           - http/1.1
         servername: YOUR_CDN_DOMAIN
         client-fingerprint: chrome
-        xhttp-opts:
-          host: YOUR_CDN_DOMAIN
-          path: YOUR_PATH
-          mode: auto
-          reuse-settings:
-            max-concurrency: "16-32"
-            c-max-reuse-times: "0"
-            h-max-reusable-secs: "1800-3000"
+        reality-opts:
+          public-key: ""
+        path: YOUR_PATH
+        host: YOUR_CDN_DOMAIN
+        reuse-settings:
+          max-concurrency: "16-32"
+          c-max-reuse-times: "0"
+          h-max-reusable-secs: "1800-3000"
 
 
 proxy-groups:
