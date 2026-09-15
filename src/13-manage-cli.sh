@@ -253,11 +253,15 @@ cmd_resub() {
   [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
 
   # 重新生成 Shadowrocket 专属与 v2rayN TUN 优化订阅
-  grep -E 'Vless-.*reality-vision|Hysteria2-obfs' "${home}/client-config.txt" > "${subdir}/shadowrocket-raw.txt" || true
+  local sr_cdn_line="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
+  {
+    grep -E 'Reality-Vision|Hysteria2-.*[Oo]bfs' "${home}/client-config.txt" || true
+    echo "$sr_cdn_line"
+  } > "${subdir}/shadowrocket-raw.txt"
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
     base64 "${subdir}/shadowrocket-raw.txt" | tr -d '\n' > "${subdir}/shadowrocket.txt"
   fi
-  grep -vE -- '-cdn-' "${home}/client-config.txt" > "${subdir}/v2rayn-tun-raw.txt" || true
+  grep -vE -- '-CDN-|-cdn-' "${home}/client-config.txt" > "${subdir}/v2rayn-tun-raw.txt" || true
   if [[ -s "${subdir}/v2rayn-tun-raw.txt" ]]; then
     base64 "${subdir}/v2rayn-tun-raw.txt" | tr -d '\n' > "${subdir}/v2rayn-tun.txt"
   fi
@@ -628,17 +632,17 @@ cmd_diag() {
   echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
   echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
-  echo -e "${YELLOW}  节点 Vless-xhttp-h2-cdn / Vless-xhttp-h3-cdn 经 Cloudflare CDN 转发${NC}"
-  echo "  其中 h2-cdn 走 TCP 443（最稳健，不受 UDP 443 限速丢包影响）；"
-  echo "  h3-cdn 走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
+  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H2 / VLESS-XHTTP-CDN-H3 经 Cloudflare CDN 转发${NC}"
+  echo "  其中 CDN-H2 走 TCP 443（最稳健，不受 UDP 443 限速丢包影响）；"
+  echo "  CDN-H3 走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
   echo ""
   echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："
   echo "    curl -sI --http3-only https://cloudflare-quic.com/ | head -1"
   echo "    curl -sI --http3-only https://${CDN_DOMAIN:-你的CDN域名}/ | head -1"
   echo "  若 curl 不支持 --http3-only，用浏览器访问 https://cloudflare-quic.com/ 看是否显示 HTTP/3。"
   echo ""
-  echo "  若 h3-cdn 不通显示 -1 而 h2-cdn 正常 ⇒ 属于客户端本地或运营商 UDP 443 被限速/封锁，"
-  echo "  使用 Vless-xhttp-h2-cdn 即可完美解决。"
+  echo "  若 CDN-H3 不通显示 -1 而 CDN-H2 正常 ⇒ 属于客户端本地或运营商 UDP 443 被限速/封锁，"
+  echo "  使用 VLESS-XHTTP-CDN-H2 即可完美解决。"
   echo ""
   echo "  另：开启 TUN 时务必确认节点自身流量已豁免（client-config-mihomo-full.yaml"
   echo "  已内置 route-exclude-address / 首条 DIRECT 规则），否则 QUIC 会在 TUN 里自环。"
@@ -1230,18 +1234,21 @@ cmd_ech() {
       else
         echo -e "  当前状态:       ${YELLOW}未开启 (Disabled)${NC}"
       fi
-      local cdn_domain="${CDN_DOMAIN:-cdn.example.com}"
-      echo -e "  CDN 域名:       ${cdn_domain}"
-      
-      echo -n "  Cloudflare 记录: "
-      local ech_probe=""
-      if command -v dig >/dev/null 2>&1; then
-        ech_probe=$(dig +short HTTPS "$cdn_domain" @1.1.1.1 2>/dev/null | grep -o 'ech=[^ ]*' || true)
-      fi
-      if [[ -n "$ech_probe" ]]; then
-        echo -e "${GREEN}检测到有效 ECH 记录${NC} (${ech_probe:0:32}...)"
+      local cdn_domain="${CDN_DOMAIN:-}"
+      if [[ -n "$cdn_domain" ]]; then
+        echo -e "  CDN 域名:       ${cdn_domain}"
+        echo -n "  Cloudflare 记录: "
+        local ech_probe=""
+        if command -v dig >/dev/null 2>&1; then
+          ech_probe=$(dig +short HTTPS "$cdn_domain" @1.1.1.1 2>/dev/null | grep -o 'ech=[^ ]*' || true)
+        fi
+        if [[ -n "$ech_probe" ]]; then
+          echo -e "${GREEN}检测到有效 ECH 记录${NC} (${ech_probe:0:32}...)"
+        else
+          echo -e "${YELLOW}未检测到 ECH 记录 (请在 Cloudflare SSL/TLS 边缘证书中开启 ECH)${NC}"
+        fi
       else
-        echo -e "${YELLOW}未检测到 ECH 记录 (请在 Cloudflare SSL/TLS 边缘证书中开启 ECH)${NC}"
+        echo -e "  CDN 域名:       ${YELLOW}未配置${NC}"
       fi
       echo ""
       echo -e "说明："

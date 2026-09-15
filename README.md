@@ -4,7 +4,7 @@
 
 >  **已在 Oracle ARM (4 核 24G) 和系统 Ubuntu  26.04.01 深度测试与调优**。本协议专门应对规避AI封号。
 
-基于 Xray-core 的 **XHTTP + CDN + Reality + Hysteria2** 全能高可用部署方案。默认开启 **xpadding 流量填充混淆 / Hysteria2 Salamander 混淆 / 全套 7条节点**，并在安装时自动应用**系统级与网络层流控调优（BBR + fq、64MB 缓冲区、1048576 句柄、全套安全加固）**，附带常驻管理工具 `xh`。
+基于 Xray-core 的 **XHTTP + CDN + Reality + Hysteria2** 全能高可用部署方案。默认开启 **xpadding 流量填充混淆 / Hysteria2 Salamander 混淆 / 全套 8 条核心节点**，并在安装时自动应用**系统级与网络层流控调优（BBR + fq、64MB 缓冲区、1048576 句柄、全套安全加固）**，附带常驻管理工具 `xh`。
 
 支持 V2rayN / Clash Verge Rev / Mihomo Party / Sing-box / Shadowrocket / Loon / Surge / onexray 等全平台客户端。
 
@@ -41,7 +41,8 @@
 - [二十、v4.9.18 锁定 Xray-core 官方正式版本（releases/latest）规范与测试版防护](#二十v4918-锁定-xray-core-官方正式版本releaseslatest规范与测试版防护)
 - [二十一、v4.9.19 彻底攻克 Mihomo / Clash 上下行分离节点（REALITY 认证失败）与全订阅默认启用](#二十一v4919-彻底攻克-mihomo--clash-上下行分离节点reality-认证失败与全订阅默认启用)
 - [二十二、v4.9.20 原生支持 ECH (加密 SNI) 与 TCP ECN 全栈自愈管理](#二十二v4920-原生支持-ech-加密-sni-与-tcp-ecn-全栈自愈管理)
-- [二十三、免责声明](#二十三免责声明)
+- [二十三、v4.9.21 节点本质命名规范重构与攻克 Shadowrocket CDN 断连历史顽疾](#二十三v4921-节点本质命名规范重构与攻克-shadowrocket-cdn-断连历史顽疾)
+- [二十四、免责声明](#二十四免责声明)
 
 ---
 
@@ -1850,7 +1851,33 @@ func (r *RealityOptions) Parse() (*reality.Config, error) {
 
 ---
 
-## 二十三、免责声明
+## 二十三、v4.9.21 节点本质命名规范重构与攻克 Shadowrocket CDN 断连历史顽疾
+
+在 **v4.9.21** 中，全面重构了节点命名体系，使节点名称严格回归协议本质与拓扑形态，并彻底攻克了 Shadowrocket（小火箭）在 Cloudflare CDN 节点上的握手断连与解析异常：
+
+### 1. 节点全量本质命名规范重构
+- **剔除硬件架构与历史冗余词**：彻底移除了历史遗留的 `-arm` 架构后缀以及不直观的 `raw` 词缀；
+- **采用「协议-伪装/传输-网络形态」的标准语义结构**：
+  - `VLESS-Reality-Vision-Direct`：标准 TCP 443 + REALITY 伪装 + Vision 零拷贝流控，全平台通用极速直连；
+  - `VLESS-Reality-XHTTP-Direct`：TCP 443 + REALITY 伪装 + XHTTP 填充混淆，深度防探测；
+  - `VLESS-Reality-Up-CDN-Down`：0-RTT 直连 REALITY 上行 + Cloudflare CDN 满速下行，兼顾极致低延迟与隐藏源站；
+  - `VLESS-XHTTP-CDN-H2`：通过 Cloudflare CDN 代理，HTTP/2 流式传输，纯 TLS 1.3 强加密；
+  - `VLESS-XHTTP-CDN-H3`：通过 Cloudflare CDN 代理，QUIC / HTTP/3 传输；
+  - `VLESS-XHTTP-Direct-H3`：直连 UDP 8446 端口，QUIC / HTTP/3 传输；
+  - `VLESS-XHTTP-Direct-H2`：直连 TCP 8445 端口，HTTP/2 传输；
+  - `Hysteria2-Obfs-Direct`：直连 UDP 8443 端口，Hysteria 2 协议 + Salamander 混淆，弱网丢包杀手。
+
+### 2. 攻克 Shadowrocket CDN 节点断连与不稳定历史顽疾
+- **根因一：Xray 服务端入站强校验拒绝**：
+  此前 CDN 8001 入站配置了实验性后量子密钥解密（`mlkem768x25519plus...`），当 Shadowrocket 发起标准 VLESS 握手（`encryption: "none"`）时，Xray 服务端直接掐断连接并返回 `curl 52: Empty reply from server`。在纯 TLS 1.3 双层端到端加密防护下，将入站解密算法收敛为标准的 `"none"`，彻底杜绝拒连。
+- **根因二：Shadowrocket 对 ECH 与高级 extra 字符串的反序列化异常**：
+  Shadowrocket 客户端内核在解析包含 `&ech=...` 与形如 `16-32` / `600-900` 范围语法时会抛出 EOF 或解析中断。在订阅生成中为 `shadowrocket.txt` 专门注入纯净版 `VLESS-XHTTP-CDN-H2`（显式锁定 `encryption=none` 与 `alpn=h2`，剔除不兼容参数），确保即开即用。
+- **根因三：TUN 模式下 Cloudflare 免费 CDN 的 3 层 UDP 阻断**：
+  Cloudflare 免费 CDN 仅代理 7 层 HTTP/HTTPS，不转发 3 层 UDP。Shadowrocket 开启全局 TUN 模式时，系统发出的 UDP 53 DNS 请求无法穿透 CDN 导致间断超时。在客户端指引中明确开启 DoH（如阿里 DNS `https://dns.alidns.com/dns-query` 或 Cloudflare DoH）即可完全根治。
+
+---
+
+## 二十四、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

@@ -19,14 +19,18 @@ base64 "$USER_HOME/client-config.txt" | tr -d '\n' > "$SUB_DIR/v2rayn.txt"
 cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
-# Shadowrocket 专属订阅（只包含小火箭完全兼容的 REALITY 与 Hy2 节点）
-grep -E 'Vless-.*reality-vision|Hysteria2-obfs' "$USER_HOME/client-config.txt" > "$SUB_DIR/shadowrocket-raw.txt" || true
+# Shadowrocket 专属订阅（包含小火箭完全兼容的 REALITY、Hy2 与纯净极稳的 CDN-H2 节点）
+SHADOWROCKET_CDN_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
+{
+  grep -E 'Reality-Vision|Hysteria2-.*[Oo]bfs' "$USER_HOME/client-config.txt" || true
+  echo "$SHADOWROCKET_CDN_LINE"
+} > "$SUB_DIR/shadowrocket-raw.txt"
 if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
   base64 "$SUB_DIR/shadowrocket-raw.txt" | tr -d '\n' > "$SUB_DIR/shadowrocket.txt"
 fi
 
 # v2rayN TUN 优化订阅（排除在 TUN 模式下会导致 UDP 53 DNS 丢包超时的纯 CDN 节点）
-grep -vE -- '-cdn-' "$USER_HOME/client-config.txt" > "$SUB_DIR/v2rayn-tun-raw.txt" || true
+grep -vE -- '-CDN-|-cdn-' "$USER_HOME/client-config.txt" > "$SUB_DIR/v2rayn-tun-raw.txt" || true
 if [[ -s "$SUB_DIR/v2rayn-tun-raw.txt" ]]; then
   base64 "$SUB_DIR/v2rayn-tun-raw.txt" | tr -d '\n' > "$SUB_DIR/v2rayn-tun.txt"
 fi
