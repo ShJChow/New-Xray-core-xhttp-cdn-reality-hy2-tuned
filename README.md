@@ -42,7 +42,8 @@
 - [二十一、v4.9.19 彻底攻克 Mihomo / Clash 上下行分离节点（REALITY 认证失败）与全订阅默认启用](#二十一v4919-彻底攻克-mihomo--clash-上下行分离节点reality-认证失败与全订阅默认启用)
 - [二十二、v4.9.20 原生支持 ECH (加密 SNI) 与 TCP ECN 全栈自愈管理](#二十二v4920-原生支持-ech-加密-sni-与-tcp-ecn-全栈自愈管理)
 - [二十三、v4.9.21 节点本质命名规范重构与攻克 Shadowrocket CDN 断连历史顽疾](#二十三v4921-节点本质命名规范重构与攻克-shadowrocket-cdn-断连历史顽疾)
-- [二十四、免责声明](#二十四免责声明)
+- [二十四、v4.9.22 geo 数据更新、CDN 延迟归因复核与测速源陷阱](#二十四v4922-geo-数据更新cdn-延迟归因复核与测速源陷阱)
+- [二十五、免责声明](#二十五免责声明)
 
 ---
 
@@ -1384,8 +1385,8 @@ BBRv3 下 A/B（各 12 轮交错，cachefly 10MB + gstatic/generate_204）：
 
 > **测量口径警告**：`speed.cloudflare.com` 会对频繁测速返回 **HTTP 429**，
 > 此时 `%{speed_download}` 变成 0 而 **curl 退出码仍是 0**，极易被误读成
-> 「吞吐掉到 0 的严重回归」——我就这么误判过一次。做吞吐基准要用 cachefly
-> 一类不限流的源，并显式检查 `http_code` 与 `size_download`。
+> 「吞吐掉到 0 的严重回归」——我就这么误判过一次。做吞吐基准必须显式检查
+> `http_code` 与 `size_download`。**cachefly 也不行**（见第二十四节：它限流时返回 HTTP 200 + 24 字节）。
 > v4.9.1 那组 BBRv1 的吞吐数字（1212/1373 Mbps）就掺了 429，不可与本节数字直接相比。
 
 ---
@@ -1877,7 +1878,73 @@ func (r *RealityOptions) Parse() (*reality.Config, error) {
 
 ---
 
-## 二十四、免责声明
+## 二十四、v4.9.22 geo 数据更新、CDN 延迟归因复核与测速源陷阱
+
+### 1.〔版本〕Xray 核心保持 v26.3.27，只更新路由数据
+
+按「Xray 仅用官方正式版」的规约，本次**不升级核心**：`releases/latest` 仍是
+`v26.3.27`，其后的 v26.7.x / v26.9.x 在 GitHub 上全部标记为 `prerelease: true`。
+
+```bash
+gh api repos/XTLS/Xray-core/releases/latest --jq .tag_name          # v26.3.27
+gh api repos/XTLS/Xray-core/releases --jq '.[0:3][]|.tag_name+" "+(.prerelease|tostring)'
+```
+
+路由里用到的 `geoip:private` / `geosite:category-pt` 依赖数据文件，走官方安装脚本的
+独立子命令更新，不触碰核心二进制：
+
+```bash
+bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install-geodata
+xray run -test -c /usr/local/etc/xray/config.json && systemctl restart xray
+```
+
+更新后 `geoip.dat` / `geosite.dat` 校验和均为 OK，`xray run -test` 通过，7 条 Xray 节点回归全 PASS。
+
+### 2.〔归因〕CDN 两条节点变慢，不是本机配置问题
+
+两条 CDN 节点中位延迟从 v4.9.4 基线的 12.7 / 15.8ms 升到 30~45ms。按「先直连边缘对照」逐段排除：
+
+| 检查项 | 结果 |
+|---|---|
+| 客户端到 CF 边缘 RTT | 0.8ms，`cf-ray` 仍落在同区机房 |
+| 到边缘 TCP 建连 | 1.8ms |
+| packet-up 间隔 | 订阅与测试客户端均为 10ms（`backup/` 里的 30 是旧备份） |
+| **隧道路径首字节：经 CF** | **22 ~ 36ms** |
+| **隧道路径首字节：直打源站 nginx** | **4.6 ~ 5.0ms** |
+
+```bash
+# 注意打的是隧道路径 $XHTTP_PATH，不是 /（/ 是伪装反代，量出来的是伪装站）
+curl -s -o /dev/null -w '%{time_starttransfer}\n' "https://cdn.example.com$XHTTP_PATH/"
+curl -sk -o /dev/null -w '%{time_starttransfer}\n' --resolve cdn.example.com:8003:127.0.0.1 \
+  "https://cdn.example.com:8003$XHTTP_PATH/"
+```
+
+多出的 20~30ms 落在 **Cloudflare 边缘 → 回源**这一段内部，本机无从调整，**本版不改动**。
+
+### 3.〔测速陷阱〕cachefly 限流时返回 HTTP 200 + 24 字节
+
+此前 README 建议用 cachefly 替代会 429 的 `speed.cloudflare.com`。**这条建议已失效**：
+反复下载后 cachefly 返回的是
+
+```
+HTTP/2 200
+x-cf-quota-max-delivery-conns: 500
+...
+I just served you 10mb
+```
+
+**状态码 200、curl 退出码 0、正文只有 24 字节** —— 比 429 更隐蔽，
+不校验 `size_download` 的脚本会直接算出一个极低的"吞吐"。实测本机 5 条 sing-box
+节点里 4 条被它判成「全部无效」，而同 URL 另一条恰好没被限流，差点被误读成节点故障。
+
+**替代做法**：选离 VPS 近、直连带宽远高于代理吞吐的源（本机 SJC 实测
+`speedtest.fremont.linode.com` 与 `sjo-ca-us-ping.vultr.com` 直连 2~3.5 Gbps），
+两个源交替、用 `-r 0-52428799` 取固定 50MB，**只有 `size_download` 满 52428800 字节才计入**。
+离得远的源（如 `proof.ovh.net` 直连仅 42Mbps）会先成为瓶颈，测不出代理本身。
+
+---
+
+## 二十五、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
