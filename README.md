@@ -43,7 +43,8 @@
 - [二十二、v4.9.20 原生支持 ECH (加密 SNI) 与 TCP ECN 全栈自愈管理](#二十二v4920-原生支持-ech-加密-sni-与-tcp-ecn-全栈自愈管理)
 - [二十三、v4.9.21 节点本质命名规范重构与攻克 Shadowrocket CDN 断连历史顽疾](#二十三v4921-节点本质命名规范重构与攻克-shadowrocket-cdn-断连历史顽疾)
 - [二十四、v4.9.22 geo 数据更新、CDN 延迟归因复核与测速源陷阱](#二十四v4922-geo-数据更新cdn-延迟归因复核与测速源陷阱)
-- [二十五、免责声明](#二十五免责声明)
+- [二十五、v4.9.23 Xray 内核兼容性全量测试与参数复核](#二十五v4923-xray-内核兼容性全量测试与参数复核)
+- [二十六、免责声明](#二十六免责声明)
 
 ---
 
@@ -1944,7 +1945,76 @@ I just served you 10mb
 
 ---
 
-## 二十五、免责声明
+## 二十五、v4.9.23 Xray 内核兼容性全量测试与参数复核
+
+### 1.〔方法〕按订阅链接原样建 Xray 客户端
+
+此前 `run_test.py` 的客户端是从服务端参数直接拼的，**测不到"用户导入订阅后到底能不能用"**。
+新增 `tools/xray_compat_test.py`：只读订阅链接，按 v2rayN（Xray 内核）的方式解析成 Xray 出站，
+逐条先 `xray run -test` 校验、再实际跑延迟与满字节下载。
+
+```bash
+python3 tools/xray_compat_test.py /usr/local/nginx/html/sub/<token>/
+```
+
+覆盖三份订阅：本项目 v2rayN 订阅、TUN 专用订阅、同机 sbbox 订阅。
+
+### 2.〔结果〕Xray 内核能用的 12 条链接全部通过
+
+| 来源 | 节点 | 结果 |
+|---|---|---|
+| v2rayN 订阅 | VLESS-XHTTP-CDN-H2 / CDN-H3 / Direct-H3 | PASS |
+| v2rayN 订阅 | Hysteria2-Obfs-Direct | PASS |
+| v2rayN 订阅 | VLESS-Reality-Vision-Direct / Reality-XHTTP-Direct / Reality-Up-CDN-Down | PASS |
+| TUN 订阅 | 上述中的 4 条直连节点 | PASS |
+| sbbox 订阅 | Hysteria2、VLESS-Reality-Vision | PASS |
+| sbbox 订阅 | TUIC、AnyTLS、NaiveProxy H2/H3 | **Xray 不支持该协议**，需切 sing-box 内核 |
+
+两处之前的测试盲区这次补上了：
+
+- **Xray 客户端连 Hysteria2 从没测过**：`run_test.py` 测 Hysteria2 节点用的是 sing-box 客户端。
+- **sbbox 的 VLESS-Reality 节点不在 `run_test.py` 的节点表里**，一直没被回归覆盖。
+
+两条均 PASS。客户端配置无一被 Xray 拒绝，运行期无告警。
+
+判断 Xray 是否支持某协议的方法：出站报 `failed to build outbound handler` 是"认识该协议、参数不对"；
+报 `failed to load outbound detour config` 才是"不认识该协议"。
+
+### 3.〔复核〕参数调整：实测无收益，本版不改
+
+不是"调到最大"——本项目曾把缓冲从 32MB 调到 64MB、MTU 调到 1500，实测明显变慢后全部回滚。
+本次在接近真实用户的条件下复核，工具为 `tools/xray_rtt_bench.py`：客户端进独立网络命名空间，
+**160ms RTT、下行 1% 丢包、用户线路 300↓/50↑ Mbps**（tbf 限速 + netem 延迟），同时测上下行。
+
+**Hysteria2 链接里的 `upmbps=100&downmbps=1000`：Xray 内核下没有可测效果。**
+
+| 变体 | 下行 Mbps | 上行 Mbps |
+|---|---|---|
+| 原样 ↑100 / ↓1000 | 130 | 41 |
+| 删掉带宽声明 | 135 | 42 |
+| 贴合线路 ↑50 / ↓300 | 131 | 42 |
+
+三者在误差内一致；RTT 0、不限速时声明了 `upmbps=100` 的上行也跑到 308 Mbps。
+既然改了拿不出收益，**不改**。（sing-box 内核对该参数的处理不同，未在本版复核。）
+
+同条件下其余节点：Reality-Vision 144↓/33↑、Reality-XHTTP 102↓/27↑、XHTTP-H3-Direct 111↓/37↑、
+sbbox Hysteria2 128↓/40↑、sbbox Reality-Vision 140↓/33↑。
+
+**有意保持不动的项**（安全决策，不为"最大"放开）：
+
+- Hysteria2 服务端 QUIC 初始窗口 512KB / 1MB 与 `ignoreClientBandwidth: true`：QDoS 防护。
+- `policy.bufferSize: 4096`（KB）：本版**未做前后对比**，维持现状，不下结论。
+
+### 4.〔测速口径〕
+
+- 上传测试用 `speed.cloudflare.com/__up`，会限流返回 429，脚本显式识别并打印。
+- 下载源与满字节判据见第二十四节。
+- 本机经公网回环时 UDP 类节点被发夹路径压低，兼容性表中的吞吐只证明"能通、能跑满字节"，
+  不代表真实速度；参数对比一律用命名空间基准。
+
+---
+
+## 二十六、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

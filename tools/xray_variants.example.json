@@ -1,0 +1,55 @@
+[
+ {
+  "name": "说明: link 必须与订阅里的节点名完全一致；sbbox 节点名带主机名后缀，按实际替换 <主机名>",
+  "link": "",
+  "skip": true
+ },
+ {
+  "name": "Hy2-Xray 原样 brutal ↑100/↓1000",
+  "link": "Hysteria2-Obfs-Direct"
+ },
+ {
+  "name": "Hy2-Xray 删带宽(BBR)",
+  "link": "Hysteria2-Obfs-Direct",
+  "patch": [
+   [
+    "streamSettings.finalmask.quicParams",
+    null
+   ]
+  ]
+ },
+ {
+  "name": "Hy2-Xray brutal 贴合线路 ↑50/↓300",
+  "link": "Hysteria2-Obfs-Direct",
+  "patch": [
+   [
+    "streamSettings.finalmask.quicParams",
+    {
+     "congestion": "brutal",
+     "brutalUp": "50 mbps",
+     "brutalDown": "300 mbps"
+    }
+   ]
+  ]
+ },
+ {
+  "name": "Hy2-sbbox 原样(无带宽)",
+  "link": "hy2-<主机名>"
+ },
+ {
+  "name": "Reality-Vision",
+  "link": "VLESS-Reality-Vision-Direct"
+ },
+ {
+  "name": "Reality-XHTTP",
+  "link": "VLESS-Reality-XHTTP-Direct"
+ },
+ {
+  "name": "XHTTP-H3-Direct",
+  "link": "VLESS-XHTTP-Direct-H3"
+ },
+ {
+  "name": "sbbox Reality-Vision",
+  "link": "reality-<主机名>"
+ }
+]
