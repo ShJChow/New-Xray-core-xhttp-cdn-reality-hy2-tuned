@@ -67,8 +67,12 @@ EOF
 # 与 `xh tuning on` 的 sysctl 层互不冲突：bufferSize 是 Xray 进程内的 Go 分配、
 # sockopt 是 Xray 建的 socket 选项，sysctl 都调不到，只能在 config.json 里写。
 # --------------------------------------------------
-# policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB），显式按内存分档
-# 扩容三档 4096 / 2048 / 512 KB，释放 4K/8K 与千兆高吞吐性能。
+# policy.bufferSize：ARM64 上 Xray 默认只有 4 KB（x86 是 512 KB，源码 features/policy/policy.go 已核实），
+# 按内存分档显式设为 4096 / 2048 / 512 KB。
+# v4.9.24 实测更正：此前注释称扩容可「释放千兆高吞吐性能」，**实测无可测差异**。
+# 在 4 KB（默认）/ 32 / 512 / 4096 KB 四档下测 Reality-Vision、Reality-XHTTP、XHTTP-H3、Hysteria2，
+# 不限速 RTT 0 与 160ms RTT + 1% 丢包两组，上下行中位全部落在彼此范围内，xray RSS 58~70MB 也无差别。
+# 保留现值只是因为改动同样拿不出收益，不代表它提速。
 # 超时调优：handshake 10s（防跨境抖动重试断开）、connIdle 1800s（30分钟长连接保活）、
 # uplinkOnly 5s / downlinkOnly 10s（防非对称关闭提前截断数据）。
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)

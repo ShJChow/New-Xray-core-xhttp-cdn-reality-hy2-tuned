@@ -64,3 +64,14 @@ def load_nodes(files):
             name = up.unquote(l.split("#")[-1]); u = up.urlsplit(l); qs = up.parse_qs(u.query)
             out.setdefault(name, vless(u, qs) if scheme == "vless" else hy2(u, qs))
     return out
+
+def load_raw(files):
+    """节点名 → (urlsplit 结果, 解析后的 query)，给需要原始参数的调用方用"""
+    out = {}
+    for f in files:
+        try: lines = [l.strip() for l in open(f) if l.strip()]
+        except OSError: continue
+        for l in lines:
+            if "#" not in l: continue
+            u = up.urlsplit(l); out.setdefault(up.unquote(l.split("#")[-1]), (u, up.parse_qs(u.query)))
+    return out

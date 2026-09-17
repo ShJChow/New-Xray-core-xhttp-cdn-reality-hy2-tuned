@@ -1,0 +1,5 @@
+[ {"name":"sing-box ↑100(原样)",   "link":"Hysteria2-Obfs-Direct", "core":"sing-box"},
+  {"name":"sing-box ↑300",        "link":"Hysteria2-Obfs-Direct", "core":"sing-box", "set":{"up_mbps":300}},
+  {"name":"sing-box ↑1000",       "link":"Hysteria2-Obfs-Direct", "core":"sing-box", "set":{"up_mbps":1000}},
+  {"name":"sing-box 删带宽(BBR)",  "link":"Hysteria2-Obfs-Direct", "core":"sing-box", "unset":["up_mbps","down_mbps"]},
+  {"name":"Xray(对照)",            "link":"Hysteria2-Obfs-Direct"} ]

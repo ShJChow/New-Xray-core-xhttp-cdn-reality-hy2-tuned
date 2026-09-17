@@ -56,6 +56,24 @@ rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null
 # 需要时可用环境变量覆盖：XHTTP_SC_MIN_POSTS_MS=30 bash install.sh
 XHTTP_SC_MIN_POSTS_MS=${XHTTP_SC_MIN_POSTS_MS:-10}
 
+# ---------- Hysteria2 客户端带宽声明（v4.9.24） ----------
+# 链接里的 upmbps / downmbps 在 **sing-box 内核（v2rayN 的 Hysteria2 默认走它）与 Mihomo** 下会启用
+# Brutal，按声明速率硬发；**Xray 内核下无可测效果**。它应当约等于用户自己的真实线路带宽，
+# 生成器猜不出每个人的线路，只能给默认值。实测（netns，160ms RTT，sing-box 客户端，上行 Mbps）：
+#
+#   声明 ↑    线路 300↓/50↑（无丢包 / 下行1%）   线路 1000↓/300↑（无丢包 / 下行1%）
+#   100          41 / 42                          85 / 85      ← 快上行被硬卡在 ~89
+#   300          —  / 27                         190 / 175
+#   1000         31 / 33                         163 / 167
+#   不声明(BBR)   40 / 13                         171 / 160
+#
+# 没有哪个值两头都赢：调高后快上行翻倍，但慢上行掉 25~35%（超发把自己的上行队列灌满，
+# 上传期间同线路并行 ping 也更高）；不声明在「慢上行 + 丢包」下跌到 13。
+# 默认保持 100：国内家宽上行多在 30~100 Mbps，100 离主流最近。上行快（≥300）的用户应设成
+# 接近自己真实上行的值：HY2_UP_MBPS=300 bash install.sh；或在客户端里直接改节点的上行带宽。
+HY2_UP_MBPS=${HY2_UP_MBPS:-100}
+HY2_DOWN_MBPS=${HY2_DOWN_MBPS:-1000}
+
 XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
 
 if [[ "$FEATURE_XPADDING" == true ]]; then
@@ -190,10 +208,10 @@ fi
 
 if [[ "$FEATURE_HY2" == true ]]; then
   if [[ "${FEATURE_PORT_HOPPING:-false}" == true ]]; then
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-Obfs-Direct"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-Obfs-Direct"
     MIHOMO_HY2_PORTS_LINE=$(printf '\n    ports: %s,%s' "${HY2_PORT}" "${PORT_HOP_RANGE:-40000-50000}")
   else
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=100&downmbps=1000#Hysteria2-Obfs-Direct"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${VPS_IP_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-Obfs-Direct"
     MIHOMO_HY2_PORTS_LINE=""
   fi
 else
