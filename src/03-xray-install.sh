@@ -86,10 +86,9 @@ migrate_legacy_udp_components() {
       rc-service hysteria-server stop >/dev/null 2>&1 || true
       rc-update del hysteria-server default >/dev/null 2>&1 || true
     fi
-    rm -rf /etc/hysteria 2>/dev/null || true
-    rm -f /usr/local/bin/hysteria 2>/dev/null || true
+    rm -f "$hy_conf" 2>/dev/null || true
     rm -f /etc/systemd/system/hysteria-server.service /etc/init.d/hysteria-server 2>/dev/null || true
-    info "  已停用独立 hysteria 二进制（配置备份于 ${LEGACY_BACKUP_DIR}）"
+    info "  已停用旧版独立 hysteria 服务配置（配置备份于 ${LEGACY_BACKUP_DIR}）"
     info "  Hysteria2 改由 Xray 原生 inbound 提供，本次起带 Salamander 混淆"
   fi
 
@@ -153,29 +152,43 @@ install_xray() {
   info "Installing Xray-core..."
 
   if [ -f "/usr/local/bin/xray" ]; then
-    local cur
+    local cur cur_arch sys_arch arch_mismatch=false
     cur=$(/usr/local/bin/xray version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    info "Xray already installed: ${cur:-unknown}"
+    cur_arch=$(file -b -L /usr/local/bin/xray 2>/dev/null || true)
+    sys_arch=$(uname -m)
+    case "$sys_arch" in
+      x86_64|amd64)
+        [[ "$cur_arch" != *x86-64* ]] && arch_mismatch=true ;;
+      aarch64|arm64)
+        [[ "$cur_arch" != *aarch64* && "$cur_arch" != *ARM* ]] && arch_mismatch=true ;;
+    esac
 
-    # 已装但版本低于两个 UDP 节点的下限时**自动升级**，而不是跳过后再把节点关掉。
-    # 用户重跑安装脚本的意图就是让新功能生效；停在旧版只会让他们拿到一份
-    # 静默缺少 Hysteria2/h3 的配置，还以为是自己配错了。
-    if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
-      if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
-        warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
-        local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
-        if [[ "$OS_ID" != "alpine" ]]; then
-          local install_flag=""
-          [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
-          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root \
-            || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
-          info "升级后版本: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
-        else
-          warn "Alpine 下不自动升级，请手动更新后重跑（${MANAGE_CMD} update）"
+    if [[ "$arch_mismatch" == true || -z "$cur" ]]; then
+      warn "检测到已安装 Xray 二进制架构 ($cur_arch) 与系统 CPU ($sys_arch) 不匹配或已损坏，执行自动替换安装..."
+      rm -f /usr/local/bin/xray
+    else
+      info "Xray already installed: ${cur:-unknown} ($sys_arch)"
+
+      # 已装但版本低于两个 UDP 节点的下限时**自动升级**，而不是跳过后再把节点关掉。
+      # 用户重跑安装脚本的意图就是让新功能生效；停在旧版只会让他们拿到一份
+      # 静默缺少 Hysteria2/h3 的配置，还以为是自己配错了。
+      if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
+        if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
+          warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
+          local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
+          if [[ "$OS_ID" != "alpine" ]]; then
+            local install_flag=""
+            [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
+            bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root \
+              || warn "自动升级失败，将按现有版本继续（两个直连 UDP 节点会被关闭）"
+            info "升级后版本: $(/usr/local/bin/xray version 2>/dev/null | head -1 || echo unknown)"
+          else
+            warn "Alpine 下不自动升级，请手动更新后重跑（${MANAGE_CMD} update）"
+          fi
         fi
       fi
+      return
     fi
-    return
   fi
 
   if [[ "$OS_ID" != "alpine" ]]; then

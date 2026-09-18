@@ -145,16 +145,15 @@ bash ~/install.sh
 适合重装系统、自动化脚本或批量部署。遵循 **Karpathy 工程准则**（*Think Before Coding · Simplicity First · Surgical Changes*）设计：
 
 > [!TIP]
-> **防粘贴换行报错提示**：在部分 SSH 终端或富文本网页复制带反斜杠 `\` 的多行命令时，容易因尾部附带空格或 Windows CRLF 换行符导致 `command not found` 语法错误。推荐优先使用下方提供的 **「方案 A-1 单行免转义版」** 或 **「方案 A-2 Heredoc 批处理版」**，100% 免疫换行报错。
+> **现代参数传参建议**：推荐优先使用下方 **「方案 A-1 现代位置参数单行版」**（形如 `sudo bash <(curl -fsSL ...) key=val`）。参数直接作为 CLI 位置参数传入脚本内部解析为环境变量，无需提前 `sudo -i`，100% 免疫终端换行/软回车断行、Windows CRLF、尾部空格及 `sudo: AUTO=1: command not found` 报错。且脚本内部已内置最佳优化生产默认值，只需填写必选域名。
 
-#### 方案 A-1：纯单行免转义推荐版（强烈推荐：100% 避免终端换行报错）
+#### 方案 A-1：现代位置参数单行版（强烈推荐：100% 免疫终端换行与转义报错）
 ```bash
-sudo -i
-
-AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" IP_CHOICE=1 FALLBACK_MODE="proxy" REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu" CDN_FALLBACK_ORIGIN="https://www.stanford.edu" FEATURE_AUTO_TUNING=true FEATURE_XPADDING=true FEATURE_CDN_ECH=false FEATURE_H3_DIRECT=true FEATURE_H2_DIRECT=false FEATURE_HY2=true FEATURE_AUTOUPDATE=true FEATURE_KEEPALIVE=true NODE_TAG="oracle-vps" bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="oracle-vps"
 ```
+> 如需覆盖更多自定义项，直接在末尾空格追加即可（如 `IP_CHOICE=1`、`CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`）。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_HY2=true` 等优化配置，绝大多数场景无需重复传入。
 
-#### 方案 A-2：Heredoc 结构化批处理版（无反斜杠，粘贴绝对安全）
+#### 方案 A-2：Heredoc 结构化批处理版（多环境变量批量定义）
 ```bash
 sudo -i
 
@@ -162,69 +161,37 @@ bash << 'EOF'
 export AUTO=1
 export REALITY_DOMAIN="reality.example.com"
 export CDN_DOMAIN="cdn.example.com"
-export IP_CHOICE=1
-export FALLBACK_MODE="proxy"
-export REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu"
-export CDN_FALLBACK_ORIGIN="https://www.stanford.edu"
-export FEATURE_AUTO_TUNING=true
-export FEATURE_XPADDING=true
-export FEATURE_CDN_ECH=false
-export FEATURE_H3_DIRECT=true
-export FEATURE_H2_DIRECT=false
-export FEATURE_HY2=true
-export FEATURE_AUTOUPDATE=true
-export FEATURE_KEEPALIVE=true
 export NODE_TAG="oracle-vps"
+export CDN_FALLBACK_ORIGIN="https://www.harvard.edu"
 bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
 EOF
 ```
 
-#### 方案 A-3：标准多行环境变量模板（注意反斜杠后切勿带空格）
+#### 方案 A-3：标准多行参数模板
 ```bash
-sudo -i
-
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-IP_CHOICE=1 \
-FALLBACK_MODE="proxy" \
-REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu" \
-CDN_FALLBACK_ORIGIN="https://www.stanford.edu" \
-FEATURE_AUTO_TUNING=true \
-FEATURE_XPADDING=true \
-FEATURE_CDN_ECH=false \
-FEATURE_H3_DIRECT=true \
-FEATURE_H2_DIRECT=false \
-FEATURE_HY2=true \
-FEATURE_AUTOUPDATE=true \
-FEATURE_KEEPALIVE=true \
-NODE_TAG="oracle-vps" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
+  AUTO=1 \
+  REALITY_DOMAIN="reality.example.com" \
+  CDN_DOMAIN="cdn.example.com" \
+  NODE_TAG="oracle-vps"
 ```
 
-#### 方案 B：极简极速模板（仅配置必填项）
+#### 方案 B：极简极速模板（仅配置必填域名）
 ```bash
-sudo -i
-
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com"
 ```
 
 #### 方案 C：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
 ```bash
-sudo -i
-
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-H3_PORT=8446 \
-H2_PORT=8445 \
-HY2_PORT=8443 \
-XHTTP_PATH="/$(openssl rand -hex 4)" \
-NODE_TAG="node-01" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
+  AUTO=1 \
+  REALITY_DOMAIN="reality.example.com" \
+  CDN_DOMAIN="cdn.example.com" \
+  H3_PORT=8446 \
+  H2_PORT=8445 \
+  HY2_PORT=8443 \
+  XHTTP_PATH="/$(openssl rand -hex 4)" \
+  NODE_TAG="node-01"
 ```
 
 #### 全量环境变量配置矩阵速查表
@@ -238,7 +205,7 @@ bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality
 | `NODE_TAG` | 节点标识 | `vps` | 节点名称后缀（如 `hk-oracle`、`us-lax`），便于客户端策略组区分。 |
 | `FALLBACK_MODE` | 伪装模式 | `proxy` | `proxy`（反代真实高校网站）或 `static`（本地网页）。 |
 | `REALITY_FALLBACK_ORIGIN` | 伪装源站 | `https://www.sjsu.edu` | Reality 握手失败/主动探测回落的合法目标网站。 |
-| `CDN_FALLBACK_ORIGIN` | 伪装源站 | `https://www.stanford.edu`| CDN 路径未匹配时的伪装目标网站。 |
+| `CDN_FALLBACK_ORIGIN` | 伪装源站 | `https://www.harvard.edu`| CDN 路径未匹配时的伪装目标网站。 |
 | `FEATURE_AUTO_TUNING` | 系统优化 | `true` | 自动开启 BBR+fq、64MB Socket 缓冲区、1048576 句柄等系统级调优。 |
 | `FEATURE_XPADDING` | 流量混淆 | `true` | 启用 XHTTP 流量填充混淆（`xPaddingObfsMode`），破坏 CDN 侧长度指纹。 |
 | `FEATURE_CDN_ECH` | 实验特性 | `false` | Cloudflare ECH 加密 SNI 开关。未在 CF 控制台开启 ECH 时务必保持 `false`。 |

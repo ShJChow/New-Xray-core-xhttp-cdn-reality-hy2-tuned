@@ -5,7 +5,7 @@
 proxies:
   # ---------- 经 CDN / QUIC 直连 ----------
   # 1. 经 CDN：走 TCP（h2）。最稳健的 CDN 节点，不受运营商 UDP 443 限速/丢包影响。
-  - name: VLESS-XHTTP-CDN-H2
+  - name: VLESS-XHTTP-CDN-H2${NODE_SUFFIX}
     type: vless
     server: ${CDN_DOMAIN}
     port: 443
@@ -34,7 +34,7 @@ proxies:
   #    mihomo 仅在 alpn 恰好等于 h3 时才走 HTTP/3（transport/xhttp/client.go:159）。
   #    服务端零改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP，
   #    因此这条节点不占用任何额外端口，也不需要安全组放行。
-  - name: VLESS-XHTTP-CDN-H3
+  - name: VLESS-XHTTP-CDN-H3${NODE_SUFFIX}
     type: vless
     server: ${CDN_DOMAIN}
     port: 443
@@ -61,7 +61,7 @@ proxies:
   #<<FEATURE_H3_DIRECT
   # 2. 直连 VPS 的 h3（UDP ${H3_PORT}）：不经 CDN，Xray 自己监听 UDP。
   #    sni 用 Reality 域名——证书是 Reality+CDN 双域名 SAN，直连侧用前者。
-  - name: VLESS-XHTTP-Direct-H3
+  - name: VLESS-XHTTP-Direct-H3${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
     port: ${H3_PORT}
@@ -91,7 +91,7 @@ proxies:
   #     运营商封 UDP 或 QUIC 丢包严重时它完全不可用，而 mihomo 在 alpn 只有 h3
   #     时不会自动回落 TCP（transport/xhttp/client.go:159）——表现为该节点
   #     单独连不上。两者由下面的「直连择优」url-test 组自动接管。
-  - name: VLESS-XHTTP-Direct-H2
+  - name: VLESS-XHTTP-Direct-H2${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
     port: ${H2_PORT}
@@ -120,7 +120,7 @@ proxies:
   #<<FEATURE_HY2
   # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
   #    inbound 提供，支持 Brutal 拥塞控制、0-RTT 握手与连接迁移。
-  - name: Hysteria2-Obfs-Direct
+  - name: Hysteria2-Obfs-Direct${NODE_SUFFIX}
     type: hysteria2
     server: ${VPS_IP}
     port: ${HY2_PORT}${MIHOMO_HY2_PORTS_LINE}
@@ -136,7 +136,7 @@ proxies:
   #>>FEATURE_HY2
 
   # ---------- TCP 兜底（UDP/QUIC 被封时使用）----------
-  - name: VLESS-Reality-Vision-Direct
+  - name: VLESS-Reality-Vision-Direct${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
     port: 443
@@ -155,7 +155,7 @@ proxies:
       public-key: ${PUBLIC_KEY}
       short-id: ${SHORT_ID}
 
-  - name: VLESS-Reality-XHTTP-Direct
+  - name: VLESS-Reality-XHTTP-Direct${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
     port: 443
@@ -183,7 +183,7 @@ proxies:
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
 
   #<<FEATURE_UP_CDN_DOWN_MIHOMO
-  - name: VLESS-Reality-Up-CDN-Down
+  - name: VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
     port: 443

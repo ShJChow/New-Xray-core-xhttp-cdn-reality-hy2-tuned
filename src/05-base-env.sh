@@ -104,13 +104,15 @@ if [[ "${VISION_UDP443:-0}" == "1" ]]; then
 else
   VISION_FLOW="xtls-rprx-vision"
 fi
-# 节点名后缀：优先取 NODE_TAG，否则取主机名，剔除非 ASCII 字母数字与连字符，
-# 避免客户端列表乱码。
-# 很多 VPS 镜像的 hostname 就是 localhost，直接拿来当后缀会得到
-# 「Vless-xhttp-h3-cdn-localhost」这种在多机订阅里完全无法区分的名字，
-# 所以把 localhost 也当成「没设置」处理。
+# 节点名后缀控制：若用户显式传入 NODE_TAG（如 hk-oracle、oracle-vps），自动追加 -${NODE_TAG}；
+# 默认未传入或为 vps/localhost 时保持规范纯净节点命名（如 VLESS-Reality-Vision-Direct）
 HOSTNAME_TAG=$(printf '%s' "${NODE_TAG:-$(hostname -s 2>/dev/null)}" | tr -cd 'A-Za-z0-9-' | cut -c1-20)
 [[ -z "$HOSTNAME_TAG" || "$HOSTNAME_TAG" == "localhost" ]] && HOSTNAME_TAG="vps"
+if [[ -n "${NODE_TAG:-}" && "${NODE_TAG}" != "vps" && "${NODE_TAG}" != "localhost" ]]; then
+  NODE_SUFFIX="-$(printf '%s' "${NODE_TAG}" | tr -cd 'A-Za-z0-9-' | cut -c1-20)"
+else
+  NODE_SUFFIX=""
+fi
 UUID1=$(xray uuid)
 UUID2=$(xray uuid)
 KEY_OUTPUT=$(xray x25519 2>&1)

@@ -12,6 +12,13 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+# 支持 `bash install.sh key=value ...` 位置参数传入（与环境变量前缀等价，且彻底规避终端换行/转义断行报错）
+for arg in "$@"; do
+  case "$arg" in
+    *=*) export "$arg" ;;
+  esac
+done
+
 [[ $EUID -ne 0 ]] && error "请使用 root 用户运行此脚本"
 
 if [[ -f /etc/os-release ]]; then
@@ -26,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.24"
+PROJECT_VERSION="4.9.25"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。

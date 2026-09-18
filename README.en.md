@@ -348,52 +348,28 @@ curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/
 
 Designed following **Karpathy Engineering Principles** (*Think Before Coding · Simplicity First · Surgical Changes*):
 
-#### Option A: Standard Production Template (Recommended)
+#### Option A: Standard Production One-Liner (Recommended: immune to terminal wrapping & CRLF breaks)
 ```bash
-sudo -i
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="oracle-vps"
+```
+> To override additional settings, append them to the command (e.g. `IP_CHOICE=1` `CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`). Script defaults already provide optimized production values (`FALLBACK_MODE=proxy`, `FEATURE_AUTO_TUNING=true`, `FEATURE_XPADDING=true`, `FEATURE_H3_DIRECT=true`, `FEATURE_HY2=true`).
 
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-IP_CHOICE=1 \
-FALLBACK_MODE="proxy" \
-REALITY_FALLBACK_ORIGIN="https://www.sjsu.edu" \
-CDN_FALLBACK_ORIGIN="https://www.stanford.edu" \
-FEATURE_AUTO_TUNING=true \
-FEATURE_XPADDING=true \
-FEATURE_CDN_ECH=false \
-FEATURE_H3_DIRECT=true \
-FEATURE_H2_DIRECT=false \
-FEATURE_HY2=true \
-FEATURE_AUTOUPDATE=true \
-FEATURE_KEEPALIVE=true \
-NODE_TAG="oracle-vps" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+#### Option B: Minimalist One-Liner (Required variables only)
+```bash
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com"
 ```
 
-#### Option B: Minimalist Template (Required variables only)
+#### Option C: Custom Ports & Path Template
 ```bash
-sudo -i
-
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
-```
-
-#### Option C: Custom Ports & Path Template (Passwords auto-generated as 64-char SHA256 hex)
-```bash
-sudo -i
-
-AUTO=1 \
-REALITY_DOMAIN="reality.example.com" \
-CDN_DOMAIN="cdn.example.com" \
-H3_PORT=8446 \
-H2_PORT=8445 \
-HY2_PORT=8443 \
-XHTTP_PATH="/$(openssl rand -hex 4)" \
-NODE_TAG="node-01" \
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
+  AUTO=1 \
+  REALITY_DOMAIN="reality.example.com" \
+  CDN_DOMAIN="cdn.example.com" \
+  H3_PORT=8446 \
+  H2_PORT=8445 \
+  HY2_PORT=8443 \
+  XHTTP_PATH="/$(openssl rand -hex 4)" \
+  NODE_TAG="node-01"
 ```
 
 ---

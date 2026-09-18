@@ -150,15 +150,15 @@ proxy-groups:
     hidden: false
     proxies:
       #<<FEATURE_H3_DIRECT
-      - VLESS-XHTTP-Direct-H3
+      - VLESS-XHTTP-Direct-H3${NODE_SUFFIX}
       #>>FEATURE_H3_DIRECT
       #<<FEATURE_H2_DIRECT
-      - VLESS-XHTTP-Direct-H2
+      - VLESS-XHTTP-Direct-H2${NODE_SUFFIX}
       #>>FEATURE_H2_DIRECT
       #<<FEATURE_HY2
-      - Hysteria2-Obfs-Direct
+      - Hysteria2-Obfs-Direct${NODE_SUFFIX}
       #>>FEATURE_HY2
-      - VLESS-Reality-Vision-Direct
+      - VLESS-Reality-Vision-Direct${NODE_SUFFIX}
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/speed.svg
 
   - name: 节点选择
