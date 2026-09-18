@@ -3,6 +3,7 @@
 # 第 1 条经 CDN 走 TCP(h2)，第 2 条 QUIC/h3 直连，第 3 条是它的 TCP 孪生体（v4.7.0），
 # 第 4 条 Hysteria2，后两条是 Reality TCP 直连兜底。
 proxies:
+  #<<FEATURE_CDN_H2
   # ---------- 经 CDN / QUIC 直连 ----------
   # 1. 经 CDN：走 TCP（h2）。最稳健的 CDN 节点，不受运营商 UDP 443 限速/丢包影响。
   - name: VLESS-XHTTP-CDN-H2${NODE_SUFFIX}
@@ -29,6 +30,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+  #>>FEATURE_CDN_H2
 
   # 1b. 经 CDN 的 QUIC 链路（v4.7.4 新增）：
   #    mihomo 仅在 alpn 恰好等于 h3 时才走 HTTP/3（transport/xhttp/client.go:159）。
@@ -122,7 +124,7 @@ proxies:
   #    inbound 提供，支持 Brutal 拥塞控制、0-RTT 握手与连接迁移。
   - name: Hysteria2-Obfs-Direct${NODE_SUFFIX}
     type: hysteria2
-    server: ${VPS_IP}
+    server: ${REALITY_DOMAIN}
     port: ${HY2_PORT}${MIHOMO_HY2_PORTS_LINE}
     password: ${HY2_PASSWORD}
     obfs: salamander

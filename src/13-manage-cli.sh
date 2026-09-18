@@ -142,6 +142,8 @@ cmd_status() {
   printf '  %-32s %s\n' "Xray policy.bufferSize" "${_buf:-未设置} KB"
   if [[ -f "$SYSCTL_CONF" ]]; then
     printf '  %-32s %s\n' "调优配置文件" "$SYSCTL_CONF（已启用）"
+  elif [[ -f /etc/sysctl.d/99-sbbox.conf ]]; then
+    printf '  %-32s %s\n' "调优配置文件" "/etc/sysctl.d/99-sbbox.conf（已由 sbbox 启用生效）"
   else
     printf '  %-32s %s\n' "调优配置文件" "未启用（安装时自动开启，或手动 xh tuning on）"
   fi
@@ -253,10 +255,11 @@ cmd_resub() {
   [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
 
   # 重新生成 Shadowrocket 专属与 v2rayN TUN 优化订阅
-  local sr_cdn_line="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
   {
     grep -E 'Reality-Vision|Hysteria2-.*[Oo]bfs' "${home}/client-config.txt" || true
-    echo "$sr_cdn_line"
+    if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
+      echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
+    fi
   } > "${subdir}/shadowrocket-raw.txt"
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
     base64 "${subdir}/shadowrocket-raw.txt" | tr -d '\n' > "${subdir}/shadowrocket.txt"
@@ -632,17 +635,9 @@ cmd_diag() {
   echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
   echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
-  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H2 / VLESS-XHTTP-CDN-H3 经 Cloudflare CDN 转发${NC}"
-  echo "  其中 CDN-H2 走 TCP 443（最稳健，不受 UDP 443 限速丢包影响）；"
-  echo "  CDN-H3 走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
-  echo ""
-  echo "  在客户端机器上执行下面两条来区分（任一不通即为客户端侧网络封锁 QUIC）："
-  echo "    curl -sI --http3-only https://cloudflare-quic.com/ | head -1"
-  echo "    curl -sI --http3-only https://${CDN_DOMAIN:-你的CDN域名}/ | head -1"
-  echo "  若 curl 不支持 --http3-only，用浏览器访问 https://cloudflare-quic.com/ 看是否显示 HTTP/3。"
-  echo ""
-  echo "  若 CDN-H3 不通显示 -1 而 CDN-H2 正常 ⇒ 属于客户端本地或运营商 UDP 443 被限速/封锁，"
-  echo "  使用 VLESS-XHTTP-CDN-H2 即可完美解决。"
+  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H3 经 Cloudflare CDN 转发${NC}"
+  echo "  走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
+  echo "  若所处网络环境对 UDP 443 存在限速或丢包，可通过 FEATURE_CDN_H2=true 启用 TCP/h2 备用节点。"
   echo ""
   echo "  另：开启 TUN 时务必确认节点自身流量已豁免（client-config-mihomo-full.yaml"
   echo "  已内置 route-exclude-address / 首条 DIRECT 规则），否则 QUIC 会在 TUN 里自环。"
@@ -963,7 +958,7 @@ cmd_guard() {
       logger -t xray-xhttp "guard: restarted ${s}" 2>/dev/null || true
     fi
   done
-  if [[ -f /etc/hysteria/config.yaml ]] && ! svc_active hysteria-server; then
+  if systemctl is-enabled --quiet hysteria-server 2>/dev/null && [[ -f /etc/hysteria/config.yaml ]] && ! svc_active hysteria-server; then
     svc restart hysteria-server >/dev/null 2>&1 || true
   fi
   [[ $restarted -eq 1 ]] && info "已拉起异常服务" || true

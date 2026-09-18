@@ -88,6 +88,10 @@ AUTO=${AUTO:-0}
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
 
+# FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
+# 默认关闭（保持以 CDN-H3 与直连节点为主，精简节点），需要时可通过 FEATURE_CDN_H2=true 开启。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
+
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}

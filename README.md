@@ -1831,11 +1831,11 @@ func (r *RealityOptions) Parse() (*reality.Config, error) {
   - `VLESS-Reality-Vision-Direct`：标准 TCP 443 + REALITY 伪装 + Vision 零拷贝流控，全平台通用极速直连；
   - `VLESS-Reality-XHTTP-Direct`：TCP 443 + REALITY 伪装 + XHTTP 填充混淆，深度防探测；
   - `VLESS-Reality-Up-CDN-Down`：0-RTT 直连 REALITY 上行 + Cloudflare CDN 满速下行，兼顾极致低延迟与隐藏源站；
-  - `VLESS-XHTTP-CDN-H2`：通过 Cloudflare CDN 代理，HTTP/2 流式传输，纯 TLS 1.3 强加密；
+  - `VLESS-XHTTP-CDN-H2`：通过 Cloudflare CDN 代理，HTTP/2 流式传输，纯 TLS 1.3 强加密（可选节点，默认关闭，可通过 `FEATURE_CDN_H2=true` 启用）；
   - `VLESS-XHTTP-CDN-H3`：通过 Cloudflare CDN 代理，QUIC / HTTP/3 传输；
   - `VLESS-XHTTP-Direct-H3`：直连 UDP 8446 端口，QUIC / HTTP/3 传输；
   - `VLESS-XHTTP-Direct-H2`：直连 TCP 8445 端口，HTTP/2 传输；
-  - `Hysteria2-Obfs-Direct`：直连 UDP 8443 端口，Hysteria 2 协议 + Salamander 混淆，弱网丢包杀手。
+  - `Hysteria2-Obfs-Direct`：直连 UDP 8443 端口，Hysteria 2 协议 + Salamander 混淆，域名与证书直连认证，弱网丢包杀手。
 
 ### 2. 攻克 Shadowrocket CDN 节点断连与不稳定历史顽疾
 - **根因一：Xray 服务端入站强校验拒绝**：
