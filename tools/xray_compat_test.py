@@ -2,9 +2,11 @@
 """用 Xray 内核按「订阅链接」原样建客户端，逐节点测兼容性。
 用法: xray_compat_test.py <订阅目录>   例: xray_compat_test.py /usr/local/nginx/html/sub/<token>/
 模拟 v2rayN(Xray core) 导入订阅：参数只从链接里取，不读服务端配置。"""
-import json, subprocess, sys, time, statistics, urllib.parse as up, os
+import json, subprocess, sys, time, statistics, urllib.parse as up, os, tempfile, shutil, atexit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-S = os.environ.get("BENCH_TMP", "/tmp")
+_td = tempfile.TemporaryDirectory(prefix="xc_test_")
+atexit.register(lambda: _td.cleanup() if os.path.exists(_td.name) else None)
+S = os.environ.get("BENCH_TMP", _td.name)
 SUB = sys.argv[1]; N_DL = int(os.environ.get("N_DL", "2"))
 SOURCES = [("xray-v2rayn", f"{SUB}/v2rayn-raw.txt"), ("xray-tun", f"{SUB}/v2rayn-tun-raw.txt"), ("sbbox", "/root/sbbox/nodes.txt")]
 URLS = ["https://speedtest.fremont.linode.com/100MB-fremont.bin", "https://sjo-ca-us-ping.vultr.com/vultr.com.100MB.bin"]
