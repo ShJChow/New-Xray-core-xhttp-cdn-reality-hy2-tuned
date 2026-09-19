@@ -210,7 +210,7 @@ else
   H2_DIRECT_NODE_LINE=""
 fi
 
-if [[ "$FEATURE_HY2" == true ]]; then
+if [[ "$FEATURE_HY2" == true && "${FEATURE_HY2_OBFS:-false}" == true ]]; then
   if [[ "${FEATURE_PORT_HOPPING:-false}" == true ]]; then
     HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
     MIHOMO_HY2_PORTS_LINE=$(printf '\n    ports: %s,%s' "${HY2_PORT}" "${PORT_HOP_RANGE:-40000-50000}")
@@ -230,7 +230,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down"
+info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Hysteria2-obfs(${FEATURE_HY2_OBFS:-false}) + Reality x2 + Reality-up-CDN-down"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
@@ -273,7 +273,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_UP_CDN_DOWN_MIHOMO; do
+  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else

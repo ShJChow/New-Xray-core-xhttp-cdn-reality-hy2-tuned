@@ -69,7 +69,7 @@ migrate_legacy_udp_components() {
 
   if [[ "${KEEP_LEGACY_UDP:-false}" == true ]]; then
     warn "KEEP_LEGACY_UDP=true：保留旧的独立 UDP 组件，改为关闭 Xray 原生的两个新节点"
-    [[ -f "$hy_conf" ]] && { FEATURE_HY2=false; warn "  → Hysteria2-obfs 已关闭（旧的独立 hysteria 无 Salamander 混淆）"; }
+    [[ -f "$hy_conf" ]] && { FEATURE_HY2_OBFS=false; warn "  → Hysteria2-obfs 已关闭（旧的独立 hysteria 占用 8443）；Hysteria2-H3（UDP 443）不受影响"; }
     [[ -f "$h3_env" ]] && { FEATURE_H3_DIRECT=false; warn "  → h3-direct 已关闭"; }
     return 0
   fi
@@ -118,7 +118,7 @@ check_udp_port_conflict() {
   command -v ss >/dev/null 2>&1 || return 0
   local p
 
-  for p in "${H3_PORT}:FEATURE_H3_DIRECT:h3-direct" "${HY2_PORT}:FEATURE_HY2:Hysteria2-obfs" "${HY2_H3_PORT:-443}:FEATURE_HY2_H3:Hysteria2-H3"; do
+  for p in "${H3_PORT}:FEATURE_H3_DIRECT:h3-direct" "${HY2_PORT}:FEATURE_HY2_OBFS:Hysteria2-obfs" "${HY2_H3_PORT:-443}:FEATURE_HY2_H3:Hysteria2-H3"; do
     local port="${p%%:*}" rest="${p#*:}"
     local var="${rest%%:*}" name="${rest#*:}"
     [[ "${!var}" == true ]] || continue

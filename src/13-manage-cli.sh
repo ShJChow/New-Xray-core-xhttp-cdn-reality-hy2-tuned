@@ -197,13 +197,15 @@ cmd_info() {
     echo "  h2-direct:       未启用"
   fi
   if [[ "${FEATURE_HY2:-false}" == true ]]; then
-    echo "  Hysteria2:       UDP ${HY2_PORT:-8443}"
-    echo "    认证密码:      ${HY2_PASSWORD}"
-    echo "    混淆:          salamander（Xray finalmask）"
-    echo "    混淆密码:      ${OBFS_PASSWORD}"
-    echo "    ↑ 两个密码是独立的值，客户端两处都要填对才能握手"
     if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-      echo "  Hysteria2-H3:    UDP ${HY2_H3_PORT:-443}（同一认证密码，无混淆，标准 HTTP/3 形态）"
+      echo "  Hysteria2-H3:    UDP ${HY2_H3_PORT:-443}（无混淆，标准 HTTP/3 形态）"
+      echo "    认证密码:      ${HY2_PASSWORD}"
+    fi
+    if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
+      echo "  Hysteria2-obfs:  UDP ${HY2_PORT:-8443}（同一认证密码）"
+      echo "    混淆:          salamander（Xray finalmask）"
+      echo "    混淆密码:      ${OBFS_PASSWORD}"
+      echo "    ↑ 两个密码是独立的值，客户端两处都要填对才能握手"
     fi
   else
     echo "  Hysteria2:       未启用"
@@ -463,7 +465,14 @@ cmd_diag() {
         chk "h2-direct 未监听 TCP ${H2_PORT:-8445}" 1 "config.json 里有该 inbound 但未 bind；查 ${MANAGE_CMD} log xray"
       fi
     fi
-    if [[ "${FEATURE_HY2:-false}" == true ]]; then
+    if [[ "${FEATURE_HY2:-false}" == true && "${FEATURE_HY2_H3:-false}" == true ]]; then
+      if ss -lnup 2>/dev/null | grep -qE ":${HY2_H3_PORT:-443}\b"; then
+        chk "Hysteria2-H3 已监听 UDP ${HY2_H3_PORT:-443}" 0
+      else
+        chk "Hysteria2-H3 未监听 UDP ${HY2_H3_PORT:-443}" 1 "查 ${MANAGE_CMD} log xray；确认 UDP 443 未被其他进程占用"
+      fi
+    fi
+    if [[ "${FEATURE_HY2:-false}" == true && "${FEATURE_HY2_OBFS:-false}" == true ]]; then
       if ss -lnup 2>/dev/null | grep -qE ":${HY2_PORT:-8443}\b"; then
         chk "Hysteria2 已监听 UDP ${HY2_PORT:-8443}" 0
       else

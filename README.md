@@ -46,7 +46,8 @@
 - [二十五、v4.9.23 Xray 内核兼容性全量测试与参数复核](#二十五v4923-xray-内核兼容性全量测试与参数复核)
 - [二十六、v4.9.24 三项遗留参数的实测判断](#二十六v4924-三项遗留参数的实测判断)
 - [二十七、v4.9.26 新增 Hysteria2-H3-Direct：上下行最佳、流量形态为标准 HTTP/3](#二十七v4926-新增-hysteria2-h3-direct上下行最佳流量形态为标准-http3)
-- [二十八、免责声明](#二十八免责声明)
+- [二十八、v4.9.28 Xray 侧 Hysteria2 只保留 Hysteria2-H3-Direct](#二十八v4928-xray-侧-hysteria2-只保留-hysteria2-h3-direct)
+- [二十九、免责声明](#二十九免责声明)
 
 ---
 
@@ -2125,7 +2126,61 @@ Reality-Up-CDN-Down 的上行走同一条路径，有同样的上限。
 
 ---
 
-## 二十八、免责声明
+## 二十八、v4.9.28 Xray 侧 Hysteria2 只保留 Hysteria2-H3-Direct
+
+### 1.〔决策〕保留哪一条
+
+Xray 侧原有两条 Hysteria2，本版只保留 **Hysteria2-H3-Direct（UDP 443、无混淆）**，
+`Hysteria2-Obfs-Direct`（UDP 8443、salamander）改为**默认关闭**。依据是第二十七节的同条件实测：
+
+| 下行 Mbps（Xray / sing-box 客户端） | Hysteria2-H3-Direct | Hysteria2-Obfs-Direct |
+|---|---|---|
+| 1000↓/300↑ 无丢包 | **257 / 263** | 227 / 206 |
+| 1000↓/300↑ 下行 1% 丢包 | **159 / 132** | 126 / 108 |
+| 300↓/50↑ 下行 1% 丢包 | **129 / 139** | 127 / 118 |
+
+- 上行两者持平。
+- 回归延迟上 H3 更低：2.9ms 对比 3.9ms。
+- 流量形态是标准 HTTP/3，比非标准端口上的随机字节 UDP 更不容易被按端口 / 特征限速。
+
+**代价**：Xray 侧不再有带混淆的 Hysteria2。若所处网络对 QUIC 做深度识别封锁，需要混淆：
+- 重新开启：`FEATURE_HY2_OBFS=true bash install.sh`（代码保留，只是默认关闭）；
+- 或使用同机 sbbox 的 Hysteria2，它自带 salamander。
+
+### 2.〔开关语义〕
+
+| 开关 | 默认 | 作用 |
+|---|---|---|
+| `FEATURE_HY2` | true | Hysteria2 总开关；内核版本不够或缺证书时两条一起关 |
+| `FEATURE_HY2_H3` | true | UDP 443 无混淆节点 |
+| `FEATURE_HY2_OBFS` | **false** | UDP 8443 salamander 节点 |
+
+以下各处都改为按 `FEATURE_HY2_OBFS` 判断 8443：
+- 端口冲突检测；
+- 旧版独立 hysteria 迁移（它占的是 8443，现在只关混淆节点，**不再连带关掉 UDP 443 那条**）；
+- 订阅与 Mihomo 裁剪；
+- 安装输出、`xh info`；
+- `xh diag` 的监听检查。
+
+`xh diag` 顺带补上了对 UDP 443 的监听检查，之前漏了。
+
+### 3.〔升级已有安装〕
+
+8443 入站删除后，**还在用 Hysteria2-Obfs-Direct 的客户端会断开，需要重新拉取订阅**。
+新订阅里 Hysteria2 只剩 Hysteria2-H3-Direct（v2rayN / TUN / Shadowrocket / Mihomo 均已同步）。
+
+```bash
+ss -lnup | grep -E ':(443|8443) '        # 只应有 xray 在 UDP 443
+grep FEATURE_HY2 /etc/xhttp-cdn/node.env  # FEATURE_HY2_OBFS=false
+xh diag                                   # 应含「Hysteria2-H3 已监听 UDP 443」
+```
+
+防火墙里 8443 的 QDoS 规则与放行规则保留未删：与同机 sbbox 的 44116 写在同一条 multiport 规则里，
+且端口无人监听时这些规则不产生影响。
+
+---
+
+## 二十九、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

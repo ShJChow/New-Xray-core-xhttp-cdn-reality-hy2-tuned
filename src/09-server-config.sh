@@ -269,6 +269,7 @@ H2EOF
 fi
 
 if [[ "$FEATURE_HY2" == true ]]; then
+  if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
   XRAY_HY2_INBOUND=$(cat <<HY2EOF
 ,
         {
@@ -339,6 +340,8 @@ if [[ "$FEATURE_HY2" == true ]]; then
         }
 HY2EOF
 )
+  info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆，FEATURE_HY2_OBFS=true）"
+  fi
 
 # Hysteria2-H3（v4.9.26）：与上面同一套认证与证书，端口 UDP 443、**不加 salamander**。
 # 实测（netns，160ms RTT，下行 Mbps，Xray / sing-box 客户端）：
@@ -411,7 +414,6 @@ HY2H3EOF
 )
   info "已启用 Hysteria2-H3 直连节点: UDP ${HY2_H3_PORT}（无混淆，标准 HTTP/3 形态）"
 fi
-  info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆）"
 fi
 
 info "写入 /etc/nginx/nginx.conf ..."
@@ -446,6 +448,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
   printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
   printf 'FEATURE_HY2_H3=%q\n'    "$FEATURE_HY2_H3"
+  printf 'FEATURE_HY2_OBFS=%q\n'  "${FEATURE_HY2_OBFS:-false}"
   printf 'HY2_H3_PORT=%q\n'       "${HY2_H3_PORT:-443}"
   printf 'FEATURE_H2_DIRECT=%q\n' "$FEATURE_H2_DIRECT"
   printf 'FEATURE_PORT_HOPPING=%q\n' "${FEATURE_PORT_HOPPING:-false}"

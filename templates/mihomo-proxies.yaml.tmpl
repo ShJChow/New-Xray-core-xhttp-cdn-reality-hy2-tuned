@@ -134,7 +134,7 @@ proxies:
       - h3
   #>>FEATURE_HY2_H3
 
-  #<<FEATURE_HY2
+  #<<FEATURE_HY2_OBFS
   # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
   #    inbound 提供，支持 Brutal 拥塞控制、0-RTT 握手与连接迁移。
   - name: Hysteria2-Obfs-Direct${NODE_SUFFIX}
@@ -150,7 +150,7 @@ proxies:
     down: "${HY2_DOWN_MBPS} Mbps"
     alpn:
       - h3
-  #>>FEATURE_HY2
+  #>>FEATURE_HY2_OBFS
 
   # ---------- TCP 兜底（UDP/QUIC 被封时使用）----------
   - name: VLESS-Reality-Vision-Direct${NODE_SUFFIX}

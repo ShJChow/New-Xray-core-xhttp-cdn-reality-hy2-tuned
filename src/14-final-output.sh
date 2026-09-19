@@ -37,19 +37,24 @@ else
   echo "h2-direct:      未启用"
 fi
 if [[ "$FEATURE_HY2" == true ]]; then
-  echo "Hysteria2:      UDP ${HY2_PORT}"
-  echo "  认证密码:     ${HY2_PASSWORD}"
-  echo "  混淆:         salamander（Xray finalmask）"
-  echo "  混淆密码:     ${OBFS_PASSWORD}"
-  echo "  ※ 两个密码是独立的值，客户端 password 与 obfs-password 都要填对"
   if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-    echo "Hysteria2-H3:   UDP ${HY2_H3_PORT:-443}（同一认证密码，无混淆，标准 HTTP/3 形态）"
+    echo "Hysteria2-H3:   UDP ${HY2_H3_PORT:-443}（无混淆，标准 HTTP/3 形态）"
+    echo "  认证密码:     ${HY2_PASSWORD}"
+  fi
+  if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
+    echo "Hysteria2-obfs: UDP ${HY2_PORT}（同一认证密码）"
+    echo "  混淆:         salamander（Xray finalmask）"
+    echo "  混淆密码:     ${OBFS_PASSWORD}"
+    echo "  ※ 两个密码是独立的值，客户端 password 与 obfs-password 都要填对"
   fi
 else
   echo "Hysteria2:      未启用"
 fi
+# 只有开了混淆节点才提示放行 8443；不能用 ${VAR:+...}，值为 "false" 时它也会展开
+_HY2_OBFS_PORT_NOTE=""
+[[ "${FEATURE_HY2_OBFS:-false}" == true ]] && _HY2_OBFS_PORT_NOTE="、UDP ${HY2_PORT}"
 if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true || "$FEATURE_H2_DIRECT" == true ]]; then
-  echo -e "${RED}※ 直连节点需要在云厂商安全组放行 UDP ${H3_PORT}、UDP ${HY2_PORT}、UDP ${HY2_H3_PORT:-443} 与 TCP ${H2_PORT}${NC}"
+  echo -e "${RED}※ 直连节点需要在云厂商安全组放行 UDP ${H3_PORT}、UDP ${HY2_H3_PORT:-443}${_HY2_OBFS_PORT_NOTE} 与 TCP ${H2_PORT}${NC}"
   echo "  安全组在虚拟机外面，本机 ss 显示监听正常也可能被云平台丢包。"
 fi
 if [[ "$FEATURE_CDN_ECH" == true ]]; then
