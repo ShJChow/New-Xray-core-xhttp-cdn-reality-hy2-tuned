@@ -118,7 +118,7 @@ check_udp_port_conflict() {
   command -v ss >/dev/null 2>&1 || return 0
   local p
 
-  for p in "${H3_PORT}:FEATURE_H3_DIRECT:h3-direct" "${HY2_PORT}:FEATURE_HY2:Hysteria2-obfs"; do
+  for p in "${H3_PORT}:FEATURE_H3_DIRECT:h3-direct" "${HY2_PORT}:FEATURE_HY2:Hysteria2-obfs" "${HY2_H3_PORT:-443}:FEATURE_HY2_H3:Hysteria2-H3"; do
     local port="${p%%:*}" rest="${p#*:}"
     local var="${rest%%:*}" name="${rest#*:}"
     [[ "${!var}" == true ]] || continue

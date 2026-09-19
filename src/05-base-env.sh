@@ -61,6 +61,15 @@ ensure_firewall_ports() {
       iptables -I INPUT 2 -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
     iptables -C INPUT -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_8443 -j DROP 2>/dev/null || \
       iptables -I INPUT 3 -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_8443 -j DROP 2>/dev/null || true
+    # Hysteria2-H3（UDP 443）不加 salamander，未认证者可以完成 QUIC 握手，同样套上握手限速
+    if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
+      iptables -C INPUT -p udp --dport 443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT 1 -p udp --dport 443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+      iptables -C INPUT -p udp --dport 443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || \
+        iptables -I INPUT 2 -p udp --dport 443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+      iptables -C INPUT -p udp --dport 443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_443 -j DROP 2>/dev/null || \
+        iptables -I INPUT 3 -p udp --dport 443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy_qdos_443 -j DROP 2>/dev/null || true
+    fi
   fi
   if command -v ip6tables >/dev/null 2>&1; then
     for port in 80 443 8443 8445 8446; do
@@ -74,6 +83,15 @@ ensure_firewall_ports() {
       ip6tables -I INPUT 2 -p udp --dport 8443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
     ip6tables -C INPUT -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_8443 -j DROP 2>/dev/null || \
       ip6tables -I INPUT 3 -p udp --dport 8443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_8443 -j DROP 2>/dev/null || true
+    # Hysteria2-H3（UDP 443）不加 salamander，未认证者可以完成 QUIC 握手，同样套上握手限速
+    if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
+      ip6tables -C INPUT -p udp --dport 443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+        ip6tables -I INPUT 1 -p udp --dport 443 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+      ip6tables -C INPUT -p udp --dport 443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || \
+        ip6tables -I INPUT 2 -p udp --dport 443 -m conntrack --ctstate INVALID -j DROP 2>/dev/null || true
+      ip6tables -C INPUT -p udp --dport 443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_443 -j DROP 2>/dev/null || \
+        ip6tables -I INPUT 3 -p udp --dport 443 -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name hy6_qdos_443 -j DROP 2>/dev/null || true
+    fi
   fi
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
     ufw allow 80/tcp >/dev/null 2>&1 || true

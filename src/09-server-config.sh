@@ -146,6 +146,7 @@ CERT_KEY="/etc/ssl/private/private.key"
 XRAY_H3_DIRECT_INBOUND=""
 XRAY_H2_DIRECT_INBOUND=""
 XRAY_HY2_INBOUND=""
+XRAY_HY2_H3_INBOUND=""
 
 if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
   if [[ "$FEATURE_H3_DIRECT" == true || "$FEATURE_HY2" == true || "$FEATURE_H2_DIRECT" == true ]]; then
@@ -155,6 +156,7 @@ if [[ ! -s "${ACME_CERT_HOME}/fullchain.cer" ]]; then
     FEATURE_HY2=false
   fi
 fi
+[[ "$FEATURE_HY2" == true ]] || FEATURE_HY2_H3=false
 
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
   XRAY_H3_DIRECT_INBOUND=$(cat <<H3EOF
@@ -337,6 +339,78 @@ if [[ "$FEATURE_HY2" == true ]]; then
         }
 HY2EOF
 )
+
+# Hysteria2-H3（v4.9.26）：与上面同一套认证与证书，端口 UDP 443、**不加 salamander**。
+# 实测（netns，160ms RTT，下行 Mbps，Xray / sing-box 客户端）：
+#   1000↓300↑ 无丢包  H3-443 257 / 263   Obfs-8443 227 / 206   Reality-Vision 198
+#   1000↓300↑ 1%丢包  H3-443 159 / 132   Obfs-8443 126 / 108   Reality-Vision 128
+#   300↓50↑   1%丢包  H3-443 129 / 139   Obfs-8443 127 / 118   Reality-Vision 108
+# 上行与 Obfs-8443 持平（范围重叠）。去掉混淆后流量就是标准 HTTP/3，伪装到本机站点。
+# 代价是未认证者能完成 QUIC 握手，所以防火墙对 UDP 443 同样加了每源 IP 50/s 的握手限速。
+if [[ "$FEATURE_HY2_H3" == true ]]; then
+  XRAY_HY2_H3_INBOUND=$(cat <<HY2H3EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "tag": "hy2-h3-443",
+            "port": ${HY2_H3_PORT},
+            "protocol": "hysteria",
+            "settings": {
+                "version": 2,
+                "clients": [
+                    {
+                        "auth": "${HY2_PASSWORD}",
+                        "level": 0
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "hysteria",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h3"],
+                    // 只谈 TLS 1.3。注意不能靠「删掉这行」来要最新特性——
+                    // 删掉后 Xray 会退回它自己的默认下限（更低），
+                    // 所以这里显式写死 1.3。
+                    "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
+                    // 只接受证书覆盖的 SNI；未知 SNI 直接拒绝握手，
+                    // 避免本入站被当作任意 SNI 的 TLS 前置来探测或滥用。
+                    "rejectUnknownSni": true,
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ]
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "udpIdleTimeout": 60,
+                    "masquerade": {
+                        "type": "proxy",
+                        "url": "https://127.0.0.1:8003",
+                        "rewriteHost": false,
+                        "insecure": true
+                    }
+                },
+                "sockopt": {
+                    "tcpFastOpen": true,
+                    "tcpcongestion": "brutal"
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+HY2H3EOF
+)
+  info "已启用 Hysteria2-H3 直连节点: UDP ${HY2_H3_PORT}（无混淆，标准 HTTP/3 形态）"
+fi
   info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆）"
 fi
 
@@ -371,6 +445,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'PROJECT_VERSION=%q\n'   "$PROJECT_VERSION"
   printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
   printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
+  printf 'FEATURE_HY2_H3=%q\n'    "$FEATURE_HY2_H3"
+  printf 'HY2_H3_PORT=%q\n'       "${HY2_H3_PORT:-443}"
   printf 'FEATURE_H2_DIRECT=%q\n' "$FEATURE_H2_DIRECT"
   printf 'FEATURE_PORT_HOPPING=%q\n' "${FEATURE_PORT_HOPPING:-false}"
   printf 'H3_PORT=%q\n'           "$H3_PORT"

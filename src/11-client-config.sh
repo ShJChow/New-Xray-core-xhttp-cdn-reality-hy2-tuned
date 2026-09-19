@@ -223,7 +223,14 @@ else
   MIHOMO_HY2_PORTS_LINE=""
 fi
 
-info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Reality x2 + Reality-up-CDN-down"
+# Hysteria2-H3（v4.9.26）：UDP 443、无混淆，其余与 Hysteria2-Obfs-Direct 相同。
+if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
+  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-H3-Direct${NODE_SUFFIX}"
+else
+  HY2_H3_NODE_LINE=""
+fi
+
+info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-obfs(${FEATURE_HY2}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
@@ -266,7 +273,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_UP_CDN_DOWN_MIHOMO; do
+  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_UP_CDN_DOWN_MIHOMO; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else

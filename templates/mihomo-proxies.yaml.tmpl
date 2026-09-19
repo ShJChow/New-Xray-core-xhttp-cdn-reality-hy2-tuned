@@ -119,6 +119,21 @@ proxies:
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
   #>>FEATURE_H2_DIRECT
 
+  #<<FEATURE_HY2_H3
+  # Hysteria2-H3（UDP 443，无混淆）：流量形态即标准 HTTP/3，实测下行三种线路条件下均为全节点最快。
+  - name: Hysteria2-H3-Direct${NODE_SUFFIX}
+    type: hysteria2
+    server: ${REALITY_DOMAIN}
+    port: ${HY2_H3_PORT}
+    password: ${HY2_PASSWORD}
+    sni: ${REALITY_DOMAIN}
+    skip-cert-verify: false
+    up: "${HY2_UP_MBPS} Mbps"
+    down: "${HY2_DOWN_MBPS} Mbps"
+    alpn:
+      - h3
+  #>>FEATURE_HY2_H3
+
   #<<FEATURE_HY2
   # 3. Hysteria2 + Salamander 混淆（UDP ${HY2_PORT}）：由 Xray 原生 hysteria
   #    inbound 提供，支持 Brutal 拥塞控制、0-RTT 握手与连接迁移。

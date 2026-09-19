@@ -202,6 +202,9 @@ cmd_info() {
     echo "    混淆:          salamander（Xray finalmask）"
     echo "    混淆密码:      ${OBFS_PASSWORD}"
     echo "    ↑ 两个密码是独立的值，客户端两处都要填对才能握手"
+    if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
+      echo "  Hysteria2-H3:    UDP ${HY2_H3_PORT:-443}（同一认证密码，无混淆，标准 HTTP/3 形态）"
+    fi
   else
     echo "  Hysteria2:       未启用"
   fi
