@@ -21,7 +21,9 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
 # Shadowrocket 专属订阅（包含小火箭完全兼容的 REALITY、Hy2；若启用 FEATURE_CDN_H2 则附带）
 {
-  grep -E 'Reality-Vision|Hysteria2-.*[Oo]bfs' "$USER_HOME/client-config.txt" || true
+  # v4.9.27：同时下发 Hysteria2-H3-Direct（UDP 443 无混淆）。小火箭原生支持 Hysteria2，
+  # 此前只匹配带 Obfs 的那条，新节点在新装机器上会漏掉。
+  grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" || true
   if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
     echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
   fi

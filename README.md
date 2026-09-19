@@ -2121,6 +2121,7 @@ Reality-Up-CDN-Down 的上行走同一条路径，有同样的上限。
   （实测对下行无影响，防持密码者伪造高声明让服务端硬发），窗口等其余参数保持官方默认——
   官方默认初始窗口 8M/20M 与 sbbox v2.7.10 的实测最佳值等效。
 - 回归：`SAMPLES=25 run_test.py` 12/12 PASS；按订阅链接的 Xray 内核兼容性测试 14 条全部 PASS。
+- **v4.9.27 补丁**：Shadowrocket 专属订阅的节点过滤此前只匹配带 `Obfs` 的 Hysteria2，新装机器上会漏掉 Hysteria2-H3-Direct；已改为同时下发。
 
 ---
 
