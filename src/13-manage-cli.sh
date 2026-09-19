@@ -1174,7 +1174,12 @@ for home in user_homes:
             line_str = re.sub(r'\s*([&?])\s*', r'\1', line.strip())
             if not line_str:
                 continue
-            if ('-cdn-' in line_str or 'cdn.' in line_str) and 'reality-up-cdn-down' not in line_str:
+            # v4.9.29：按节点名（URI fragment）不区分大小写匹配。v4.9.21 改名后节点名是
+            # VLESS-Reality-Up-CDN-Down，原先按小写 'reality-up-cdn-down' 匹配不上，
+            # 分离节点被当成普通 CDN 节点在顶层加了 &ech=（那是 Reality 腿，不该有）。
+            node_name = urllib.parse.unquote(line_str.rsplit('#', 1)[-1]).lower()
+            is_split = 'reality-up-cdn-down' in node_name
+            if not is_split and ('-cdn-' in node_name or 'cdn-up' in node_name):
                 if enable:
                     if '&ech=' in line_str:
                         line_str = re.sub(r'&ech=[^&#]*', f'&ech={ech_query_enc}', line_str)
@@ -1182,14 +1187,16 @@ for home in user_homes:
                         line_str = re.sub(r'(&security=tls)', f'\\g<1>&ech={ech_query_enc}', line_str)
                 else:
                     line_str = re.sub(r'&ech=[^&#]*', '', line_str)
-            elif 'reality-up-cdn-down' in line_str:
+            elif is_split:
                 m = re.search(r'&extra=([^#]+)', line_str)
                 if m:
                     try:
                         extra_json = json.loads(urllib.parse.unquote(m.group(1)))
                         ds_tls = extra_json.get('downloadSettings', {}).get('tlsSettings', {})
                         if enable:
-                            ds_tls['ech'] = ech_query_enc
+                            # 放进 JSON 的必须是原文：整个 extra 随后会整体 quote 一次，
+                            # 塞已编码的串会变成双重编码（%252B），客户端解不出 DoH 地址。
+                            ds_tls['ech'] = urllib.parse.unquote(ech_query_enc)
                         else:
                             ds_tls.pop('ech', None)
                         new_extra_enc = urllib.parse.quote(json.dumps(extra_json, separators=(',', ':')), safe='')
@@ -1210,12 +1217,13 @@ for home in user_homes:
                 continue
             for p in cfg.get('proxies', []):
                 name = p.get('name', '')
-                if '-cdn-' in name and 'reality-up-cdn-down' not in name:
+                lname = name.lower()
+                if ('-cdn-' in lname or 'cdn-up' in lname) and 'reality-up-cdn-down' not in lname:
                     if enable:
                         p['ech-opts'] = {'enable': True, 'query-server-name': 'cloudflare-ech.com'}
                     else:
                         p.pop('ech-opts', None)
-                elif 'reality-up-cdn-down' in name:
+                elif 'reality-up-cdn-down' in lname:
                     xopts = p.get('xhttp-opts', {})
                     ds = xopts.get('download-settings', {})
                     if enable:

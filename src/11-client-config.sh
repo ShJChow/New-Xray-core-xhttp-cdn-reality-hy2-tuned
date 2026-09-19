@@ -143,6 +143,19 @@ else
   XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
 
+# 反向分离（v4.9.29，FEATURE_CDN_UP_REALITY_DOWN）：上行 XHTTP+TLS 经 CDN，
+# 下行 downloadSettings 直连 VPS 的 Reality 443。两条腿都落到 8001 入站，
+# 因此共用 UUID2 / path / XHTTP_ENCRYPTION。下行腿的 extra 与 Reality-XHTTP 直连节点一致；
+# 上行腿的 extra 与 CDN 节点一致（含 scMinPostsIntervalMs，packet-up 经 CDN 需要）。
+# IPv6 地址在 JSON 里不加方括号，但冒号要编码。
+REALITY_DOWNLOAD_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${VPS_IP//:/%3A}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22serverName%22%3A%22${REALITY_DOMAIN}%22%2C%22fingerprint%22%3A%22chrome%22%2C%22publicKey%22%3A%22${PUBLIC_KEY}%22%2C%22shortId%22%3A%22${SHORT_ID}%22%2C%22spiderX%22%3A%22%22%7D%2C%22xhttpSettings%22%3A%7B%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A${XPAD_EXTRA_ENC}%7D%7D"
+XPAD_REV_SPLIT_EXTRA_ENC="${XPAD_CDN_EXTRA_ENC%\%7D}%2C${REALITY_DOWNLOAD_ENC}%7D"
+if [[ "${FEATURE_CDN_UP_REALITY_DOWN:-true}" == true ]]; then
+  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
+else
+  CDN_UP_REALITY_DOWN_NODE_LINE=""
+fi
+
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
   MIHOMO_ECH_PROXY_BLOCK=$(cat <<EOF
 
@@ -187,7 +200,7 @@ fi
 
 # h2-cdn: 经 CDN 的 TCP(h2) 链路（默认关闭，FEATURE_CDN_H2=true 时启用）
 if [[ "$FEATURE_CDN_H2" == true ]]; then
-  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
+  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
 else
   H2_CDN_NODE_LINE=""
 fi
@@ -200,7 +213,7 @@ fi
 # CDN 存在则它必然可生成。真正决定它能否用的是 Cloudflare 侧是否开着 HTTP/3
 # （默认开启，`curl -sI https://<cdn域名>/ | grep alt-svc` 可确认），
 # 那是安装脚本无从探测也无权更改的东西，做成开关只会给出虚假的控制感。
-H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 
 # h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
 # alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
@@ -273,7 +286,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO; do
+  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO FEATURE_CDN_UP_REALITY_DOWN; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else

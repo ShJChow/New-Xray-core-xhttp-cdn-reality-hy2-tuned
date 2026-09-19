@@ -47,7 +47,8 @@
 - [二十六、v4.9.24 三项遗留参数的实测判断](#二十六v4924-三项遗留参数的实测判断)
 - [二十七、v4.9.26 新增 Hysteria2-H3-Direct：上下行最佳、流量形态为标准 HTTP/3](#二十七v4926-新增-hysteria2-h3-direct上下行最佳流量形态为标准-http3)
 - [二十八、v4.9.28 Xray 侧 Hysteria2 只保留 Hysteria2-H3-Direct](#二十八v4928-xray-侧-hysteria2-只保留-hysteria2-h3-direct)
-- [二十九、免责声明](#二十九免责声明)
+- [二十九、v4.9.29 反向上下行分离节点、XHTTP 入站启用 VLESS Encryption、ECH 双重编码修复](#二十九v4929-反向上下行分离节点xhttp-入站启用-vless-encryptionech-双重编码修复)
+- [三十、免责声明](#三十免责声明)
 
 ---
 
@@ -315,14 +316,18 @@ flowchart TD
     end
 ```
 
-| # | 节点名称 | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.29） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-TLS-CF-h3` | XHTTP (QUIC) | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
-| **2** | `VLESS-XHTTP-TLS-QUIC` | XHTTP (QUIC) | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
-| **3** | `Hysteria2-QUIC-TLS` | Hysteria 2 | 直连 UDP 8443 | **Brutal 拥塞引擎**，弱网丢包杀手 |
-| **4** | `VLESS-TCP-REALITY-Vision` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
-| **5** | `VLESS-XHTTP-REALITY` | XHTTP-Reality | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
-| **6** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上下行分离 | 上行直连 / 下行 CDN | 兼顾极速上行握手与 CDN 下行大带宽 |
+| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
+| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
+| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
+| **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
+| **6** | `VLESS-Reality-Up-CDN-Down` | 上下行分离 + vlessenc | 上行 Reality 直连 / 下行 CDN | 上行不经 CDN，下行隐藏源站 |
+| **7** | `VLESS-CDN-Up-Reality-Down` | 上下行分离 + vlessenc | 上行 CDN / 下行 Reality 直连 | v4.9.29 新增，见第二十九节 |
+
+> 默认关闭、可按开关恢复：`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（UDP 8443，`FEATURE_HY2_OBFS`）。
+> 下面的吞吐表是 v4.9.x 早期的历史测量，节点名为当时的旧名。
 
 ### 六条核心节点实测吞吐
 
@@ -2180,7 +2185,100 @@ xh diag                                   # 应含「Hysteria2-H3 已监听 UDP 
 
 ---
 
-## 二十九、免责声明
+## 二十九、v4.9.29 反向上下行分离节点、XHTTP 入站启用 VLESS Encryption、ECH 双重编码修复
+
+参考 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的五种模式与安全项，逐项对照本项目：
+
+| 参考项目 | 本项目现状 |
+|---|---|
+| Reality Vision 直连 | 已有 `VLESS-Reality-Vision-Direct` |
+| XHTTP + Reality 上下行不分离 | 已有 `VLESS-Reality-XHTTP-Direct` |
+| **上行 XHTTP+TLS+CDN，下行 XHTTP+Reality** | **本版新增 `VLESS-CDN-Up-Reality-Down`** |
+| XHTTP + TLS + H2（经 CDN） | 已有（`FEATURE_CDN_H2`，默认关；H3 版 `VLESS-XHTTP-CDN-H3` 默认开） |
+| 上行 XHTTP+Reality，下行 XHTTP+TLS+CDN | 已有 `VLESS-Reality-Up-CDN-Down` |
+| **XHTTP 入站启用 vlessenc，Vision 直连不需要** | **本版改为默认开启**（v4.9.21 曾为小火箭改成 none） |
+| 回落可选 Nginx 反代网站 / 用户上传的 `dist` 静态页 | 已有（`FALLBACK_MODE=proxy` / `static`，静态页放 `~/dist/<域名>/index.html`） |
+| xpadding | 已有（`FEATURE_XPADDING`，默认开） |
+| ECH | 已有（`xh ech on`）；**本版修复分离节点下行 ECH 的双重编码** |
+
+### 1.〔新节点〕`VLESS-CDN-Up-Reality-Down`
+
+上行走 XHTTP + TLS 经 Cloudflare CDN，下行 `downloadSettings` 直连 VPS 的 Reality 443。
+和已有的 `VLESS-Reality-Up-CDN-Down` 方向相反，两条都落到同一个 8001 入站
+（Reality 443 回落 → 8001；CDN → Nginx 8003 → 8001），**服务端不需要新入站、不开新端口**。
+
+- v2rayN / Xray 订阅：顶层是 CDN 的 TLS 参数（ECH 开启时带 `&ech=`），`extra.downloadSettings` 是 Reality 参数；
+- Mihomo：父级 TLS + `download-settings` 自带 `reality-opts` 与 `servername`（Reality 域名），并显式 `ech-opts: { enable: false }`，
+  不让下行 Reality 腿继承父级的 ECH；
+- 两条分离节点都有 CDN 腿，不进 TUN 订阅（Cloudflare 免费 CDN 不转发 UDP，见 v4.9.11 说明）；
+- 开关 `FEATURE_CDN_UP_REALITY_DOWN`，默认开。
+
+### 2.〔安全〕8001 XHTTP 入站默认启用 VLESS Encryption
+
+8001 是唯一经过 CDN 的入站。Cloudflare 边缘会解开外层 TLS，不加 vlessenc 时 VLESS 头与载荷对 CDN 是可见的。
+本版起 8001 的 `decryption` 默认使用安装时生成的 vlessenc 密钥（`FEATURE_XHTTP_VLESSENC=true`），
+所有走 8001 的节点——CDN-H2/H3、Reality-XHTTP、两条分离节点——客户端都带 `encryption=<VLESSENC_ENCRYPTION>`。
+Reality-Vision 直连（443 主入站）不经 CDN，保持 `none`。
+
+**代价**：小火箭不支持 vlessenc。它的专属订阅本来就只含 Vision 与 Hysteria2，唯一受影响的是
+`FEATURE_CDN_H2=true` 时附带的 CDN-H2 纯净链接——现在只在 `FEATURE_XHTTP_VLESSENC=false` 时才附带。
+需要回到 v4.9.21 的行为：`FEATURE_XHTTP_VLESSENC=false bash install.sh`。
+
+**负对照（证明服务端确实只接受加密客户端）**：切换后、客户端尚未更新时跑 `run_test.py`，
+带 `encryption: none` 的 4 个 8001 节点（n0/n1/n5/n6）全部超时，其余节点 PASS；客户端改用 vlessenc 后恢复。
+
+### 3.〔修复〕`xh ech` 让分离节点下行 ECH 失效
+
+两处问题叠在一起：
+1. `xh ech on` 改写分离节点时，把**已 URL 编码**的查询串塞进 JSON，再对整个 `extra` 编码一次，
+   订阅里变成 `cloudflare-ech.com%252Bhttps%253A…`，客户端解出来是 `cloudflare-ech.com%2Bhttps%3A…`，Xray 解析不了 DoH 地址；
+2. 它按小写 `reality-up-cdn-down` 匹配节点，v4.9.21 改名为 `VLESS-Reality-Up-CDN-Down` 后匹配不上，
+   分离节点被当作普通 CDN 节点，ECH 被加到了顶层（Reality 腿）上。Mihomo 侧同理漏配。
+
+修复：按 URI 的节点名（fragment）**不区分大小写**匹配；JSON 里写原文，只在整体编码时编一次。
+安装时生成的链接本来就是对的，只有执行过 `xh ech on` 的机器受影响，升级后重新执行一次 `xh ech on` 即可。
+
+### 4.〔实测〕两种上下行分离对比
+
+条件：netns + netem，RTT 160ms、下行 1% 丢包、不限速，每项 3 次（↓60MB / ↑20MB），CDN 腿走真实 Cloudflare。
+
+| 节点 | 下行中位（范围） | 上行中位（范围） |
+|---|---|---|
+| 上行 Reality / 下行 CDN（`VLESS-Reality-Up-CDN-Down`） | **101**（75–123） | 28（26–33） |
+| 上行 CDN / 下行 Reality（`VLESS-CDN-Up-Reality-Down`） | 92（76–98） | **11**（11–11） |
+| 对照：纯 Reality-XHTTP | 95（83–98） | 30（29–30） |
+| 对照：纯 CDN-H3 | 95（87–101） | 87（69–106） |
+
+- 下行三者范围重叠，差别在噪声内；
+- 上行差距明显：上行走 CDN 的分离节点只有 11 Mbps（上行经 CDN 时为 packet-up，每个 POST 都要跨 160ms 往返），
+  上行走 Reality 的受 HTTP/2 1MB 窗口限制约 28（见第二十六节）。
+- 结论：**两条分离节点都保留**，默认推荐 `VLESS-Reality-Up-CDN-Down`；`VLESS-CDN-Up-Reality-Down` 适合只下载、
+  且希望上行（含请求目标）不直连 VPS IP 的场景。上行大的场景用 CDN-H3 或 Hysteria2-H3-Direct。
+
+### 5.〔测试工具〕`tools/xray_rtt_bench.py` 现在能测 CDN 腿
+
+之前在隔离网络空间（netns）里测带 CDN 腿的节点全部「无效」，只有按 IP 直连的 Reality 有数。两个原因：
+- 宿主 `resolv.conf` 指向 `127.0.0.53`（systemd-resolved），netns 里访问不到，CDN 域名解析失败；
+- 装了 Docker 的机器 `FORWARD` 默认策略是 DROP，也没有 netns 网段的 MASQUERADE，出不了公网。
+
+现在运行期会写 `/etc/netns/xbench/resolv.conf` 并插入临时 FORWARD / MASQUERADE 规则，结束时删除，不持久化。
+
+### 6.〔验证〕
+
+```bash
+grep -A2 '"port": 8001' /usr/local/etc/xray/config.json | head; grep -c mlkem768 /usr/local/etc/xray/config.json  # 8001 decryption 为 mlkem768x25519plus…
+python3 tools/xray_compat_test.py /usr/local/nginx/html/sub/<token>/   # 两条分离节点均应 PASS
+```
+
+v4.9.29 线上结果：`run_test.py` 13/13 PASS（新增 n8 `cdn-up-reality-down`，本地 socks 10808）；
+按订阅链接的 Xray 兼容性测试中 v2rayN 订阅 7/7、TUN 订阅 4/4 PASS。
+
+同机 sbbox 的保留端口同步从 `10800-10806` 扩到 `10800-10809`（sbbox v2.7.13），
+两个项目写同一个 sysctl，列表必须一致；本项目写入的列表顺带去掉了已释放的 28443。
+
+---
+
+## 三十、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

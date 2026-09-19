@@ -238,6 +238,12 @@ VLESSENC_ENCRYPTION=$(echo "$VLESSENC_OUTPUT" | awk -F'"' '/Authentication: X255
 VLESSENC_DECRYPTION=$(echo "$VLESSENC_OUTPUT" | awk -F'"' '/Authentication: X25519/{found=1} found && /"decryption"/{print $4; exit}')
 [[ -z "$VLESSENC_ENCRYPTION" ]] && error "未能提取 VLESS Encryption Key，xray vlessenc 输出: $VLESSENC_OUTPUT"
 [[ -z "$VLESSENC_DECRYPTION" ]] && error "未能提取 VLESS Decryption Key，xray vlessenc 输出: $VLESSENC_OUTPUT"
+# 8001 XHTTP 入站（所有经 CDN / Reality 回落的 XHTTP 节点共用）用的一对值
+if [[ "${FEATURE_XHTTP_VLESSENC:-true}" == true ]]; then
+  XHTTP_ENCRYPTION="$VLESSENC_ENCRYPTION"; XHTTP_DECRYPTION="$VLESSENC_DECRYPTION"
+else
+  XHTTP_ENCRYPTION="none"; XHTTP_DECRYPTION="none"
+fi
 if [[ "$IP_CHOICE" == "2" ]]; then
   VPS_IP=$(curl -6 -s --max-time 5 ip.sb)
   [[ -z "$VPS_IP" ]] && error "无法获取 IPv6 地址"

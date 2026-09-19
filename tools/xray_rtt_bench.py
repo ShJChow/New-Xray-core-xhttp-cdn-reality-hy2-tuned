@@ -53,11 +53,23 @@ def ns_up():
               f"ip -n {NS} addr add 10.201.0.2/30 dev xvc", f"ip -n {NS} link set xvc up",
               f"ip -n {NS} link set lo up", f"ip -n {NS} route add default via 10.201.0.1"]:
         sh(c, True)
+    # 经 CDN 的腿要从 netns 出公网（客户端 → Cloudflare 边缘）。FORWARD 默认策略常是 DROP
+    # （装了 Docker 就是），不加这三条时 CDN 节点全部「无效」。只在运行期存在，ns_down 删除，不持久化。
+    for r in NAT_RULES: sh(f"iptables {r.replace('-X', '-I', 1)}", True)
+    # 宿主 resolv.conf 指向 127.0.0.53（systemd-resolved），netns 里访问不到，CDN 域名解析失败。
+    # ip netns exec 会把 /etc/netns/<ns>/resolv.conf 绑定挂载到 /etc/resolv.conf。
+    os.makedirs(f"/etc/netns/{NS}", exist_ok=True)
+    open(f"/etc/netns/{NS}/resolv.conf", "w").write("nameserver 1.1.1.1\nnameserver 8.8.8.8\n")
     shape("xvh", None, RTT/2, LOSS, DOWN)     # 服务端→客户端 = 下行
     shape("xvc", NS, RTT/2, 0, UP)            # 客户端→服务端 = 上行
 
+NAT_RULES = ["-X FORWARD -s 10.201.0.0/30 -j ACCEPT", "-X FORWARD -d 10.201.0.0/30 -j ACCEPT",
+             "-t nat -X POSTROUTING -s 10.201.0.0/30 ! -d 10.201.0.0/30 -j MASQUERADE"]
+
 def ns_down():
-    sh(f"ip netns del {NS}"); sh("ip link del xvh")
+    for r in NAT_RULES:
+        while sh(f"iptables {r.replace('-X', '-D', 1)}").returncode == 0: pass
+    sh(f"ip netns del {NS}"); sh("ip link del xvh"); sh(f"rm -rf /etc/netns/{NS}")
 
 def kill_clients():
     me = os.getpid()

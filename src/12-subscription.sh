@@ -24,7 +24,8 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   # v4.9.27：同时下发 Hysteria2-H3-Direct（UDP 443 无混淆）。小火箭原生支持 Hysteria2，
   # 此前只匹配带 Obfs 的那条，新节点在新装机器上会漏掉。
   grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" || true
-  if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
+  # v4.9.29：8001 开了 vlessenc（FEATURE_XHTTP_VLESSENC）时小火箭连不上 CDN 节点，不再附带
+  if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
     echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
   fi
 } > "$SUB_DIR/shadowrocket-raw.txt"

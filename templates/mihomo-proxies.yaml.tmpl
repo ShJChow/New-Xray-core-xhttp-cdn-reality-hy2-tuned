@@ -20,7 +20,7 @@ proxies:
       - http/1.1
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
-    encryption: none${MIHOMO_ECH_PROXY_BLOCK}
+    encryption: ${XHTTP_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
@@ -49,7 +49,7 @@ proxies:
       - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
-    encryption: none${MIHOMO_ECH_PROXY_BLOCK}
+    encryption: ${XHTTP_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
@@ -180,7 +180,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: "none"
+    encryption: ${XHTTP_ENCRYPTION}
     network: xhttp
     alpn:
       - h2
@@ -208,7 +208,7 @@ proxies:
     udp: true
     flow: ""
     tls: true
-    encryption: "none"
+    encryption: ${XHTTP_ENCRYPTION}
     network: xhttp
     alpn:
       - h2
@@ -245,4 +245,55 @@ proxies:
           h-max-request-times: "600-900"
           h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
   #>>FEATURE_UP_CDN_DOWN_MIHOMO
+
+  #<<FEATURE_CDN_UP_REALITY_DOWN
+  # 反向上下行分离（v4.9.29）：上行 XHTTP+TLS 经 Cloudflare CDN，下行直连 Reality 443。
+  # 与上一条相反，这里父级是 TLS、下行腿是 Reality，不存在 downloadRealityCfg 继承问题；
+  # 下行腿必须自带 reality-opts 与 servername（Reality 域名），并关掉继承来的 ECH。
+  - name: VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}
+    type: vless
+    server: ${CDN_DOMAIN}
+    port: 443
+    uuid: ${UUID2}
+    udp: true
+    flow: ""
+    tls: true
+    encryption: ${XHTTP_ENCRYPTION}
+    network: xhttp
+    alpn:
+      - h2
+      - http/1.1
+    servername: ${CDN_DOMAIN}
+    client-fingerprint: chrome${MIHOMO_ECH_PROXY_BLOCK}
+    xhttp-opts:
+      host: ${CDN_DOMAIN}
+      path: ${XHTTP_PATH}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      reuse-settings:
+        max-concurrency: "16-32"
+        c-max-reuse-times: "0"
+        h-max-request-times: "600-900"
+        h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+      download-settings:
+        server: ${VPS_IP}
+        port: 443
+        tls: true
+        alpn:
+          - h2
+          - http/1.1
+        servername: ${REALITY_DOMAIN}
+        client-fingerprint: chrome
+        ech-opts:
+          enable: false
+        reality-opts:
+          public-key: ${PUBLIC_KEY}
+          short-id: ${SHORT_ID}
+        path: ${XHTTP_PATH}
+        host: ""
+        reuse-settings:
+          max-concurrency: "16-32"
+          c-max-reuse-times: "0"
+          h-max-request-times: "600-900"
+          h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_DOWNLOAD}
+  #>>FEATURE_CDN_UP_REALITY_DOWN
 

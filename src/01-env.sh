@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.28"
+PROJECT_VERSION="4.9.29"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -123,6 +123,19 @@ FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 # 下行腿恢复标准 TLS 1.3 握手；同时扁平化 path/host/reuse-settings 结构。
 # 实测 mihomo v1.19.30+ 完美跑通，0-RTT 极速上行 + CDN 满速下行！
 FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-true}
+
+# FEATURE_CDN_UP_REALITY_DOWN（v4.9.29）：反向的上下行分离节点
+# VLESS-CDN-Up-Reality-Down —— 上行 XHTTP+TLS 经 Cloudflare CDN，下行 XHTTP+Reality 直连。
+# 与 Reality-Up-CDN-Down 一样落到同一个 8001 入站（Reality 443 回落 / Nginx 8003 回源），
+# 服务端不需要新入站。
+FEATURE_CDN_UP_REALITY_DOWN=${FEATURE_CDN_UP_REALITY_DOWN:-true}
+
+# FEATURE_XHTTP_VLESSENC（v4.9.29）：8001 XHTTP 入站启用 VLESS Encryption（默认开启）。
+# 8001 是唯一经过 CDN 的入站，Cloudflare 边缘会解开外层 TLS，不加 vlessenc 时
+# VLESS 头和明文载荷对 CDN 可见。Reality-Vision 直连（443 主入站）不需要，保持 none。
+# 代价：小火箭不支持 vlessenc，开启后它的专属订阅不再附带 VLESS-XHTTP-CDN-H2。
+# 置为 false 回到 v4.9.21 的行为（8001 decryption none）。
+FEATURE_XHTTP_VLESSENC=${FEATURE_XHTTP_VLESSENC:-true}
 
 # FEATURE_PORT_HOPPING：UDP 端口跳跃（默认关闭）。
 # 避免客户端在服务端未配置 nat/iptables 端口段重定向时握手失败，或劫持同机其他 UDP 服务。
