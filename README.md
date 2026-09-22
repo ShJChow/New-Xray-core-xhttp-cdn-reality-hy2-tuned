@@ -356,7 +356,7 @@ flowchart TD
 
 ---
 
-## 六、常见问题与排错
+## 六、常见问题与排错-开发者查看指引
 
 ### 1. Reality 三条节点全都不通 / 提示认证失败？
 Reality 节点的认证在服务端会被记录为 `authentication failed or validation criteria not met`，常见原因及排查方法如下：
