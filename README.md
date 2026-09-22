@@ -107,14 +107,14 @@ bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh
 1. **进入菜单**：输入 `1` 选择 **【ACME 申请证书】**；
 2. **选择申请模式**：
    - **推荐方式 A（80 端口模式）**：输入 `1`（Standalone 模式，需确保 80 端口未被占用且域名 1 已灰云直连解析到本机 IP）；
-   - **推荐方式 B（Cloudflare API 模式）**：输入 `2`（无需停用 80 端口，输入 CF Global API Key 或 Token 即可全自动签发）；
+   - **推荐方式 B（Cloudflare API 模式）**：输入 `2`（无需停用 80 端口，输入 CF Global API Key 或 Token 即可全自动签发）；**最佳推荐**。
 3. **输入主域名与次域名（双域名 SAN 证书）**：
    - **主域名**：输入你的直连域名（如 `reality.example.com`）
    - **泛域名 / 附加域名**：输入你的 CDN 域名（如 `cdn.example.com`）
 4. **安装并输出证书路径**：
    申请成功后，证书会自动保存在 `/root/ygkkkca/` 目录下。
 
-#### 步骤 4：将证书部署到标准路径（一键复制）
+#### 步骤 4：将证书部署到标准路径（一键复制），如果没有自动签发，ssh重连一次主机即可。
 ```bash
 mkdir -p /etc/ssl/private
 cp -f /root/ygkkkca/reality.example.com/fullchain.cer /etc/ssl/private/fullchain.cer
