@@ -26,6 +26,16 @@ ver_ge() {
   [[ "$lowest" == "$2" ]]
 }
 
+try_sysctl() {
+  if sysctl -w "${1}=${2}" >/dev/null 2>&1; then
+    declare -p SYSCTL_APPLIED >/dev/null 2>&1 && SYSCTL_APPLIED+=("${1} = ${2}")
+    return 0
+  else
+    declare -p SYSCTL_SKIPPED >/dev/null 2>&1 && SYSCTL_SKIPPED+=("$1")
+    return 1
+  fi
+}
+
 # 本脚本自身的版本，由安装时的 sed 从占位符替换而来（见本文件末尾）。
 # 不能直接写 ${PROJECT_VERSION}：外层 heredoc 是 quoted 的，不做变量展开。
 #
@@ -1360,8 +1370,8 @@ cmd_ecn() {
       ;;
     on)
       info "正在开启 TCP ECN..."
-      try_sysctl net.ipv4.tcp_ecn 1
-      try_sysctl net.ipv4.tcp_ecn_fallback 1
+      try_sysctl net.ipv4.tcp_ecn 1 || sysctl -w net.ipv4.tcp_ecn=1 >/dev/null 2>&1 || true
+      try_sysctl net.ipv4.tcp_ecn_fallback 1 || sysctl -w net.ipv4.tcp_ecn_fallback=1 >/dev/null 2>&1 || true
       if [[ -f "$SYSCTL_CONF" ]]; then
         sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 1/' "$SYSCTL_CONF" 2>/dev/null || true
         sed -i -E 's/^#?net\.ipv4\.tcp_ecn_fallback[[:space:]]*=.*/net.ipv4.tcp_ecn_fallback = 1/' "$SYSCTL_CONF" 2>/dev/null || true
@@ -1374,7 +1384,7 @@ cmd_ecn() {
       ;;
     off)
       info "正在关闭 TCP ECN..."
-      try_sysctl net.ipv4.tcp_ecn 0
+      try_sysctl net.ipv4.tcp_ecn 0 || sysctl -w net.ipv4.tcp_ecn=0 >/dev/null 2>&1 || true
       if [[ -f "$SYSCTL_CONF" ]]; then
         sed -i -E 's/^#?net\.ipv4\.tcp_ecn[[:space:]]*=.*/net.ipv4.tcp_ecn = 0/' "$SYSCTL_CONF" 2>/dev/null || true
       fi

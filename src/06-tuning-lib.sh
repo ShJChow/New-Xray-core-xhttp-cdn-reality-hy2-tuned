@@ -87,20 +87,22 @@ EOF
   info "已将 DefaultLimitNOFILE 由 ${cur:-未设置} 对齐到 fs.nr_open=${nr_open}（原值越界会导致服务报 205/LIMITS）"
 }
 
+# try_sysctl KEY VALUE —— 试写，如果在系统调优上下文中则记录待落盘
+try_sysctl() {
+  if sysctl -w "${1}=${2}" >/dev/null 2>&1; then
+    declare -p SYSCTL_APPLIED >/dev/null 2>&1 && SYSCTL_APPLIED+=("${1} = ${2}")
+    return 0
+  else
+    declare -p SYSCTL_SKIPPED >/dev/null 2>&1 && SYSCTL_SKIPPED+=("$1")
+    return 1
+  fi
+}
+
 apply_system_tuning() {
   local SYSCTL_APPLIED=() SYSCTL_SKIPPED=() TUNING_BBR_OK=false
   local MEM_MB CPU_CORES ARCH PAGE_SIZE MEM_PAGES
   local TUNE_TIER SOCK_MEM_MAX TCP_MEM_MAX NETDEV_BACKLOG CONNTRACK_MAX
   local BEFORE_QDISC BEFORE_CC BEFORE_RMEM BEFORE_NOFILE AVAILABLE_CC unit
-
-  # try_sysctl KEY VALUE —— 试写，成功则记录待落盘
-  try_sysctl() {
-    if sysctl -w "${1}=${2}" >/dev/null 2>&1; then
-      SYSCTL_APPLIED+=("${1} = ${2}")
-    else
-      SYSCTL_SKIPPED+=("$1")
-    fi
-  }
 
   install -d -m 700 "$STATE_DIR"
 
