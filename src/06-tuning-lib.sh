@@ -115,16 +115,16 @@ apply_system_tuning() {
 
   local SOCK_MEM_DEF UDP_MEM_MIN
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="large";  SOCK_MEM_MAX=134217728; TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=2097152; UDP_MEM_MIN=131072
   elif [[ "$MEM_MB" -ge 4096 ]]; then
-    TUNE_TIER="medium"; SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="medium"; SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=1048576; UDP_MEM_MIN=65536
   elif [[ "$MEM_MB" -ge 1536 ]]; then
-    TUNE_TIER="entry";  SOCK_MEM_MAX=16777216; TCP_MEM_MAX=8388608;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=65536; NETDEV_BUDGET=""; OPTMEM_MAX=65536
+    TUNE_TIER="entry";  SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=65536; NETDEV_BUDGET=""; OPTMEM_MAX=65536
     SOCK_MEM_DEF=524288; UDP_MEM_MIN=32768
   else
-    TUNE_TIER="small";  SOCK_MEM_MAX=4194304;  TCP_MEM_MAX=2097152;  NETDEV_BACKLOG=4096;  CONNTRACK_MAX=0; NETDEV_BUDGET=""; OPTMEM_MAX=65536
+    TUNE_TIER="small";  SOCK_MEM_MAX=8388608;  TCP_MEM_MAX=4194304;  NETDEV_BACKLOG=4096;  CONNTRACK_MAX=0; NETDEV_BUDGET=""; OPTMEM_MAX=65536
     SOCK_MEM_DEF=262144; UDP_MEM_MIN=16384
   fi
 
@@ -161,8 +161,9 @@ apply_system_tuning() {
   try_sysctl net.ipv4.udp_wmem_min "$UDP_MEM_MIN"
   # 中间值是**初始**默认值，autotuning 会在 min~max 之间增长；调大它影响的是
   # 连接建立初期与短流，对过 CDN 的高 RTT（100~300ms）链路少几个 RTT 的爬升。
-  try_sysctl net.ipv4.tcp_rmem "4096 131072 ${TCP_MEM_MAX}"
-  try_sysctl net.ipv4.tcp_wmem "4096 131072 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_rmem "4096 87380 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_wmem "4096 65536 ${TCP_MEM_MAX}"
+  try_sysctl net.ipv4.tcp_limit_output_bytes 4194304
   # 接收缓冲中留给协议开销的比例。设为 1（保留 50% 内存作为通告窗口），让 64MB/32MB
   # 缓冲能通告出 32MB/16MB 的接收窗口，突破跨境高延迟（200ms+）下的单流千兆吞吐瓶颈。
   try_sysctl net.ipv4.tcp_adv_win_scale 1
@@ -200,7 +201,7 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_max_syn_backlog "$NETDEV_BACKLOG"
   try_sysctl net.ipv4.tcp_max_tw_buckets 65536
   try_sysctl net.ipv4.ip_local_port_range "1024 65535"
-  try_sysctl net.ipv4.ip_local_reserved_ports "8001,8003,8443,8445,8446,10489,10800-10809,11801-11805,18793,23106,44116"
+  try_sysctl net.ipv4.ip_local_reserved_ports "8001,8003,8443,8445,8446,10489,10800-10809,11801-11805,18793,23106,28443,44116"
 
   # conntrack 仅在模块已加载时调整；未加载时写入会失败并留下无用告警
   if [[ "$CONNTRACK_MAX" -gt 0 ]] && [[ -r /proc/sys/net/netfilter/nf_conntrack_max ]]; then
@@ -333,7 +334,15 @@ apply_system_tuning() {
       || iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
   fi
 
-  # ---------- 落盘 ----------
+  # ---------- 落盘（清理冲突并持久化） ----------
+  local _conflicts=(/etc/sysctl.d/99-joeyblog.conf /etc/sysctl.d/99-sysctl.conf)
+  for _cf in "${_conflicts[@]}"; do
+    if [[ -f "$_cf" ]]; then
+      rm -f "$_cf"
+      info "已清理冲突的第三方配置: $_cf"
+    fi
+  done
+
   if [[ ${#SYSCTL_APPLIED[@]} -gt 0 ]]; then
     {
       echo "# ${PROJECT_NAME} 流控调优，由 ${MANAGE_CMD} tuning on 生成"
@@ -429,7 +438,21 @@ DROPINEOF
 
   # ---------- Before / After ----------
   echo ""
+  local _buf_mb _cap_mb
+  if [[ "$MEM_MB" -ge 16384 ]]; then _buf_mb=128; _cap_mb=128;
+  elif [[ "$MEM_MB" -ge 4096  ]]; then _buf_mb=64; _cap_mb=64;
+  elif [[ "$MEM_MB" -ge 1536  ]]; then _buf_mb=32; _cap_mb=32;
+  else _buf_mb=16; _cap_mb=16; fi
+
   echo -e "${YELLOW}[+] 流控调优 Before / After${NC}"
+  echo -e "  推荐缓冲区：             ${GREEN}${_buf_mb}MB${NC}"
+  echo -e "  内存保护上限：           ${GREEN}${_cap_mb}MB${NC}"
+  echo -e "  队列算法：               ${GREEN}$(sysctl_get net.core.default_qdisc)${NC}"
+  echo -e "  拥塞控制：               ${GREEN}$(sysctl_get net.ipv4.tcp_congestion_control) (BBR $(detect_bbr_version))${NC}"
+  echo -e "  tcp_wmem:                 ${GREEN}$(sysctl_get net.ipv4.tcp_wmem)${NC}"
+  echo -e "  tcp_rmem:                 ${GREEN}$(sysctl_get net.ipv4.tcp_rmem)${NC}"
+  echo -e "  tcp_limit_output_bytes:   ${GREEN}$(sysctl_get net.ipv4.tcp_limit_output_bytes)${NC}"
+  echo -e "  tcp_slow_start_after_idle: ${GREEN}$(sysctl_get net.ipv4.tcp_slow_start_after_idle)${NC}"
   printf '  %-28s %-18s -> %s\n' "net.core.default_qdisc"          "${BEFORE_QDISC:-n/a}" "$(sysctl_get net.core.default_qdisc)"
   printf '  %-28s %-18s -> %s\n' "net.ipv4.tcp_congestion_control" "${BEFORE_CC:-n/a}"    "$(sysctl_get net.ipv4.tcp_congestion_control)"
   printf '  %-28s %-18s -> %s\n' "net.core.rmem_max"               "${BEFORE_RMEM:-n/a}"  "$(sysctl_get net.core.rmem_max)"
@@ -549,10 +572,12 @@ show_linux_tuning() {
   echo -e "${CYAN}   Linux 客户端千兆 TCP 缓冲区与 BDP 调优指南         ${NC}"
   echo -e "${CYAN}======================================================${NC}"
   cat <<'EOF'
-sudo sysctl -w net.core.rmem_max=67108864
-sudo sysctl -w net.core.wmem_max=67108864
-sudo sysctl -w net.ipv4.tcp_rmem="4096 262144 67108864"
-sudo sysctl -w net.ipv4.tcp_wmem="4096 262144 67108864"
+sudo sysctl -w net.core.rmem_max=134217728
+sudo sysctl -w net.core.wmem_max=134217728
+sudo sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864"
+sudo sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864"
+sudo sysctl -w net.ipv4.tcp_limit_output_bytes=4194304
+sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0
 sudo sysctl -w net.ipv4.tcp_adv_win_scale=1
 sudo sysctl -w net.ipv4.tcp_fastopen=3
 sudo sysctl -w net.core.default_qdisc=fq

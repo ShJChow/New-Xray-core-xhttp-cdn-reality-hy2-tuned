@@ -315,8 +315,8 @@ fi
 
 # ---- 内存分档（控制后续所有派生参数） ----
 # NETDEV_BUDGET: NAPI 每轮 poll 包数上限，默认 300 在高 PPS 下 softirq 收不完
-if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000; SWAPPINESS=10
-elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=33554432; TCP_MAX=16777216; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000; SWAPPINESS=10
+if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=134217728; TCP_MAX=67108864; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000; SWAPPINESS=10
+elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000; SWAPPINESS=10
 else                                 TIER=small;  SOCK_MAX=16777216; TCP_MAX=8388608;  BACKLOG=16384; CONNTRACK=0; NETDEV_BUDGET=""; SWAPPINESS=30
 fi
 
@@ -361,8 +361,9 @@ try net.core.wmem_max "$SOCK_MAX"
 try net.core.rmem_default 4194304
 try net.core.wmem_default 4194304
 # tcp_rmem/wmem 中间值是初始值，autotuning 在 min~max 间动态增长
-try net.ipv4.tcp_rmem "4096 262144 ${TCP_MAX}"
-try net.ipv4.tcp_wmem "4096 262144 ${TCP_MAX}"
+try net.ipv4.tcp_rmem "4096 87380 ${TCP_MAX}"
+try net.ipv4.tcp_wmem "4096 65536 ${TCP_MAX}"
+try net.ipv4.tcp_limit_output_bytes 4194304
 # 接收缓冲中留给通告窗口比例：1 保留 50% 内存作为窗口，最高可通告 32MB 窗口
 try net.ipv4.tcp_adv_win_scale 1
 try net.ipv4.tcp_autocorking 1

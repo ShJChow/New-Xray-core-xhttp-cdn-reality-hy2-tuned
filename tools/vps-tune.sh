@@ -158,8 +158,8 @@ else log "    未检测到活动规则（云厂商安全组可能在机器外层
 # ---- 内存分档：所有派生值都从这里出 ----
 # NETDEV_BUDGET：NAPI 每轮 poll 的包数上限，默认 300 在高并发小包下 softirq 收不完
 # （/proc/net/softnet_stat 的 time_squeeze 非零）。小内存档不写，保持默认。
-if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000
-elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=33554432; TCP_MAX=16777216; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000
+if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=134217728; TCP_MAX=67108864; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000
+elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000
 else                                 TIER=small;  SOCK_MAX=16777216; TCP_MAX=8388608;  BACKLOG=16384; CONNTRACK=0; NETDEV_BUDGET=""
 fi
 kv "调优档位" "$TIER（socket 上限 $((SOCK_MAX/1024/1024)) MB / backlog ${BACKLOG}）"
@@ -258,8 +258,9 @@ try net.core.wmem_max "$SOCK_MAX"
 try net.core.rmem_default 1048576
 try net.core.wmem_default 1048576
 # 中间值是**初始**默认值，autotuning 会在 min~max 间增长；调大它省掉启动期几个 RTT 的爬升
-try net.ipv4.tcp_rmem "4096 262144 ${TCP_MAX}"
-try net.ipv4.tcp_wmem "4096 262144 ${TCP_MAX}"
+try net.ipv4.tcp_rmem "4096 87380 ${TCP_MAX}"
+try net.ipv4.tcp_wmem "4096 65536 ${TCP_MAX}"
+try net.ipv4.tcp_limit_output_bytes 4194304
 # 单位是「页」，PAGESIZE 已在上面运行时查询（L4：aarch64 常为 64K，写死 /4 会偏大 16 倍）。
 # 量纲断言：页数 × 页大小必须回算出物理内存（±5%）。页大小取错时这里会当场发现——
 # 靠肉眼看 tcp_mem 的数值是发现不了的，那正是 L4 的失败方式。

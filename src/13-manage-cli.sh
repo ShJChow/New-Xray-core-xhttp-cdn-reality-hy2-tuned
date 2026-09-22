@@ -118,23 +118,26 @@ cmd_status() {
   fi
 
   echo -e "\n${CYAN}[+] 流控状态${NC}"
-  printf '  %-32s %s\n' "net.core.default_qdisc"          "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo n/a)"
-  printf '  %-32s %s\n' "net.ipv4.tcp_congestion_control" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)"
-  # BBR 有 v1 / v3 两代，sysctl 里都叫 "bbr"，只看名字分不出来。
-  # v3 把 ECN 与丢包率纳入控制环、ProbeBW 改为轮次推进、并预留 ~15% Headroom。
-  printf '  %-32s %s\n' "  └─ BBR 版本" "$(detect_bbr_version)"
-  printf '  %-32s %s\n' "net.core.rmem_max"               "$(sysctl -n net.core.rmem_max 2>/dev/null || echo n/a)"
-  printf '  %-32s %s\n' "net.ipv4.tcp_fastopen"           "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo n/a)"
-  # 机型/档位与 bufferSize 现场探测：这些变量只在 tuning_on 的流程里赋值，
-  # status 是独立子命令、不经过那段代码，直接引用永远是空的（显示 "? 核 / 未设置"）。
-  # 分档阈值与 tuning_on 保持一致（>=16384 large / >=4096 medium / 其余 small）。
-  local _cores _mem _arch _tier _buf
+  local _cores _mem _arch _tier _buf _buf_mb _cap_mb
   _cores=$(nproc 2>/dev/null || echo '?')
   _mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
   _arch=$(uname -m 2>/dev/null || echo unknown)
-  if   [[ "$_mem" -ge 16384 ]]; then _tier=large
-  elif [[ "$_mem" -ge 4096  ]]; then _tier=medium
-  else _tier=small; fi
+  if   [[ "$_mem" -ge 16384 ]]; then _tier=large; _buf_mb=128; _cap_mb=128;
+  elif [[ "$_mem" -ge 4096  ]]; then _tier=medium; _buf_mb=64; _cap_mb=64;
+  elif [[ "$_mem" -ge 1536  ]]; then _tier=entry; _buf_mb=32; _cap_mb=32;
+  else _tier=small; _buf_mb=16; _cap_mb=16; fi
+
+  echo -e "  推荐缓冲区：             ${GREEN}${_buf_mb}MB${NC}"
+  echo -e "  内存保护上限：           ${GREEN}${_cap_mb}MB${NC}"
+  echo -e "  队列算法：               ${GREEN}$(sysctl -n net.core.default_qdisc 2>/dev/null || echo n/a)${NC}"
+  echo -e "  拥塞控制：               ${GREEN}$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)${NC}"
+  printf '  %-32s %s\n' "  └─ BBR 版本" "$(detect_bbr_version)"
+  echo -e "  tcp_wmem:                 ${GREEN}$(sysctl -n net.ipv4.tcp_wmem 2>/dev/null || echo n/a)${NC}"
+  echo -e "  tcp_rmem:                 ${GREEN}$(sysctl -n net.ipv4.tcp_rmem 2>/dev/null || echo n/a)${NC}"
+  echo -e "  tcp_limit_output_bytes:   ${GREEN}$(sysctl -n net.ipv4.tcp_limit_output_bytes 2>/dev/null || echo n/a)${NC}"
+  echo -e "  tcp_slow_start_after_idle: ${GREEN}$(sysctl -n net.ipv4.tcp_slow_start_after_idle 2>/dev/null || echo n/a)${NC}"
+  printf '  %-32s %s\n' "net.core.rmem_max"               "$(sysctl -n net.core.rmem_max 2>/dev/null || echo n/a)"
+  printf '  %-32s %s\n' "net.ipv4.tcp_fastopen"           "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo n/a)"
   # config.json 带 // 注释（JSONC），jq 解析不了，用文本提取
   _buf=$(grep -oE '"bufferSize"[[:space:]]*:[[:space:]]*[0-9]+' "$XRAY_CONF" 2>/dev/null \
          | head -1 | grep -oE '[0-9]+$')
@@ -801,13 +804,36 @@ cmd_update() {
 cmd_tuning() {
   case "${1:-show}" in
     show)
+      local _mem _buf_mb _cap_mb
+      _mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+      if   [[ "$_mem" -ge 16384 ]]; then _buf_mb=128; _cap_mb=128;
+      elif [[ "$_mem" -ge 4096  ]]; then _buf_mb=64; _cap_mb=64;
+      elif [[ "$_mem" -ge 1536  ]]; then _buf_mb=32; _cap_mb=32;
+      else _buf_mb=16; _cap_mb=16; fi
+
+      echo -e "${CYAN}[+] 流控状态摘要${NC}"
+      echo -e "  推荐缓冲区：             ${GREEN}${_buf_mb}MB${NC}"
+      echo -e "  内存保护上限：           ${GREEN}${_cap_mb}MB${NC}"
+      echo -e "  队列算法：               ${GREEN}$(sysctl -n net.core.default_qdisc 2>/dev/null || echo n/a)${NC}"
+      echo -e "  拥塞控制：               ${GREEN}$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo n/a)${NC}"
+      printf '  %-32s %s\n' "  └─ BBR 版本" "$(detect_bbr_version)"
+      echo -e "  tcp_wmem:                 ${GREEN}$(sysctl -n net.ipv4.tcp_wmem 2>/dev/null || echo n/a)${NC}"
+      echo -e "  tcp_rmem:                 ${GREEN}$(sysctl -n net.ipv4.tcp_rmem 2>/dev/null || echo n/a)${NC}"
+      echo -e "  tcp_limit_output_bytes:   ${GREEN}$(sysctl -n net.ipv4.tcp_limit_output_bytes 2>/dev/null || echo n/a)${NC}"
+      echo -e "  tcp_slow_start_after_idle: ${GREEN}$(sysctl -n net.ipv4.tcp_slow_start_after_idle 2>/dev/null || echo n/a)${NC}"
+      echo ""
+
       if [[ -f "$SYSCTL_CONF" ]]; then
         echo -e "${CYAN}[+] ${SYSCTL_CONF}${NC}"
         cat "$SYSCTL_CONF"
+      elif [[ -f /etc/sysctl.d/99-sbbox.conf ]]; then
+        echo -e "${CYAN}[+] /etc/sysctl.d/99-sbbox.conf（已由 sbbox 启用生效）${NC}"
+        cat /etc/sysctl.d/99-sbbox.conf
       else
         info "系统层调优未开启。安装时默认自动执行（跳过用 FEATURE_AUTO_TUNING=false），也可手动 ${MANAGE_CMD} tuning on"
       fi
       [[ -f "$LIMITS_CONF" ]] && { echo ""; echo -e "${CYAN}[+] ${LIMITS_CONF}${NC}"; cat "$LIMITS_CONF"; }
+      return 0
       ;;
     on)
       [[ -f "$SYSCTL_CONF" ]] && { info "系统层调优已处于开启状态（重跑请先 ${MANAGE_CMD} tuning off）"; return 0; }
