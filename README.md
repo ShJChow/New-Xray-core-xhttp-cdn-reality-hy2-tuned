@@ -51,7 +51,8 @@
 - [三十、v4.9.30 nginx 1.31.6、CDN↑Reality↓ 上行改 h3（11→166 Mbps）、缓冲复核](#三十v4930-nginx-1316cdnreality-上行改-h311166-mbps缓冲复核)
 - [三十一、v4.9.31 修复：开启 ECH 时 Mihomo 的 Reality-Up-CDN-Down 连不上](#三十一v4931-修复开启-ech-时-mihomo-的-reality-up-cdn-down-连不上)
 - [三十二、v4.9.32 崩溃时不转储特权进程内存（fs.suid_dumpable = 0）、忽略运行时缓存库](#三十二v4932-崩溃时不转储特权进程内存fssuid_dumpable--0忽略运行时缓存库)
-- [三十三、免责声明](#三十三免责声明)
+- [三十三、v4.9.33 不再发送 ICMP 重定向（出口网卡 send_redirects = 0）](#三十三v4933-不再发送-icmp-重定向出口网卡-send_redirects--0)
+- [三十四、免责声明](#三十四免责声明)
 
 ---
 
@@ -2403,7 +2404,36 @@ sing-box 客户端（测速、回归测试时在仓库目录里启动）会在�
 
 ---
 
-## 三十三、免责声明
+## 三十三、v4.9.33 不再发送 ICMP 重定向（出口网卡 send_redirects = 0）
+
+**问题**：本机装了 Docker，`ip_forward = 1`。转发一个「从同一网卡进、又从同一网卡出」的包时，内核会向发送方发 ICMP 重定向，
+把本机的路由信息暴露给同网段。发送侧的开关按「`all` 与网卡**任一**为 1 即生效」计算：线上 `all` / `default` 都已是 0，
+但出口网卡 `enp0s6` 是 1——它在开机前就存在，不受 `default` 影响——所以**实际一直在发**。
+
+**负对照**（先证明威胁路径存在，再证明修复有效）：宿主建网桥 `10.203.0.1/24`，两个 netns A（.2）与 B（.3）挂在上面，
+A 用 `/32` 路由强制经宿主去 B，在 A 上抓 ICMP type 5：
+
+| `all.send_redirects` | 网桥自身 `send_redirects` | A 收到的 ICMP 重定向 |
+|---|---|---|
+| 0 | 1（= 线上 enp0s6 现状） | **2 个** |
+| 0 | 0 | **0 个** |
+
+**修复**：调优写入 `all` / `default` / **当前出口网卡** 三处 `send_redirects = 0`。出口网卡按默认路由识别，名字里的 `.`（VLAN）
+按 sysctl 约定转成 `/`。网卡级的键写进 `sysctl.d` 后，systemd 的 udev 规则（`99-systemd.rules`：网卡 add 时
+`systemd-sysctl --prefix=/net/ipv4/conf/$name`）会在网卡出现时重新套用，重启后保持。
+
+接收侧不改：`accept_redirects` 在 `ip_forward = 1` 时按「all 与网卡**同时**为 1 才生效」计算，`all = 0` 已足够。
+
+```bash
+sysctl net.ipv4.conf.all.send_redirects net.ipv4.conf.default.send_redirects \
+       net.ipv4.conf.$(ip route show default | awk '{print $5; exit}').send_redirects   # 全部为 0
+```
+
+同机 sbbox 在 v2.7.18 同步加入，两个项目写的 sysctl 键值集合保持一致。回归测试 13/13 PASS。
+
+---
+
+## 三十四、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
