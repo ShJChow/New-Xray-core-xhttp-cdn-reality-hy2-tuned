@@ -48,7 +48,8 @@
 - [二十七、v4.9.26 新增 Hysteria2-H3-Direct：上下行最佳、流量形态为标准 HTTP/3](#二十七v4926-新增-hysteria2-h3-direct上下行最佳流量形态为标准-http3)
 - [二十八、v4.9.28 Xray 侧 Hysteria2 只保留 Hysteria2-H3-Direct](#二十八v4928-xray-侧-hysteria2-只保留-hysteria2-h3-direct)
 - [二十九、v4.9.29 反向上下行分离节点、XHTTP 入站启用 VLESS Encryption、ECH 双重编码修复](#二十九v4929-反向上下行分离节点xhttp-入站启用-vless-encryptionech-双重编码修复)
-- [三十、免责声明](#三十免责声明)
+- [三十、v4.9.30 nginx 1.31.6、CDN↑Reality↓ 上行改 h3（11→166 Mbps）、缓冲复核](#三十v4930-nginx-1316cdnreality-上行改-h311166-mbps缓冲复核)
+- [三十一、免责声明](#三十一免责声明)
 
 ---
 
@@ -2278,7 +2279,76 @@ v4.9.29 线上结果：`run_test.py` 13/13 PASS（新增 n8 `cdn-up-reality-down
 
 ---
 
-## 三十、免责声明
+## 三十、v4.9.30 nginx 1.31.6、CDN↑Reality↓ 上行改 h3（11→166 Mbps）、缓冲复核
+
+测试条件（除特别说明）：netns + netem，RTT 160ms、下行 1% 丢包，每项 3 次（↓60MB / ↑20MB），CDN 腿走真实 Cloudflare；
+单位 Mbps，写作「下行 / 上行」。
+
+### 1.〔内核通道〕Xray 无可升
+
+`releases/latest` 仍是 **v26.3.27**，其后 v26.6.27 ~ v26.9.9 均为 pre-release，按本项目规约不使用，核心不变。
+
+### 2.〔升级〕nginx 1.31.4 → 1.31.6
+
+- 1.31.6 的安全修复（CVE-2026-90439，HTTP/3 堆溢出）只影响 **OpenSSL 3.5.0 及更早**；本项目编译用的是 3.5.5，不受影响。
+- 1.31.5 修复了「代理开启缓冲、向 HTTP/2 客户端发送响应时出错」可能触发的 use-after-free，以及若干 HTTP/3 问题。
+- 编译参数与 OpenSSL 版本与旧版逐字一致（`nginx -V` 对比无差异），源码包 GPG 签名校验通过；替换前先用新二进制对线上配置跑 `nginx -t`。
+- 升级前后经 CDN 的节点无回归：CDN-H3 98 / 91 → 97 / 170，Reality↑CDN↓ 109 / 27 → 108 / 28（上行提升不作为升级收益宣称，范围有重叠）。
+
+`src/08-nginx-install.sh` 的 `NGINX_VER` 同步改为 1.31.6。nginx 配置本身已按 XHTTP 调过（grpc 零缓冲直通、上游长连接池、H2 窗口），本轮**没有**可以拿数据证明更好的参数，不改。
+
+### 3.〔节点〕`VLESS-CDN-Up-Reality-Down` 上行腿 h2 → h3
+
+| 上行腿 ALPN | 下行 | 上行 |
+|---|---|---|
+| h2,http/1.1（v4.9.29） | 93（92–104） | **11**（11–11） |
+| **h3**（本版） | 102（88–102） | **102**（73–140） |
+| h3，升级后按订阅链接原样复测 | 129（92–130） | **166**（74–174） |
+
+上行腿经 Cloudflare 时是 packet-up，h2 下每个 POST 都要跨一次 160ms 往返，被卡死在 11；h3 解除了这个限制。
+v2rayN 链接改为 `alpn=h3`；Mihomo 顶层 `alpn` 改为只含 `h3`（mihomo 只在 alpn **恰好**为 h3 时才走 HTTP/3），
+`download-settings` 里 Reality 腿的 alpn 不变。
+
+**同时测过、不采纳**：`VLESS-Reality-Up-CDN-Down` 的下行 CDN 腿换 h3 —— 109 → 101，范围重叠，保持 h2。
+
+**代价**：h3 依赖客户端到 Cloudflare 的 UDP 443。所在网络封锁 / 严重限速 QUIC 时这条节点不可用，改用
+`VLESS-Reality-Up-CDN-Down`（CDN 腿走 TCP）。
+
+### 4.〔复核〕TCP 缓冲上限 64MB 维持不变
+
+9-08 曾把 `tcp_rmem/tcp_wmem` 上限从 32MB 提到 64MB，同时把 MTU 改成 1500，用户反馈「慢了很多」后两项一起回滚，
+从没拆开验证过是哪一项的问题。现在两个项目写入的都是 64MB，本版做了拆分验证：临时切到 32MB（不持久化），5 条 TCP 节点对比：
+
+| 下行（限速 300↓/50↑，1% 丢包） | 64MB | 32MB |
+|---|---|---|
+| Reality-Vision | **119**（116–121） | 83（42–110） |
+| Reality-XHTTP | **93**（88–94） | 24（19–77） |
+
+- 不限速时两者持平或 64MB 更高；
+- 上传期间并行 ping 两组一致（丢包 3–6%、平均 ~190ms），64MB **没有**带来额外的缓冲膨胀。
+
+结论：维持 64MB。9-08 变慢的元凶更可能是同时改掉的 MTU 1500，而不是缓冲。
+
+**测过、不采纳：`tcp_notsent_lowat` 256KB → 1MB / 4MB**（临时切换，每档 5 次）。Reality-Vision 下行在 300↓/50↑ 为 113 / 115 / 120，
+1000↓/200↑ 为 134 / 142 / 138，差异在波动范围内；上传期间 ping 一致。维持 256KB。
+
+### 5.〔测试工具〕`tools/xray_rtt_bench.py` 可直接测 sbbox 节点
+
+变体可写 `{"core":"sing-box","sbtag":"naive-h2"}`：直接取 `/root/sbbox/sbox_client.json`（可用 `SB_CLIENT` 覆盖）里的同名出站，
+只把 `server` 换成 veth 对端，TLS 的 `server_name` 不变。这样 naive / tuic / AnyTLS 等 Xray 不支持的协议也能在同一条件下对比。
+配合 `"set":{"server_port":...}` 可以指向临时起的测试实例，做服务端参数 A/B 而不动生产节点。
+
+### 6.〔验证〕
+
+```bash
+nginx -v                                                        # 1.31.6
+grep -o 'alpn=[^&]*' /usr/local/nginx/html/sub/<token>/v2rayn-raw.txt | sort | uniq -c
+python3 tools/xray_compat_test.py /usr/local/nginx/html/sub/<token>/
+```
+
+---
+
+## 三十一、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

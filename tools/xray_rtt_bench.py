@@ -14,6 +14,7 @@ SUB = [l for l in os.popen("ls -d /usr/local/nginx/html/sub/*/").read().split() 
 LINKS = xlinks.load_nodes([f"{SUB}/v2rayn-raw.txt", "/root/sbbox/nodes.txt"])
 RAW = xlinks.load_raw([f"{SUB}/v2rayn-raw.txt", "/root/sbbox/nodes.txt"])
 SB_BIN = os.environ.get("SB_BIN", "/root/sbbox/sing-box")
+SB_CLIENT = os.environ.get("SB_CLIENT", "/root/sbbox/sbox_client.json")
 
 def sb_hy2(name, tgt):
     """按 v2rayN(sing-box 内核) 的映射把 hysteria2 链接转成 sing-box 出站：upmbps/downmbps → up_mbps/down_mbps"""
@@ -100,7 +101,13 @@ try:
     sb_in, sb_out, sb_rules = [], [], []
     for i, v in enumerate(variants):
         if v.get("core") == "sing-box":
-            o = sb_hy2(v["link"], "10.201.0.1")
+            # "sbtag"：直接取 sbbox 客户端配置里的同名出站（naive / tuic / reality 等 Xray 不支持的协议），
+            # 只把 server 换成 veth 对端；TLS 的 server_name 保持原值
+            if v.get("sbtag"):
+                o = copy.deepcopy(next(x for x in json.load(open(SB_CLIENT))["outbounds"] if x.get("tag") == v["sbtag"]))
+                o["server"] = "10.201.0.1"
+            else:
+                o = sb_hy2(v["link"], "10.201.0.1")
             for k, val in v.get("set", {}).items(): o[k] = val
             for k in v.get("unset", []): o.pop(k, None)
             o["tag"] = f"o{i}"; sb_out.append(o)
