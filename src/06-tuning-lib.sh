@@ -241,6 +241,10 @@ apply_system_tuning() {
   # 只是我们从来没问过。
   try_sysctl net.ipv4.tcp_ecn 1
   try_sysctl net.ipv4.tcp_ecn_fallback 1
+  # fs.suid_dumpable = 0：setuid / 中途切换过身份的进程崩溃时不产生 core dump。
+  # 代理进程内存里有私钥、UUID、解密后的流量，默认值 2（suidsafe）仍会 dump 到 core_pattern 指定处；
+  # 0 则一律不 dump。配合 limits.conf 的 `* hard core 0` 与 core_pattern = core。
+  try_sysctl fs.suid_dumpable 0
   # tcp_no_metrics_save = 1（v4.7.2）：不把连接结束时的 cwnd / ssthresh 缓存进路由表。
   # 默认行为（0）在同质网络里是优化，在代理机上是负担：对端遍布全球，线路质量差异
   # 极大，一条丢包严重的连接会把偏低的 ssthresh 写进缓存，之后**同网段**的新连接

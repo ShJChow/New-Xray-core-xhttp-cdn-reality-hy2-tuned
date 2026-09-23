@@ -1,2 +1,7 @@
 dist/
 __pycache__/
+
+# sing-box / Xray 运行时缓存（含 DNS 缓存与真实域名），不得提交
+*.db
+*.db-journal
+cache.db

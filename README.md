@@ -50,7 +50,8 @@
 - [二十九、v4.9.29 反向上下行分离节点、XHTTP 入站启用 VLESS Encryption、ECH 双重编码修复](#二十九v4929-反向上下行分离节点xhttp-入站启用-vless-encryptionech-双重编码修复)
 - [三十、v4.9.30 nginx 1.31.6、CDN↑Reality↓ 上行改 h3（11→166 Mbps）、缓冲复核](#三十v4930-nginx-1316cdnreality-上行改-h311166-mbps缓冲复核)
 - [三十一、v4.9.31 修复：开启 ECH 时 Mihomo 的 Reality-Up-CDN-Down 连不上](#三十一v4931-修复开启-ech-时-mihomo-的-reality-up-cdn-down-连不上)
-- [三十二、免责声明](#三十二免责声明)
+- [三十二、v4.9.32 崩溃时不转储特权进程内存（fs.suid_dumpable = 0）、忽略运行时缓存库](#三十二v4932-崩溃时不转储特权进程内存fssuid_dumpable--0忽略运行时缓存库)
+- [三十三、免责声明](#三十三免责声明)
 
 ---
 
@@ -2379,7 +2380,30 @@ python3 -c "import yaml;d=yaml.safe_load(open('mihomo-full.yaml'));p=[x for x in
 
 ---
 
-## 三十二、免责声明
+## 三十二、v4.9.32 崩溃时不转储特权进程内存（fs.suid_dumpable = 0）、忽略运行时缓存库
+
+### 1.〔安全〕调优写入 `fs.suid_dumpable = 0`
+
+代理进程内存里有 Reality 私钥、UUID、vlessenc 密钥与解密后的流量。内核默认 `fs.suid_dumpable = 2`（suidsafe）时，
+setuid / 中途切换过身份的进程崩溃仍会按 `core_pattern` 产生 core dump；设为 0 后一律不转储。
+配合已有的 `kernel.core_pattern = core` 与 `/etc/security/limits.conf` 的 `* hard core 0`。
+
+此前本项目的调优没有写这一项（线上核实为 2），本版加入 `xh tuning on` 的写入列表（`src/06-tuning-lib.sh`）。
+同机 sbbox 在 v2.7.17 同步加入——两个项目写的是同一组 sysctl，键值集合必须一致。
+
+```bash
+sysctl -n fs.suid_dumpable                       # 0
+grep suid_dumpable /etc/sysctl.d/99-xray-xhttp.conf
+```
+
+### 2.〔隐私〕`.gitignore` 忽略 `*.db` / `*.db-journal` / `cache.db`
+
+sing-box 客户端（测速、回归测试时在仓库目录里启动）会在当前目录生成 `cache.db`，里面是 DNS 缓存，含真实域名。
+同机 sbbox 仓库早已忽略，本仓库此前没有；v4.9.30 开发期间就在工作区里出现过一次，手动删掉才没提交上去。
+
+---
+
+## 三十三、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
