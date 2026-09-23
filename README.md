@@ -49,7 +49,8 @@
 - [二十八、v4.9.28 Xray 侧 Hysteria2 只保留 Hysteria2-H3-Direct](#二十八v4928-xray-侧-hysteria2-只保留-hysteria2-h3-direct)
 - [二十九、v4.9.29 反向上下行分离节点、XHTTP 入站启用 VLESS Encryption、ECH 双重编码修复](#二十九v4929-反向上下行分离节点xhttp-入站启用-vless-encryptionech-双重编码修复)
 - [三十、v4.9.30 nginx 1.31.6、CDN↑Reality↓ 上行改 h3（11→166 Mbps）、缓冲复核](#三十v4930-nginx-1316cdnreality-上行改-h311166-mbps缓冲复核)
-- [三十一、免责声明](#三十一免责声明)
+- [三十一、v4.9.31 修复：开启 ECH 时 Mihomo 的 Reality-Up-CDN-Down 连不上](#三十一v4931-修复开启-ech-时-mihomo-的-reality-up-cdn-down-连不上)
+- [三十二、免责声明](#三十二免责声明)
 
 ---
 
@@ -2348,7 +2349,37 @@ python3 tools/xray_compat_test.py /usr/local/nginx/html/sub/<token>/
 
 ---
 
-## 三十一、免责声明
+## 三十一、v4.9.31 修复：开启 ECH 时 Mihomo 的 Reality-Up-CDN-Down 连不上
+
+**现象**：Mihomo / Clash Meta 客户端里 `VLESS-Reality-Up-CDN-Down` 不通，日志 `REALITY authentication failed`。
+v2rayN / Xray 客户端正常，所以按订阅链接的兼容性测试一直 PASS，没暴露出来。
+
+**根因**：开启 ECH 时插入 `download-settings` 的 `MIHOMO_ECH_DOWNLOAD_BLOCK` 缩进写成了 6 格，而 `download-settings` 的子项是 8 格。
+于是 `ech-opts` 变成和 `download-settings` 平级，紧跟其后的 `reality-opts` / `path` / `host` / `reuse-settings` 全被 YAML 归到了 `ech-opts` 名下——
+`download-settings` 里没了 v4.9.19 那条关键的 `reality-opts: { public-key: "" }`，mihomo 又对 Cloudflare 做 Reality 握手（见第二十一节）。
+YAML 语法本身是合法的，`mihomo -t` 也能通过，只有真正走流量才会失败。**自 v4.9.20 引入 ECH 起，开启 ECH 的机器都受影响。**
+
+**修复**：缩进改为 8 / 10 格。修复后 `download-settings` 含 `reality-opts`（空公钥）、`path`、`host`、`reuse-settings`、`ech-opts`。
+
+**验证**：用官方 mihomo v1.19.31 加载订阅里的全部节点（只保留节点定义，不开 TUN / DNS 监听，仅监听本机），经 API 逐节点测延迟、切换节点实测下载：
+
+| Mihomo 订阅节点 | 修复前 | 修复后 |
+|---|---|---|
+| `VLESS-Reality-Up-CDN-Down` | **不通**（REALITY authentication failed） | 509 Mbps |
+| 其余 6 条 | 通 | 通（357–576 Mbps） |
+
+```bash
+mihomo -t -f mihomo-full.yaml        # 只能证明语法合法，证明不了节点能用
+# 要看下行腿是否完整：
+python3 -c "import yaml;d=yaml.safe_load(open('mihomo-full.yaml'));p=[x for x in d['proxies'] if x['name'].startswith('VLESS-Reality-Up-CDN-Down')][0];print(sorted(p['xhttp-opts']['download-settings']))"
+# 应含 reality-opts / path / host / reuse-settings
+```
+
+**升级已有安装**：重新生成订阅即可（服务端不变）；Mihomo 客户端需重新拉取订阅。
+
+---
+
+## 三十二、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。

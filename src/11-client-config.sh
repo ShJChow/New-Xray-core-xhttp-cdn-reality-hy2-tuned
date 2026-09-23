@@ -166,11 +166,16 @@ if [[ "$CDN_ECH_ENABLED" == true ]]; then
       query-server-name: cloudflare-ech.com
 EOF
 )
+  # v4.9.31：缩进必须与 download-settings 的子项一致（8 格）。此前写成 6 格，
+  # ech-opts 变成与 download-settings 平级，紧随其后的 reality-opts / path / host /
+  # reuse-settings 全被 YAML 归到 ech-opts 名下——download-settings 里没了
+  # 「reality-opts: { public-key: "" }」，mihomo 对 Cloudflare 做 Reality 握手，
+  # 报 REALITY authentication failed（开启 ECH 的机器自 v4.9.20 起均受影响）。
   MIHOMO_ECH_DOWNLOAD_BLOCK=$(cat <<EOF
 
-      ech-opts:
-        enable: true
-        query-server-name: cloudflare-ech.com
+        ech-opts:
+          enable: true
+          query-server-name: cloudflare-ech.com
 EOF
 )
 else
