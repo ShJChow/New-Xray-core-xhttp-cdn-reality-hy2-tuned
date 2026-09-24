@@ -482,6 +482,7 @@ xh start|stop|restart   Service control
 xh update [--auto]      Update Xray-core (automatic rollback if the self-test fails)
 xh ech [show|on|off]   Cloudflare CDN ECH (encrypted SNI) toggle and auto-sync
 xh ecn [show|on|off]   TCP ECN (Explicit Congestion Notification) toggle & stats
+xh cdnh2 [show|on|off]  CDN TCP(h2) fallback node toggle and auto-sync
 xh tuning [show|on|off] Show / enable / roll back the system-level tuning
 xh diag                 Server-side self-check for when a node will not connect
 xh conflict             Detect other files in /etc/sysctl.d/ that override this project's parameters

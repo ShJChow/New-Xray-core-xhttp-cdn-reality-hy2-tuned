@@ -246,6 +246,7 @@ xh resub               # 修改配置后一键重新生成全量订阅
 xh minversion [on|off|<ver>] # Reality 最低版本控制（默认 1.8.0 兼容 mihomo/Clash）
 xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
 xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
+xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
