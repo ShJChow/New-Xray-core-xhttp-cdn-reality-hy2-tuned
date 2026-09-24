@@ -14,6 +14,8 @@ proxies:
     udp: true
     flow: ""
     tls: true
+    tfo: true
+    packet-encoding: xudp
     network: xhttp
     alpn:
       - h2
@@ -162,6 +164,9 @@ proxies:
     tls: true
     flow: xtls-rprx-vision
     encryption: "none"
+    packet-encoding: xudp
+    tfo: true
+    mptcp: true
     network: tcp
     alpn:
       - h2
@@ -180,6 +185,8 @@ proxies:
     udp: true
     flow: ""
     tls: true
+    tfo: true
+    packet-encoding: xudp
     encryption: ${XHTTP_ENCRYPTION}
     network: xhttp
     alpn:
@@ -208,6 +215,8 @@ proxies:
     udp: true
     flow: ""
     tls: true
+    tfo: true
+    packet-encoding: xudp
     encryption: ${XHTTP_ENCRYPTION}
     network: xhttp
     alpn:
