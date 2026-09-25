@@ -234,42 +234,20 @@ xh start | stop | restart # 启停与重启服务
 
 ## 四、全平台千兆客户端调优指南（慎用）
 
-针对 **1000 兆（Gigabit）宽带**，客户端操作系统的默认 TCP 缓冲区会锁死跨国高 BDP 链路的单流下载速度。执行以下调优可跑满千兆线速：
+针对千兆宽带跨境高 BDP 链路，可按需对客户端系统进行网络调优：
 
-### 1. Windows 10 / 11（管理员 PowerShell）
-
-以管理员身份打开 PowerShell 执行一键联网优化：
-```powershell
-irm https://reality.example.com/sub/<你的Token>/win.ps1 | iex
-```
-*(或直接在服务器运行 `xh tuning win` 获取本地离线调优脚本)*
-
-### 2. macOS
-
-打开终端执行一键命令扩容 Socket 接收窗口至 32MB：
-```bash
-sudo sysctl -w kern.ipc.maxsockbuf=33554432
-sudo sysctl -w net.inet.tcp.recvspace=4194304
-sudo sysctl -w net.inet.tcp.sendspace=4194304
-sudo sysctl -w net.inet.tcp.autorcvbuf=1
-sudo sysctl -w net.inet.tcp.autorcvbufmax=33554432
-sudo sysctl -w net.inet.tcp.autosndbuf=1
-sudo sysctl -w net.inet.tcp.autosndbufmax=33554432
-sudo sysctl -w net.inet.tcp.fastopen=3
-sudo sysctl -w net.inet.tcp.rfc1323=1
-sudo sysctl -w net.inet.tcp.win_scale_factor=8
-```
-
-### 3. Linux 客户端
-
-```bash
-sudo sysctl -w net.core.rmem_max=67108864
-sudo sysctl -w net.core.wmem_max=67108864
-sudo sysctl -w net.ipv4.tcp_rmem="4096 262144 67108864"
-sudo sysctl -w net.ipv4.tcp_wmem="4096 262144 67108864"
-sudo sysctl -w net.ipv4.tcp_adv_win_scale=1
-sudo sysctl -w net.ipv4.tcp_fastopen=3
-```
+- **Windows 10 / 11（管理员 PowerShell）**：
+  ```powershell
+  irm https://reality.example.com/sub/<你的Token>/win.ps1 | iex  # 或在服务端运行 xh tuning win
+  ```
+- **macOS（终端扩容 Socket 接收窗口至 32MB）**：
+  ```bash
+  sudo sysctl -w kern.ipc.maxsockbuf=33554432 net.inet.tcp.recvspace=4194304 net.inet.tcp.autorcvbuf=1 net.inet.tcp.autorcvbufmax=33554432 net.inet.tcp.fastopen=3
+  ```
+- **Linux 客户端**：
+  ```bash
+  sudo sysctl -w net.core.rmem_max=67108864 net.ipv4.tcp_rmem="4096 262144 67108864" net.ipv4.tcp_fastopen=3
+  ```
 
 ---
 
@@ -304,99 +282,33 @@ flowchart TD
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 | **6** | `VLESS-Reality-Up-CDN-Down` | 上下行分离 + vlessenc | 上行 Reality 直连 / 下行 CDN | 上行不经 CDN，下行隐藏源站 |
-| **7** | `VLESS-CDN-Up-Reality-Down` | 上下行分离 + vlessenc | 上行 CDN / 下行 Reality 直连 | v4.9.29 新增，见第二十九节 |
+| **7** | `VLESS-CDN-Up-Reality-Down` | 上下行分离 + vlessenc | 上行 CDN / 下行 Reality 直连 | v4.9.29 新增，解决本地 UDP 443 干扰 |
 
-> 默认关闭、可按开关恢复：`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（UDP 8443，`FEATURE_HY2_OBFS`）。
-> 下面的吞吐表是 v4.9.x 早期的历史测量，节点名为当时的旧名。
-
-### 六条核心节点实测吞吐
-
-在服务端本机为每条节点单独起一个 SOCKS 入口，**9 轮交替轮询**采样：每轮先测一次不走代理的直连基线，再依次测 6 条核心节点，因此同一轮内所有条目共享同样的上游状态。下载取 `cachefly.cachefly.net/50mb.test`，握手取 `www.gstatic.com/generate_204`。表中为 **9 次采样的中位数（最小–最大）**。
-
-| # | 节点 | 链路 | 下载 MB/s 中位（范围） | 握手 ms 中位（范围） |
-| :--- | :--- | :--- | ---: | ---: |
-| — | *直连基线（不走代理）* | — | *681.6（277.8–714.2）* | *23（21–26）* |
-| **1** | `VLESS-XHTTP-TLS-CF-h3` | 经 CDN 443/UDP | 57.8（35.3–80.2） | 217（88–643） |
-| **2** | `VLESS-XHTTP-TLS-QUIC` | 直连 8446/UDP | 59.3（45.2–67.1） | 25（23–36） |
-| **3** | `Hysteria2-QUIC-TLS` | 直连 8443/UDP | 32.2（28.8–43.6） | 26（23–66） |
-| **4** | `VLESS-TCP-REALITY-Vision` | 直连 443/TCP | **374.1（285.2–432.2）** | 26（25–33） |
-| **5** | `VLESS-XHTTP-REALITY` | 直连 443/TCP | 97.5（91.0–134.4） | 25（23–65） |
-| **6** | `VLESS-XHTTP-Reality-UP-CDN-Down` | 上行直连 / 下行 CDN | 99.6（88.9–111.1） | 25（24–30） |
-
-怎么读这张表：
-
-- **测的是服务端侧的协议栈开销，不是你的实际网速。** 客户端跑在 VPS 本机、经公网 IP 回环，不含最后一公里。直连基线 681.6 MB/s 说明上游几乎不构成瓶颈，因此各节点的差距基本可归因于协议栈本身——但这也意味着**表里没有任何一个数字是你在真实跨境链路上能跑到的**。
-- **必须看范围，不能只看中位数。** 早期用单次采样、且测速源本身抖动到数倍时，节点间的排名完全是噪声。换成快速稳定的源并取 9 次中位数后结论才立得住；即便如此，1 号 CDN 节点的握手仍在 79–821 ms 之间大幅波动——那是 Cloudflare 选边缘的结果，不是服务端的抖动。
-- **4 号 Reality-Vision 一骑绝尘（374 MB/s，约为直连基线的 55%）**，与 `xtls-rprx-vision` 走 Splice 零拷贝、数据不经用户态搬运的设计相符，是全部核心节点里唯一达到这个量级的。
-- **3 号 Hysteria 2 是最慢也最稳的一档**（32.2 MB/s，波动最小）。瓶颈在协议自身的拥塞控制与用户态包处理，而非链路——同机直连有 681 MB/s 可作对照。它的价值在弱网丢包场景，本测试环境（零丢包）恰好是它最不占优的场景。
-- **5 与 6 中位数几乎相同**（97.5 / 99.6）。上下行分离的收益在本机回环里体现不出来——下行走 CDN 那半段在这里没有任何优势，要在真实跨境链路上才有意义。
-
-复现方法与自检命令见 `xh diag`；若某条节点在客户端不通而本机自测正常，问题在该设备到 VPS 的网络路径，而非服务端配置。
-
+> 默认关闭、按需开启：`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
 
 ---
 
-## 六、常见问题与排错-开发者查看指引
+## 六、常见问题与排错
 
-### 1. Reality 三条节点全都不通 / 提示认证失败？
-Reality 节点的认证在服务端会被记录为 `authentication failed or validation criteria not met`，常见原因及排查方法如下：
-- **① 客户端系统时间偏差 > 30 秒（最常见）**：Reality 握手带有时间戳防重放校验。若手机/电脑系统时间与标准网络时间相差 30 秒以上，服务端会直接拒绝连接。**解决方法：在客户端设备设置中开启「自动从网络同步时间」**。
-- **③-a 节点 7 `Vless-xhttp-reality-up-cdn-down` 在 mihomo 上报 REALITY 认证失败？（v4.9.19 已彻底攻克并修复）**：
-  - **技术根因**：Mihomo 内核（`adapter/outbound/vless.go`）在处理 `download-settings` 时，默认将父级的 `v.realityConfig` 继承给下行连接。导致连接 CDN 域名（Cloudflare 443）时，强行发起了 REALITY 握手，因 Cloudflare 证书与 REALITY 密钥不匹配报错 `REALITY authentication failed`。
-  - **解决方案**：在 `download-settings` 中显式配置 `reality-opts: { public-key: "" }`，使得 `Parse()` 返回 nil，彻底覆写清空继承的 REALITY 配置，下行恢复标准 TLS；同时按 Mihomo 规范扁平化 path/host/reuse-settings 结构。自 v4.9.19 起该节点已在 Mihomo 配置中**默认开启并 100% 跑通**！
-- **③ 客户端内核对 XHTTP+Reality 及 ML-KEM-768 加密支持不足（节点 5 / 节点 6）**：`Vless-xhttp-reality` 节点采用了后量子加密算法，部分旧版 Clash/Mihomo/Shadowrocket 客户端内核不支持会导致握手 EOF。**建议：Clash 系客户端优先选用 `VLESS-TCP-REALITY-Vision` 标准节点；全协议节点推荐配合最新版 Xray-core (≥ 24.11 / 26.x) 客户端使用**。
-- **④ SNI 误填为 CDN 域名**：Reality 的 SNI 必须填写直连域名（`REALITY_DOMAIN`），误填 CDN 域名会导致服务端报 `server name mismatch` 并拒绝连接。
-- **⑤ 域名开启了 Cloudflare 代理（小黄云）**：Reality 是纯 TCP 直连伪装协议，`REALITY_DOMAIN` **必须在 Cloudflare 设置为仅 DNS（灰色云朵）**。
-
-> **关于 `minClientVer`（v4.9.8 起支持原生配置与一键管理）**：
-> Reality 默认配置最低客户端版本为 `1.8.0`，全面兼容 mihomo、Clash Meta、sing-box 等非 Xray 官方客户端。
-> - **切换为严格模式**（仅限同代官方 Xray 内核）：执行 `xh minversion off` 即可移除 `minClientVer` 回到内核默认。
-> - **切回兼容模式**：执行 `xh minversion on`（或 `xh minversion 1.8.0`），自动写入并热重启服务。
-> - **安装期控制**：可通过环境变量 `REALITY_MIN_CLIENT_VER=1.8.0` 或 `REALITY_MIN_CLIENT_VER=default`（别名：`MINVERSION`）指定。
-
-### 2. 直连 UDP / Hysteria 2 节点超时？
-- **原因**：云服务商（如 Oracle Cloud、AWS、阿里云、腾讯云）默认带有外部**安全组防火墙**。
-- **解决**：在云服务商控制台的安全组规则中，放行入站端口：
-  - **UDP 8443** (Hysteria 2)
-  - **UDP 8446** (XHTTP QUIC)
-  - **TCP 8445** (XHTTP TCP，仅当开启 `FEATURE_H2_DIRECT=true` 时需要)
-  - **TCP 443** 与 **TCP 80**
-
-### 3. 如何检测服务器内核配置冲突？
-- 终端运行 `xh conflict`，脚本会自动检测 `/etc/sysctl.d/` 下所有第三方冲突文件并提示自愈修复。
+| 故障现象 | 核心排查原因 | 快速解决指引 |
+| :--- | :--- | :--- |
+| **Reality 节点连接失败** | 客户端与网络时间偏差 > 30 秒 | 开启客户端系统「自动从网络同步时间」（防重放） |
+| **Mihomo 上下行分离报错** | Mihomo 浅拷贝继承父级 Reality 配置 | 在 `download-settings` 声明 `reality-opts: { public-key: "" }` |
+| **直连 UDP / Hysteria 2 超时** | 云服务商外部安全组拦截 | 云控制台安全组放行 UDP 443 / 8443 / 8446 与 TCP 443 / 8445 |
+| **内核参数冲突 / 被篡改** | `/etc/sysctl.d/` 存在外部冲突脚本 | 运行 `xh conflict` 自动检测并一键自愈修复 |
 
 ---
 
 ## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.33)
 
-本项目在经历数十轮真实跨洋高延迟（160ms+ / 1% 丢包）生产环境实测与架构重构后，沉淀并收敛为现役的高性能代理矩阵。以下为核心技术演进与调优总结：
+本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
-### 1. 官方正式版锁定铁律与客户端生态兼容（v4.9.8 – v4.9.18）
-- **内核版本铁律**：严格锁定 Xray-core 官方最新正式版（`releases/latest`，当前 v26.3.27），严禁使用预发布/测试版（prerelease）。杜绝了测试版强制实验性后量子密钥（`X25519MLKEM768`）导致的第三方客户端大面积断连（`reality verification failed`）。
-- **生态全兼容保障**：针对 Shadowrocket、sing-box、Clash Meta / Mihomo 等不同内核与客户端做深度适配，过滤不兼容语法（如 extra 范围参数、非标准 ECH 等），下发纯净且合规的专属订阅。
-
-### 2. 双轨分离拓扑与协议矩阵规范化（v4.9.19 – v4.9.29）
-- **上下行分离架构（双向互补）**：
-  - **Reality-Up-CDN-Down**：直连 Reality 443 上行（0-RTT 极速握手）+ Cloudflare CDN 满速下行，突破跨洋单流下行瓶颈。
-  - **CDN-Up-Reality-Down**：针对本地 UDP 443 QoS 严苛环境，上行经 Cloudflare CDN（标准 TCP/h2），下行直连 Reality 443 回程。
-- **Mihomo 继承陷阱攻克**：彻底解决 MetaCubeX/Mihomo 在 `download-settings` 浅拷贝父级 `realityConfig` 的底层 bug，通过显式声明 `reality-opts: { public-key: "" }` 清空继承，实现下行退回标准 TLS 1.3 握手。
-- **VLESS 加密（vlessenc）防窥探**：在 8001 XHTTP 源站入站开启 `vlessenc` 解密，阻断 Cloudflare CDN 边缘节点在解开外层 TLS 后窥视明文流量。
-- **本质语义规范命名**：全面废弃带有平台词缀的冗余命名，统一采用 `[协议]-[传输/伪装]-[拓扑]` 语义结构（如 `VLESS-Reality-Vision-Direct`、`VLESS-XHTTP-CDN-H3` 等）。
-
-### 3. 网络传输层极限流控与高阶特性优化（v4.8.x – v4.9.30）
-- **BBRv3 原生内核协同**：全面迁移并加固 `7.2.7-joeyblog-bbrv3` 原生内核与最新 TCP Brutal 满速锁定（3800 Mbps），修复高版本 Linux 内核 ABI 崩溃与符号兼容问题。
-- **系统缓冲与队列调优**：
-  - TCP 缓冲区上限严格锁定 **64MB**（`tcp_rmem/wmem` max 67108864），经 160ms/1% 丢包实测，高丢包限速线路下吞吐收益显著高于 32MB，且无额外 bufferbloat。
-  - 网卡 MTU 维持原生 1480；默认路由锁定 `initcwnd 32 initrwnd 32`；网卡队列 `txqueuelen 10000`。
-- **多核软中断负载均衡**：虚拟网卡多队列激活 RPS/RFS（`rps_cpus = f`），规避单核软中断瓶颈。
-- **现代 TLS 1.3 与协议特性**：全直连节点强制收敛至 TLS 1.3 现代密码套件；支持 TCP Fast Open (0-RTT) 与 MPTCP 多路径无缝切换；原生支持 Cloudflare CDN ECH (加密 SNI) 与 TCP ECN 协商。
-
-### 4. 全链路安全防御与防信息泄露加固（v4.9.17 – v4.9.33）
-- **端口跳跃默认关闭与收敛**：移除全网扫描与 conntrack 表耗尽风险极高的大范围 UDP 端口跳跃；Xray 侧 Hysteria2 节点全面聚焦单端口 `Hysteria2-H3-Direct`（UDP 443，标准 HTTP/3 形态）。
-- **Netfilter 令牌桶 QDoS 防洪**：部署 iptables/ip6tables 连接追踪与 hashlimit 令牌桶限速（50/s burst 100），置顶 `lo` 与 `ESTABLISHED` 放行，在系统入栈最前端丢弃伪造握手洪泛。
-- **特权进程防内存转储**：配置 `fs.suid_dumpable = 0` 与 `kernel.core_pattern = core`，阻断进程异常崩溃时内存私钥/凭据转储落盘。
-- **阻断 ICMP 路由重定向**：网卡级配置 `send_redirects = 0`，阻断恶意中间人路由投毒。
-- **本地保留端口防碰撞**：sysctl 全局保留关键代理与测试端口（`8001,8003,8443,8445,8446,10489,10800-10809,11801-11806,18793,23106,27295,28443`），防止出向短连接随机碰撞导致服务启动绑定失败。
+| 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
+| :--- | :--- | :--- |
+| **官方正式版铁律** | v4.9.8–v4.9.18 | 严格锁定 `releases/latest`（当前 v26.3.27），避开测试版后量子握手（MLKEM768）断连陷阱；深度适配主流客户端订阅语法 |
+| **双轨分离拓扑** | v4.9.19–v4.9.29 | 落地 Reality-Up-CDN-Down（0-RTT 直连上行+CDN 满速下行）与 CDN-Up-Reality-Down；攻克 Mihomo 继承 bug；8001 启用 vlessenc 防 CDN 窥探 |
+| **网络流控极限调优** | v4.8.x–v4.9.30 | 协同 BBRv3 与 TCP Brutal（锁定 3800 Mbps）；实测维持 **64MB** Socket 缓冲上限；多队列 RPS/RFS 软中断均衡；支持 TLS 1.3、TFO 与 ECH/ECN |
+| **全链路安全防洪** | v4.9.17–v4.9.33 | 默认关闭高风险大范围端口跳跃，收敛为单端口 Hy2（UDP 443）；Netfilter hashlimit 令牌桶防伪造洪泛；`fs.suid_dumpable=0` 防内存转储；保留端口防短连接碰撞 |
 
 ---
 

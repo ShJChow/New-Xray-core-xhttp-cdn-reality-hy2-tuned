@@ -2,318 +2,93 @@
 
 **Languages:** [简体中文](./README.md) · **English** · [فارسی](./README.fa.md)
 
-**Tested on Oracle 4 OCPU / 24 GB, Ubuntu 26.04 and Debian 13 (recommended).**
+> **Deeply tested and tuned on Oracle ARM (4 Core / 24G) and Ubuntu 26.04.** Specifically tuned to maintain stable connectivity and avoid AI account blocks.
 
-A one-command deployment of **XHTTP + CDN** built on Xray-core, with **xpadding,
-Hysteria2 obfuscation and all 6 nodes enabled by default** (ECH is off by default;
-set `CDN_ECH=y` to enable it). Kernel-level network tuning (BBR + fq, buffers, file
-descriptors) is applied automatically at install time, and a resident management
-command `xh` is installed alongside.
+An all-in-one high-availability deployment solution for **XHTTP + CDN + Reality + Hysteria2** based on Xray-core. Pre-configured with **xpadding traffic obfuscation / Hysteria2 Salamander obfuscation / 8 core nodes**, and automatically applies **system and network flow control tuning (BBR+fq, 64MB buffers, 1048576 file descriptors, security hardening)** during installation, alongside the resident management CLI **`xh`**.
 
-Works with V2rayN / Shadowrocket / Mihomo / onexray, over both IPv4 and IPv6.
-
-> ⚠️ **Read the [Disclaimer](#disclaimer) before deploying** — legal risk (especially
-> for users in mainland China) and an honest note on why nothing here is guaranteed
-> to stay undetected or keep working.
-
-> **Background reading**: XHTTP, split upload/download, and why it resists censorship —
-> <https://habr.com/en/articles/990208/>
->
-> **Note**: this setup uses VLESS Encryption. Your client (V2rayN, Mihomo) must be new
-> enough to support `vlessenc` and `xhttp`.
->
-> **Note**: V2rayN v7.19.5+ can be unstable in TUN mode; enable the legacy TUN-protection
-> option ([PR #9005](https://github.com/2dust/v2rayN/pull/9005)).
-
-`xh tuning on` runs **automatically at the end of installation** (kernel tuning,
-best-effort; skip it with `FEATURE_AUTO_TUNING=false`, roll it back with `xh tuning off`).
-
-> **Note on documentation**: the `docs/` directory is Chinese-only. This file is a
-> translation of the [Chinese README](./README.md), which remains the source of truth.
+Supports all major client platforms: V2rayN, Clash Verge Rev, Mihomo Party, Sing-box, Shadowrocket, Loon, Surge, onexray, etc. *Note: Ensure your client core is updated to support newer protocols such as HTTP/3.*
 
 ---
 
-## Features
+## Table of Contents
 
-| Capability | Details |
-|---|---|
-| Node set (v4.7.4) | 7 nodes by default, all served by a single Xray core: 4 over QUIC/h3 (including Hysteria2 obfs and the newer h3-cdn) plus 3 TCP fallbacks. No separate hysteria binary needed |
-| xpadding | On by default. `xPaddingObfsMode` plus a custom header and parameter name, to defeat XHTTP fingerprinting on the CDN side |
-| ECH | **Off by default**. Encrypts the SNI in the TLS handshake; enable it in Cloudflare Edge Certificates first, then set `CDN_ECH=y` |
-| VLESS Encryption | On by default (ML-KEM-768), stops the CDN from decrypting traffic in the middle |
-| **Full tuning** | BBR + fq, TFO, MTU probing, 1048576 file descriptors, Xray `sockopt` and `policy.bufferSize`, nginx gRPC long-connection timeouts |
-| **Adapts to the machine** | Three tiers by RAM (≥16G / ≥4G / <4G) scaling buffers and queues; ARM64 sets `bufferSize` explicitly (the default is only 4 KB) |
-| flow / Vision | Node 1 uses `xtls-rprx-vision` (the only node that can use Splice); the rest are XHTTP and cannot carry a flow by protocol. `VISION_UDP443=1` switches to `-udp443` |
-| **`xh` command** | Status / node details / subscription / logs / core updates / tuning toggle / keepalive / uninstall |
-| **Non-interactive** | Driven by environment variables; `AUTO=1` reinstalls with zero prompts |
-| **Self-healing** | cron health check every 5 minutes plus start-on-boot |
-| **Automatic core updates** | Weekly Xray-core update, with automatic rollback if the config self-test fails |
-| Extensions | `add-quic-h3` (3 XHTTP-over-h3 nodes) / `add-quic` (Hysteria2) / different CDNs for upload and download / IPv4 up, IPv6 down |
-
----
-
-## Node list
-
-Since v4.7.4 the installer emits **the 7 nodes below**, all served by a single Xray core —
-Hysteria2 now uses Xray's native inbound (v26.3.27+), so no separate hysteria binary is
-required.
-
-**Node order**: nodes 1 and 2 go through the CDN (over TCP/h2 and UDP/h3 respectively),
-nodes 3 and 4 are direct XHTTP (a QUIC node and its TCP twin), node 5 is Hysteria2, and
-the last two are direct TCP fallbacks. Mihomo's proxy groups use `include-all: true`, so
-this ordering carries straight through.
-
-Since v4.6.0 the Mihomo subscription ships an **`自动选择` (url-test)** group, used as the
-default entry of `节点选择`: it routes by measured latency and switches away automatically
-when a node degrades or fails, so you do not have to diagnose it by hand. You can still
-pick a specific node manually in `节点选择`.
-
-v4.7.0 added the **`直连择优`** group (called `直连回落` before v4.7.3, where it was a
-fallback group): it contains only the 4 direct nodes and picks by measured latency. The
-`h2-tcp-direct` node exists precisely for this — it is the TCP twin of `h3-direct` (same
-UUID, same path, same decryption, only the transport differs), where previously the only
-direct TCP fallback was Reality.
-
-Why url-test replaced fallback: a fallback group only asks whether a node is *up*, not
-whether it is *fast*. At peak hours, when `h3-direct` is stuck at 200 ms with heavy loss,
-it is still "healthy", stays selected, and the nodes behind it never get a turn — which is
-exactly the moment you most want to move off it. url-test switches away under that kind of
-degradation, and it still switches when UDP is fully blocked (h3 simply fails its latency
-test), so it is a superset of fallback behaviour.
-
-How it divides with `自动选择`: that group is `include-all` (it contains the CDN nodes too),
-while this one contains only direct nodes, for when you explicitly want to stay direct.
-**Note** that url-test measures handshake latency — not throughput and not loss rate — so
-Hysteria2's throughput advantage under heavy loss does not show up, and during bad-loss
-periods you may still want to switch to it manually.
-
-Node 1 goes through the CDN and its server is a domain name, so **in V2rayN TUN mode you
-must add the CDN domain to the direct/bypass list** or the connection loops back on itself.
-Nodes 2–5 connect to the bare IP and only need a direct route for the VPS IP. The installer
-writes `~/client-config-v2rayn-tun.txt` with that list filled in for your machine.
-
-Node names are plain ASCII plus a suffix (`<host>` = `NODE_TAG`, falling back to
-`hostname -s`; `vps` is used when that is empty or `localhost`). To use full
-airport-style names instead, see [Custom node names](#custom-node-names).
-
-| # | Node name | Path | Transport |
-|---|---|---|---|
-| 1 | `Vless-xhttp-h3-cdn-<host>` | Via CDN, **UDP 443** | XHTTP + TLS, alpn h3 (QUIC over Cloudflare CDN; no server-side change) |
-| 2 | `Vless-xhttp-h3-direct-<host>` | Direct to VPS, **UDP 8446** | XHTTP + TLS, alpn h3, `mode=stream-up` (v4.7.13, ~50 ms faster than auto) |
-| 3 | `Hysteria2-obfs-<host>` | Direct to VPS, **UDP 8443** | Hysteria2 + Salamander obfuscation |
-| 4 | `Vless-reality-vision-<host>` | Direct to VPS, TCP 443 | Reality + Vision; the fallback when UDP is blocked |
-| 5 | `Vless-xhttp-reality-<host>` | Direct to VPS, TCP 443 | XHTTP + Reality, upload and download together |
-| 6 | `Vless-xhttp-reality-up-cdn-down-<host>` | Upload Reality direct 443, Download TLS CDN 443 | XHTTP Split-Routing (Uplink via Reality direct, Downlink via CDN) |
-
-Nodes 2 and 3 are bare UDP to the VPS, so both need to be opened in your **cloud provider's security group** (UDP 8446, UDP 8443). Node 1
-goes through the CDN over Cloudflare's UDP 443 and needs **no** port opened at all — that layer sits outside the machine. Optional TCP 8445
-can be enabled with `FEATURE_H2_DIRECT=true`.
-
-> **Known limitation of node 2** (downgraded to opt-in in v4.0.3, back on by default in
-> v4.2.0): XHTTP over h3 has two upstream issues that are unfixed and closed as not
-> planned — [#4391](https://github.com/XTLS/Xray-core/issues/4391) (`alpn=h3` silently
-> ignored, falling back to TCP) and [#5849](https://github.com/XTLS/Xray-core/issues/5849)
-> (h3 not working for a long stretch). The port is now a separate **8446**, so falling
-> back to TCP no longer contends with Reality on 443; the worst case is that this node
-> alone fails to connect. Turn it off with `FEATURE_H3_DIRECT=false` if you do not need it.
-
-### Upgrading from older versions
-
-Machines that previously ran `add-quic.sh` (the standalone hysteria binary) or
-`add-quic-h3.sh` are **migrated automatically** when you re-run the installer: the old
-components are stopped, their configs are backed up to `/var/backups/xray-xhttp-migrate/`,
-the quic listener blocks are removed from nginx, and the UDP ports are handed over to
-Xray's native implementation.
-
-The old standalone hysteria had **no Salamander obfuscation**; you only get it after
-migrating. To keep the old components instead, set `KEEP_LEGACY_UDP=true` — the two new
-UDP nodes are then disabled automatically to avoid port conflicts.
-
-If the Xray core is older than 26.3.27, the installer **upgrades the core automatically**
-(except on Alpine) rather than silently disabling those two nodes.
-
-> **No TUIC v5**: Xray-core has no TUIC inbound, so it cannot be provided under an
-> Xray-only constraint. Node 2 (XHTTP over h3, direct) uses QUIC as its transport and is
-> the closest equivalent.
+- [1. Prerequisites (Domains, Cloudflare & Certificates)](#1-prerequisites)
+  - [1.1 DNS Resolution Setup](#11-dns-resolution-setup)
+  - [1.2 Cloudflare Dashboard Settings](#12-cloudflare-dashboard-settings)
+  - [1.3 SSL Certificate Issuance (acme-yg / acme.sh)](#13-ssl-certificate-issuance)
+- [2. One-Command Deployment](#2-one-command-deployment)
+  - [2.1 Interactive Deployment](#21-interactive-deployment)
+  - [2.2 Zero-Interaction Environment Variable Deployment](#22-zero-interaction-environment-variable-deployment)
+- [3. Resident Management Command `xh`](#3-resident-management-command-xh)
+- [4. Client Tuning Guide for Gigabit Networks](#4-client-tuning-guide-for-gigabit-networks)
+- [5. Node Topology & Dual-Track Architecture](#5-node-topology--dual-track-architecture)
+- [6. Troubleshooting & FAQ](#6-troubleshooting--faq)
+- [7. Release History & Core Tuning Evolution (v4.8 - v4.9.33)](#7-release-history--core-tuning-evolution-v48---v4933)
+- [8. Disclaimer](#8-disclaimer)
+- [Credits & License](#credits--license)
 
 ---
 
-## Measured handshake latency (v4.7.13)
+## 1. Prerequisites
 
-**Conditions**: measured from the VPS itself (Oracle 4 OCPU ARM, San Jose), target
-`https://www.cloudflare.com/cdn-cgi/trace`, median of 10 fresh connections per node,
-no connection reuse. Direct baseline (no node at all) = **20 ms**.
-
-| Node | First byte | Note |
-|---|---|---|
-| `Vless-reality-vision` | 18 ms | Matches the direct baseline |
-| `Vless-xhttp-reality` | 19 ms | Its `auto` already picks stream-up |
-| `Hysteria2-obfs` | 18 ms | |
-| `Vless-xhttp-h3-direct` | **18 ms** | Was 69 ms; v4.7.13 switched it to `stream-up` |
-| `Vless-xhttp-h2-tcp-direct` | **18 ms** | Was 68 ms; same change |
-| `Vless-xhttp-tls-cdn` | 73 ms | Inherent packet-up cost, see below |
-| `Vless-xhttp-h3-cdn` | 73 ms | Same |
-
-### The ~50 ms on the two CDN nodes is structural and cannot be optimised away
-
-Breaking the 73 ms down, each layer measured separately:
-
-| Component | Cost | Optimisable |
-|---|---|---|
-| Target site itself (direct baseline) | 20 ms | — |
-| **packet-up mode overhead** | **~48 ms** | ❌ structural |
-| Cloudflare edge processing | 5 ms | ❌ already small |
-| The Reality-fallback hop | 0.1–0.8 ms | ❌ negligible |
-
-Two decisive controls: **the same XHTTP config bypassing Cloudflare and hitting local
-nginx directly is 68 ms, versus 73 ms through Cloudflare** — so Cloudflare accounts for
-only 5 ms. And this box's Cloudflare edge is in the same facility (`colo=SJC`, 0.86 ms
-ping), so it is not a distance problem either.
-
-The remaining ~48 ms is the same packet-up penalty measured on the direct nodes, but the
-CDN nodes **cannot** switch to `stream-up` the way the direct ones did: measured through
-Cloudflare with stream-up, CDN-TLS throughput drops to 0 and CDN-H3 times out.
-Cloudflare does not support streaming request bodies — that is precisely why packet-up
-exists.
-
-The following were all tested and made no difference (interleaved sampling, 15–20 runs
-each, all landing within noise at 73–75 ms):
-
-- `scMinPostsIntervalMs` at 0 / 5 / 30
-- Larger `scMaxEachPostBytes` (slightly worse, 75 ms)
-- `xmux maxConcurrency` 16-32 → 64-128
-- Dropping xmux entirely (only p90 got worse)
-- Changing the Cloudflare origin port to bypass the Reality fallback (that hop is
-  0.1–0.8 ms)
-- Cache rules — the XHTTP path is already `cf-cache-status: DYNAMIC`
-
-**Conclusion**: do not try to optimise those 50 ms away; solve it with selection instead.
-The Mihomo subscription's `自动选择` (url-test) group routes by measured latency, so the
-18 ms direct nodes naturally win. The CDN nodes exist as the fallback for when direct
-access is blocked, and 50 ms is what they cost in exchange for presenting a Cloudflare IP
-instead of your VPS.
-
-> **These numbers do not transfer to your client.** They were measured on the VPS itself
-> and describe how much headroom is left on the server side. On a real client the maths
-> is different: the Cloudflare edge sits near **you**, and the edge-to-origin leg runs
-> over Cloudflare's backbone, which can beat the public internet. On a poor
-> intercontinental route a CDN node may well have *lower* total latency than a direct one.
-> Measure it on your own client.
+Before running the deployment script, prepare **2 subdomains resolving to your VPS IP** (Cloudflare recommended):
+- **Domain 1 (Direct / Reality Domain)**: e.g., `reality.example.com`
+- **Domain 2 (CDN Domain)**: e.g., `cdn.example.com`
 
 ---
 
-## Version history
+### 1.1 DNS Resolution Setup
 
-The nine fixes since v4.7.4 are all included in the current **v4.7.13**. None of them
-**change the node list or the subscription format** (still the 7 nodes above) — just
-re-run the installer to pick them up.
+Add two `A` records in the Cloudflare DNS dashboard pointing to your VPS public IP:
 
-| Version | Fix |
-|---|---|
-| v4.7.5 | **CDN origin-pull throughput +25%.** nginx's `grpc_buffer_size` was left at the 4k default, so Xray's downstream data was chopped into 4k pieces and forwarded over HTTP/2, multiplying syscalls and frame-header overhead. Raising it to 512k took a 100 MB loopback download from 131–162 MB/s to 177–193 MB/s. Also added `upstream xray_xhttp` with keepalive, so each POST/GET stream no longer opens a fresh connection to 8001 (packet-up upload is a stream of small POSTs, and that handshake cost was landing on every packet). |
-| v4.7.6 | **Fixed loss of the real client IP on CDN connections.** `sockopt.trustedXForwardedFor` takes a list of trusted **header names**, not trusted peer IPs. It was set to `["127.0.0.1"]`, which never matched any header name, so `X-Forwarded-For` was always judged forged (8290 `ignored potentially forged` errors in 90 minutes of production logs, the overwhelming majority of the log volume) and every CDN connection was recorded as 127.0.0.1 in logs and routing. Now set to `["X-Real-IP"]` — a header nginx overwrites unconditionally, so clients cannot forge it. |
-| v4.7.7 | **Fixed reinstalls silently disabling the h2-direct node.** The port-in-use probe used `ss -lnt` without `-p`, so it never printed the `users:(("proc",pid=…))` column and the owner was always an empty string. "Something is listening on 8445" was therefore read as "an external process holds it" — when in fact the process holding 8445 during a reinstall was the previous version's own xray. Every reinstall set `FEATURE_H2_DIRECT` to false, dropping the subscription from 7 nodes to 6. |
-| v4.7.8 | **The Mihomo subscription no longer ships dead nodes.** The Mihomo template rendered h3-direct / h2-direct / Hysteria2 unconditionally, ignoring the `FEATURE_*` switches (the URI side had that mechanism; the Mihomo side never did). Whenever one of those nodes was disabled — missing certificate, occupied port, or an explicit `FEATURE_*=false` — the V2rayN subscription correctly lost a node while the Mihomo subscription still listed it, handing clients a dead node pointing at a nonexistent inbound, which the `直连择优` url-test group then probed every 60s. Now pruned by `FEATURE_*`. |
-| v4.7.9 | ⚠️ **This fix was wrong and has been superseded by v4.7.12 — if you are on v4.7.9 through v4.7.11, Hysteria2 does not work under v2rayN/sing-box; please upgrade.** **Fixed Hysteria2 never having passed traffic.** The hysteria inbound's users were written as `settings.clients[].auth`, while Xray 26.x reads `clients[].password` — the extra key was silently ignored, the config still passed `xray run -test`, but no valid user was parsed and every client got `auth failed code 404` at authentication. It was hard to spot because the QUIC/TLS handshake succeeded, obfs worked, the port was listening, and `xh diag`'s server-side checks were all green; the symptom was "the node looks up, it just cannot pass traffic". Also added custom node naming: `NODE_TAG` for the suffix (a `localhost` hostname is no longer used directly, falling back to `vps`), and `NODE_NAME_MAP` for whole-name replacement in `old=new` form. |
-| v4.7.10 | **Misspelled environment variables are no longer silently ignored.** This script is configured entirely through environment variables, and bash gives no feedback for a name that does not exist — write `CDN_DIRECT_PORT=2053` or `FEATURE_XRAY_AUTO_UPGRADE=true` (plausible-looking names that simply are not in the script) and the install succeeds, the logs look fine, and you believe the setting took effect. Almost nobody would think to check this while debugging. The installer now lists every variable that "looks like one of this project's parameters but is never referenced by the script" and warns (without aborting). The known-variable list is not hardcoded: the script greps itself for the name, so it can never drift from the implementation. |
-| v4.7.11 | **ECH is now off by default, and `FEATURE_*` environment variables can finally actually override.** ECH requires enabling it in Cloudflare's Edge Certificates first; turning it on without that prerequisite makes the CDN nodes fail the handshake outright — a trap for anyone who did not read prerequisite 6 — so it now defaults to off and must be requested explicitly with `CDN_ECH=y`. xpadding stays on by default (it defends against traffic fingerprinting; turning it off does not affect confidentiality, but does make the node easier to identify). This release also fixed a long-standing bug: the build script injected unconditional assignments `FEATURE_XPADDING=true`, which **overwrote** whatever the user passed in, meaning the documented `FEATURE_XPADDING=false bash install.sh` had never actually worked. Changed to `${VAR:-default}`. |
-| v4.7.12 | **Fixed the regression introduced in v4.7.9: Hysteria2 broken under v2rayN / sing-box.** v4.7.9 changed the inbound users from `clients[].auth` to `clients[].password`, based on "testing with Xray's own hysteria outbound showed only this form authenticates" — but that test client put auth in `settings.auth`, whereas the [official docs](https://xtls.github.io/config/transports/hysteria.html) place the outbound auth in `streamSettings.hysteriaSettings.auth`. Two non-standard configs happened to match each other, producing a wrong conclusion that broke standard clients instead: sing-box (v2rayN's Hysteria2 core) reported `authentication failed, status code: 404` ever since. The correct form is the documented `settings.users[].auth`. Verified against three cores, each with a negative control confirming a wrong password really does fail: sing-box 236 Mbps, Xray 253 Mbps, mihomo working. |
-| v4.7.13 | **Handshake latency configured per node type; fixed the Reality nodes being unusable under mihomo.** ① The two direct XHTTP nodes (h3-direct / h2-direct) now use `mode=stream-up`: under `security=tls`, `auto` conservatively picks packet-up, which splits the upload into a series of POSTs with a minimum interval and costs about 50 ms of extra first-byte latency. Measured first byte went from 68/69 ms to **18 ms** (equal to the no-proxy baseline), with throughput unchanged. **The CDN nodes must stay on packet-up** — packet-up exists precisely because CDNs do not support streaming request bodies, and measured through Cloudflare with stream-up, CDN-TLS throughput dropped to 0 and CDN-H3 timed out. The Reality nodes need no change; their `auto` already picks stream-up. ② Reality gained `minClientVer: "1.8.0"`: Xray 26.x's Reality defaults to a minimum client version of Xray-core v26.3.27 (the `other clients may be refused to connect` line in the startup log), so mihomo failed the handshake outright with `REALITY authentication failed` and **both Reality nodes were unusable** under mihomo / Clash-family clients. After relaxing it, all seven nodes work under mihomo. |
-
-| v4.9.0 | **Faster handshakes on every node, and every backward-compatibility floor raised to the newest setting.** ① **Certificate chain trimmed.** Let's Encrypt ships a 4-cert `fullchain` whose tail is two cross-signed roots — data the client's trust store already has, retransmitted on *every* handshake. That is expensive for QUIC in particular: before the client's address is validated the server is capped by the **3x amplification limit**, so a larger first flight is more likely to cost an extra RTT (`h3-direct`, `Hysteria2-obfs`, `CDN-H3`). The trimmer deletes certificates from the tail one at a time and re-runs `openssl verify` against the system trust store after each deletion, committing only while verification still passes — it cannot be a "self-signed root" test, because the tail cert is *cross-signed* (ISRG Root X2 by X1), so `subject != issuer` and that test removes nothing. Measured: 4 certs → 3, 4841 → 3243 bytes, and **5509 → 4364 bytes** of server→client traffic per TLS 1.3 handshake (tcpdump). It stops at 3 on its own: with only leaf + YE2, `openssl verify` fails outright because Root YE is not yet in mainstream trust stores. Installed as `/usr/local/sbin/xh-trim-chain` and prepended to acme.sh's `reloadcmd`, because renewal rewrites the full 4-cert chain back and the trim does not survive on its own. ② **Xray's built-in DNS reordered by measured latency.** `freedom`'s `targetStrategy: UseIPv4` sends every new domain through this list, so the first entry sets the per-connection cost. Measured on cold random subdomains: 1.1.1.1 **4 ms**, 8.8.8.8 14 ms, 9.9.9.9 14 ms — 1.1.1.1 now leads, saving about **10 ms per new connection**. ③ **TLS floors raised to 1.3** across all three `tlsSettings.minVersion` sites and nginx's `ssl_protocols`. Note that *deleting* `minVersion` does the opposite of what it looks like: Xray then falls back to its own, lower default, so the newest behaviour has to be stated explicitly. nginx cleanups came with it: `ssl_ciphers` does nothing under TLSv1.3 (replaced with `ssl_conf_command Ciphersuites`), `ssl_prefer_server_ciphers` likewise (removed), and `ssl_stapling` is now explicitly `off` — Let's Encrypt stopped issuing OCSP in 2025, so the certificate carries no responder URL and leaving it on only produced two warnings per reload. ④ **`minClientVer` removed** — see the note below. Regression: 13/13 nodes pass (`run_test.py`, this project's 7 plus sbbox's 5 plus one in-house node). |
-
-| v4.9.1 | **CDN latency traced to the packet-up POST interval, not to Cloudflare; and ECN enabled (with an honest note that it does not speed anything up on this kernel).** ① **The CDN nodes' latency is dominated by `scMinPostsIntervalMs`.** Two wrong turns are worth recording. First, the VPS-to-edge distance was suspected: measured 0.85 ms to the edge IP, with `cf-ray` reporting the SJC colo — same region, not a distance problem. Second, a layered `curl https://cdn.<domain>/` measurement produced "origin takes 11-35 ms" — **that number is meaningless**, because nginx's `location /` is the masquerade reverse proxy and the request was measuring stanford.edu, not the tunnel. **CDN nodes must be measured on the tunnel path, never on `/`.** The real cause: CDN nodes must use `packet-up` (`stream-up` through Cloudflare drops CDN-TLS throughput to 0 and times out CDN-H3), and packet-up splits the upload into POSTs separated by a minimum interval that this project pinned at 30 ms. Measured through Cloudflare, 9 samples each: built-in default (~30 ms) median **21.7 ms**, at 10 ms median **12.2 ms**, at 1 ms median **10.3 ms** — with 20 MB download throughput indistinguishable across all three (328-546 Mbps, the spread being Cloudflare's own edge variance), so this is pure latency with nothing traded away. 10 ms is the new default rather than 1 ms: 30→10 captures the bulk (−9.5 ms) while 10→1 buys only 1.9 ms more and would raise the request rate against the CDN by another order of magnitude (request count being one of the easiest things for a CDN to fingerprint). Override with `XHTTP_SC_MIN_POSTS_MS=30`. Full regression medians: n0-h2-cdn 24.9 → **11.9 ms**, n1-h3-cdn 15.4 → **10.6 ms**. `run_test.py` was also fixed — its hand-built CDN outbound carried no `scMinPostsIntervalMs` at all, so it measured Xray's built-in default rather than what subscriptions actually ship. ② **`net.ipv4.tcp_ecn` 2 → 1.** Verified by tcpdump on the SYN/SYN-ACK flags, **filtered by peer IP** — without that filter our own server's SYN-ACK to inbound connections is misread as "the peer accepted", which is exactly the mistake made on the first attempt. Of 7 peers, 6 accept (Cloudflare, GitHub, Bing, Microsoft, 1.1.1.1, 9.9.9.9) and only Google refuses; no connection failures. **It does not speed anything up here**: this kernel's `bbr` is BBRv1, whose control loop does not consume ECN marks, and a 12-round interleaved A/B showed no measurable difference (`tcp_ecn=2` 44.8 ms / 1212 Mbps vs `tcp_ecn=1` 47.5 ms / 1373 Mbps, both groups losing 4 of 12 transfers outright to Cloudflare edge variance). It is set to 1 as a zero-cost prerequisite for a future ECN-reactive congestion control. ③ **The kernel's `bbr` is BBRv1, not v3** — `bbr_lt_bw_sampling` in kallsyms is v1-only (removed in v3), `ss` prints v1's info layout, and `/sys/module/tcp_bbr/parameters/` is empty. None of BBRv3's four mechanisms exist here and no sysctl creates them. This box is **arm64**, and every kernel in the archive carries this same BBRv1 while the usual prebuilt BBRv3 kernels (XanMod and similar) ship **x86_64 only**. The two remaining routes — a DKMS `tcp_bbr3` module (the same mechanism that already builds `tcp_brutal` here, low risk and reversible) or a self-built BBRv3 kernel (no out-of-band console on this VPS, so a failed boot means losing the machine) — were **not taken in this release**. |
-
-| v4.9.2 | **BBRv3 kernel now actually installed, and tcp-brutal fixed for the 7.1+ kernel ABI.** ① **Correction to v4.9.1:** the claim that prebuilt BBRv3 kernels ship x86_64-only was **wrong** — `byJoey/Actions-bbr-v3` has arm64 releases (the `arm64-*` tags were always there; I failed to check). This host now runs `7.2.3-joeyblog-bbrv3`, with the stock `-oracle` kernel kept in `/boot` as the fallback. ② **`tcp-brutal` fails to build on kernels 7.1+, and fails silently — this bites anyone upgrading past 7.0, BBRv3 or not.** The kernel renamed the callback: `u32 (*min_tso_segs)(struct sock *sk)` became `u32 (*tso_segs)(struct sock *sk, unsigned int mss_now)`, and upstream tcp-brutal has not adapted. Because this project writes `"tcpcongestion":"brutal"` into its sockopt while the installer swallows the build failure with `|| true`, **brutal silently becomes unavailable** and you only find out when forwarding misbehaves. The installer now runs `dkms ldtarball` first, patches, then `dkms install` — the old `dkms install <tarball>` unpacks and compiles in one step with no room to patch. The patch adds conditional compilation whose test **greps the target kernel's `include/net/tcp.h`** rather than guessing a `LINUX_VERSION_CODE` boundary. Three traps are recorded in the comments: the Makefile is read **twice** (the outer make has `KERNEL_DIR`, kbuild's re-read only has `srctree`, so testing only `KERNEL_DIR` leaves the macro silently undefined during the compile that matters); `$(shell ...)` cannot use backslash continuations; and **make matches the closing paren of `$(shell ...)` without respecting quotes**, so a `)` inside the grep pattern closes it early and yields `/bin/sh: Syntax error: Unterminated quoted string` — hence the paren-free `tso_segs.*mss_now` test (0 hits on old kernels, 1 on new). Verified: the patched source builds `brutal.ko` against **both** 7.2.3 and 7.0.0-1010-oracle, and the patch function is idempotent. ③ **Four-layer no-downtime method for swapping kernels on a console-less cloud VM**, all four required: `panic=10`; **`rd.shell=0 rd.emergency=reboot`** (the one most people miss — `panic=10` does **not** cover dracut dropping to an emergency shell and hanging, which is the real "won't boot, can't SSH" shape); a 12-minute systemd deadman for "boots but no network"; and `GRUB_DEFAULT=saved` + `grub-set-default <old>` + `grub-reboot <new>` so the new kernel gets exactly one attempt. **The protections must be in place *before* installing the kernel** — the kernel postinst runs `update-grub` itself, so with `GRUB_DEFAULT=0` still set the default flips to the untested kernel immediately; ordering them after the install left this box, when dkms failed and aborted the script, one reboot away from an unverified kernel with no fallback. ④ **Regression 13/13 PASS.** BBRv3 confirmed live; the quickest version fingerprint is `ss -tin | grep -o 'bbr:([^)]*)'` — v1 shows `cwnd_gain:2.88672`, v3 shows `cwnd_gain:2`. **ECN re-tested and still shows no benefit, but for a different reason than v4.9.1 gave.** That release blamed "BBRv1 does not consume ECN marks" — true, but not the whole story: BBRv3 does consume them and there is still no difference, because **nothing on these paths marks packets at all** (`nstat -az \| grep -iE 'DeliveredCE\|InCEPkts'` is 0 since boot). Judge ECN by CE counters, not by a throughput A/B. `tcp_ecn=1` is kept as a zero-cost prerequisite. **Measurement warning:** `speed.cloudflare.com` returns **HTTP 429** under repeated benchmarking, and then `%{speed_download}` is 0 while **curl still exits 0** — trivially misread as a catastrophic throughput regression (I misread it once). v4.9.1's BBRv1 throughput figures were partly polluted by this and are not directly comparable. |
-
-| v4.9.3 | **Correction to v4.9.2's BBR version fingerprint.** v4.9.2 documented `cwnd_gain` as the quick way to tell BBRv1 from BBRv3 (`2.88672` vs `2`). **That is wrong.** BBRv1's `cwnd_gain` is also `2` once a connection leaves STARTUP and enters PROBE_BW — the value distinguishes the connection's *state*, not the BBR version, so it gives the wrong answer on long-lived connections. It went unnoticed because all 42 connections on the test host happened to be in STARTUP. **Use the kallsyms symbols as the authority**: `bbr_start_bw_probe_down` / `bbr_is_inflight_too_high` / `bbr_skb_marked_lost` mean v3, `bbr_lt_bw_sampling` (removed in v3) means v1; symbol *names* survive `kptr_restrict=2`, so this works almost everywhere. `detect_bbr_version()` now falls back to **`pacing_gain`** (v1 STARTUP `2.88672` vs v3 `2.77344`) only when kallsyms is unreadable, reports it with a `?` suffix, and returns `unknown` rather than guessing. |
-
-| v4.9.4 | **25-sample regression baseline on the BBRv3 kernel, and how to read the jitter column.** Full run with `SAMPLES=25` on `7.2.3-joeyblog-bbrv3`: **13/13 PASS**, medians — no-proxy baseline 1.8 ms, n0-h2-cdn 15.8, n1-h3-cdn 12.7, n2-h3-direct 3.8, n3-hy2-obfs 3.0, n4-reality-vision 6.7, n5-reality-xhttp 3.1, n6-reality-up-cdn-down 3.8, tuic 2.6, hysteria2 2.9, naive-h3 2.6, naive-h2 3.9, vless-reality 7.3. **The jitter column (max ÷ median) necessarily grows with sample count** — more samples means more chances to catch an outlier — so judge stability by **p95**, not by the jitter ratio. Going from 9 to 25 samples on the same host and config: tuic went from p95 447.5 ms / **153.7x** to 6.6 ms / **2.9x** (the 153.7x was a single outlier), while naive-h3's ratio *rose* from 12.2x to 16.5x even though its p95 *fell* from 40.4 ms to 6.8 ms — ratio up, actual behaviour steadier, which is exactly why the ratio cannot be read on its own. Always read the no-proxy baseline row first: at p95 3.4 ms / 2.1x this run's path was quiet, so n0-h2-cdn's 43 ms p95 is Cloudflare edge (see the v4.9.1 notes) rather than a server problem. **No regression from the kernel swap**: medians match the BBRv1 era and agree closely across runs, and the CDN pair holds at 12.7/15.8 ms — the `scMinPostsIntervalMs` 30→10 ms win from v4.9.1 (previously ~21.7 ms) survived the change. **Scope reminder:** most of these nodes are QUIC (hy2 / tuic / naive-h3 / xhttp-h3) and carry congestion control in **userspace**, and the Xray tunnel sockets pin `tcpcongestion: brutal` — BBRv3 only governs plain outbound TCP and naive-h2, so do not attribute the whole table to it. |
-
-| v4.9.5 | **`tcp_rmem`/`tcp_wmem` ceiling on the `large` tier raised to 64MB, matching what the docs always claimed.** `docs/10` documented a 64MB ceiling for the large tier from the start, but `src/06-tuning-lib.sh` shipped `TCP_MEM_MAX=33554432` (32MB) — the code lagged the docs. Large tier (RAM >= 16GB) is now `67108864`; **medium / entry / small are unchanged**, since raising a single connection's buffer ceiling to the global `rmem_max` is not safe on small hosts. Verify with `xh tuning on && sysctl net.ipv4.tcp_rmem` (expect `4096 131072 67108864`). **Two things deliberately NOT adopted** from the widely circulated "BBR Blast Smooth" one-liner script: (1) `tcp_fin_timeout=8` — this project keeps `15`; on a CDN-origin deployment an 8s FIN_WAIT2 releases sockets too early when a middlebox half-closes a long-lived origin connection, and the memory saved is meaningless on a 24GB host. (2) appending settings to `/etc/sysctl.conf` — Ubuntu 24.04+ has no such file by default, and systemd-sysctl applies `/etc/sysctl.conf` **after** `/etc/sysctl.d/*.conf`, so that script silently overrides `xh tuning` / `sbbox tune` values while `xh tuning off` (which only removes its own file) **cannot roll them back**; `>>` also stacks duplicates on re-run. This project writes exactly one file, `/etc/sysctl.d/99-xray-xhttp.conf`, replaced and removed whole. Every other parameter in that script is already covered here. |
-
-| v4.9.6 | **MTU restored to 1500 on both sides.** Server: `xh tuning on` used to force the default NIC down to 1480 unconditionally (v4.9.5 changed it to "only when the current MTU is below 1480"). To go back, verify the path first: `ip link set dev $DEV mtu 1500` then `ping -c2 -M do -s 1472 <gateway>` and the same to `1.1.1.1` — revert to 1480 if either fails. **Persistence is outside this project's control**: if the MTU is pinned in `/etc/netplan/*.yaml`, `ip link set` only affects the running system and a reboot reverts it (`grep -rn mtu /etc/netplan/`); note `50-cloud-init.yaml` is rewritten by cloud-init at boot, so an override needs a higher-numbered file such as `99-custom-mtu.yaml`. Client: `tun.mtu` in `templates/mihomo-full.yaml.tmpl` changed from 1480 to 1500. **This client-side change is a trade-off — judge it against your own network.** TUN is a virtual interface and its packets are encapsulated again by VLESS / Hysteria before leaving the physical NIC; the 20-byte headroom at 1480 exists to avoid fragmentation after that encapsulation. **On links whose physical MTU is already below 1500 (PPPoE at 1492, some mobile networks), 1500 can cause large-packet loss and half-loaded pages.** If you see that, set `tun.mtu` back to 1480 in your client config — it is independent of the server. |
-
-| v4.9.7 | **Reverts both changes from v4.9.5 and v4.9.6 — they measurably slowed connections down.** Back to v4.9.4 behaviour: `large`-tier `tcp_rmem`/`tcp_wmem` ceiling returns to **32MB** (was 64MB), client `tun.mtu` returns to **1480** (was 1500), and the server NIC MTU should go back to **1480**. **Lesson: the v4.9.5/4.9.6 verification was inadequate.** It only confirmed the values had been *written* (`sysctl` read-back, a `ping -M do` probe at 1500 bytes) and never compared throughput or latency before and after. A parameter being set is not the same as it being faster, and a 1500-byte DF probe only proves the path MTU on **one server-to-internet hop** — not the client's real path, and certainly not that the packet still fits after tunnel encapsulation. To roll back if you installed v4.9.5/4.9.6: rerun `xh tuning off && xh tuning on` with the v4.9.7 CLI (expect `4096 131072 33554432`); reset the NIC with `ip link set dev <dev> mtu 1480` and fix any pinned value in `/etc/netplan/`; and re-fetch the subscription (or set `tun.mtu` back to 1480 by hand) on clients. **Tuning changes in this project will no longer be accepted without before/after measurements** — the bar is a throughput/latency comparison on the same host and config (`SAMPLES=25 python3 run_test.py`), not whether the parameter was written successfully. |
-
-| v4.9.8 | **Native `minversion` / `minClientVer` support and management CLI.** In v4.9.0, removing `minClientVer` caused mihomo / Clash Meta / sing-box clients to fail handshake with `REALITY authentication failed`. v4.9.8 restores `minClientVer: "1.8.0"` as the default for full client compatibility, and adds full lifecycle management via `xh minversion [show|on|off|<ver>]` and environment variable `REALITY_MIN_CLIENT_VER` (aliases: `MINVERSION`, `MIN_CLIENT_VER`). Switch to strict mode anytime with `xh minversion off`, or re-enable with `xh minversion on`. Regression: 13/13 nodes pass (`run_test.py`). |
-
-| v4.9.9 | **Full adaptation for Xray-core 26.9+ new features and deprecation cleanup.** ① **Freedom outbound `domainStrategy` migration:** Xray 26.9+ deprecated `freedom.settings.domainStrategy` / `targetStrategy` in favor of `streamSettings.sockopt.domainStrategy`. Migrated to eliminate deprecation warnings completely, achieving zero warnings on config test and startup. ② **Blackhole outbound HTTP 403 graceful response:** Added `"response": { "type": "http" }` (PR 6713) to send immediate HTTP 403 Forbidden on blocked destinations/private IP leaks rather than silent packet drops that leave client sockets hanging. ③ **Inherited Xray 26.9.9 core improvements:** Automatic carrier idle connection cleanup (IdleTimeout), official Hysteria v2.12.2 upgrade with race condition fixes, QUICv2 sniffing support, and updated REALITY crypto. Regression: 13/13 nodes pass (`run_test.py`). |
-
-| v4.9.10 | **Fix REALITY handshake failure on Shadowrocket, sing-box, and Clash Meta caused by Xray-core 26.9.8+ MLKEM768 breaking change; pin stable compatible core v26.7.28.** ① **Root cause mitigation:** Xray v26.9.8+ strictly requires the post-quantum `X25519MLKEM768` key share in ClientHello (`xtls/reality/tls.go`), immediately dropping standard clients (Shadowrocket, sing-box, Clash Meta) with `reality verification failed` even when `minClientVer: 1.8.0` is configured. ② **Pin default compatible version:** Default install and auto-upgrade now pin to verified stable `v26.7.28`. ③ **`xh update [<ver>]` support:** Allows targeting specific versions (e.g. `xh update 26.7.28`) with automated rollback. Outputs warning when updating to >= 26.9.8, and `--auto` skips breaking updates. ④ `FEATURE_AUTOUPDATE` defaults to `false` for production stability. |
-
-| v4.9.16 | **Full upgrade and adaptation for Xray-core latest release v26.9.9 and REALITY Post-Quantum (ML-KEM-768) anti-censorship standard.** ① **Strict Latest Core Invariant:** In accordance with project policy, Xray core must always remain on the latest release (`v26.9.9` live verified, 13/13 `xh diag` checks PASS). Default target version now tracks `latest`. ② **Post-Quantum REALITY Mechanism:** Full coverage of the `X25519MLKEM768` (0x11ec) key share in `xtls/reality/tls.go` to match modern Chrome 124+ and prevent GFW TLS fingerprint gap detection. ③ **Multi-Protocol Routing Matrix:** Modern Xray clients (v2rayN/v2rayNG/NekoBox) connect via REALITY ML-KEM; Shadowrocket connects via Hysteria2 (UDP 8443 obfs); sing-box & Mihomo connect via XHTTP H2/H3 CDN and Direct nodes; companion `sbbox` provides dual-engine fallback. ④ **Line-Break Error Mitigation:** Added single-line and Heredoc deployment templates to eliminate terminal backslash syntax errors completely. |
-
-| v4.9.17 | **Native Hysteria2 end-to-end QDoS mitigation, port hopping disabled by default, and TCP Brutal full-speed sockopt.** ① **Single Fixed Port Architecture:** Disables UDP port hopping by default (`FEATURE_PORT_HOPPING=false`), eliminating port conflicts with coexisting proxy deployments (e.g. sbbox) and reducing host exposure to internet-wide UDP port scanning. ② **Kernel-Level Netfilter Anti-Flood (iptables / ip6tables):** Ingress fast-path for `RELATED,ESTABLISHED` packets preserves 1000Mbps+ line-rate throughput, drops `INVALID` UDP states, and limits `NEW` connection handshakes via token-bucket (`--hashlimit-above 50/sec --hashlimit-burst 100`). ③ **Xray Hysteria Inbound Hardening:** Shortens `udpIdleTimeout` from 300s to 60s for rapid cleanup of stale UDP and conntrack states, and binds `"sockopt": { "tcpFastOpen": true, "tcpcongestion": "brutal" }` to guarantee 0-RTT handshakes and line-rate TCP Brutal congestion control. Regression: 13/13 nodes PASS (`run_test.py`). |
-
-| v4.9.18 | **Lock strictly to official Xray-core releases (`releases/latest`), eliminate `--beta` flag, and implement pre-release protection.** ① **Official Release Policy:** In accordance with project invariants, Xray must exclusively use official release versions (`releases/latest` = `v26.3.27`), strictly forbidding unstable pre-releases/betas. ② **Installer & Update Hardening:** Removed `--beta` flag from `install-release.sh` invocations and updated update endpoints to `releases/latest`. Added active pre-release detection in `xh update` to intercept and warn against accidental installations of unstable GitHub pre-releases (such as v26.9.8+ with breaking MLKEM768 REALITY handshake changes). ③ **Client Compatibility:** 100% stable compatibility restored for all third-party clients (Shadowrocket, sing-box, Clash Meta, Loon, Surge) across all nodes. Regression: 13/13 nodes PASS (`run_test.py`). |
-
-| v4.9.19 | **Completely resolve Mihomo / Clash split upload/download node (REALITY authentication failed) and enable across all subscriptions by default.** ① **Deep Source Code Root Cause Analysis:** Under `MetaCubeX/mihomo` source (`adapter/outbound/vless.go` line 764 and `reality.go`), `downloadRealityCfg` defaults to inheriting the parent node's `v.realityConfig`. When connecting to the downlink CDN domain (`cdn.example.com:443` on Cloudflare), Mihomo attempted a REALITY handshake against Cloudflare, causing TLS verification failure. Mihomo wrapped the error using `v.addr` (the VPS IP `<VPS_IP>:443`), creating the deceptive appearance that the uplink REALITY handshake failed. ② **The Elegant Fix:** In `adapter/outbound/reality.go`, `RealityOptions.Parse()` returns `(nil, nil)` when `PublicKey == ""`. Specifying `reality-opts: { public-key: "" }` inside `download-settings` forces Mihomo to clear `downloadRealityCfg` back to `nil`, restoring clean, standard TLS 1.3 for the CDN downlink. Also flattened `path`, `host`, and `reuse-settings` directly under `download-settings`. ③ **Live Mihomo Verification & Default Delivery:** Set `FEATURE_UP_CDN_DOWN_MIHOMO=true` by default. Real Mihomo binary test downloaded 10MB in **0.37s** (**27.0 MB/s / 216 Mbps**) with 100% alive health checks (4~10ms latency). Regression: 13/13 nodes PASS (`run_test.py`). |
-| v4.9.20 | **Native Cloudflare CDN ECH (Encrypted Client Hello) & TCP ECN full-stack management and auto-sync.** ① **Cloudflare CDN ECH Anti-Censorship:** In TLS 1.3, plaintext SNI exposes target domains to SNI-based filtering. ECH encrypts the inner ClientHello with the CDN's public key (fetched via HTTPS DNS records), masking user traffic behind the public outer SNI `cloudflare-ech.com`. Full native client adaptation: V2rayN/Xray automatically injects `&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query`, and Mihomo injects `ech-opts: { enable: true, query-server-name: cloudflare-ech.com }` (nested inside `download-settings` for split upload/download nodes). One-click management with `xh ech [show|on|off]`. ② **TCP ECN Dual-Stack & BBRv3 Synergy:** Enables bidirectional ECN negotiation (`net.ipv4.tcp_ecn = 1`) with safe fallback (`net.ipv4.tcp_ecn_fallback = 1`) across sysctl and coexisting projects, allowing BBRv3 to react to router Congestion Experienced (CE) marks before packet loss occurs. Managed via `xh ecn [show|on|off]`. Regression: 13/13 nodes PASS (`run_test.py`). |
-| v4.9.21 | **Standardized Essential Node Naming & Root Cause Fix for Shadowrocket CDN Disconnections.** ① **Essential Naming Refactoring:** Stripped redundant hardware architecture suffixes (`-arm`) and confusing historical tags (`raw`). Adopted standardized `[Protocol]-[Transport/Security]-[Topology]` naming: `VLESS-Reality-Vision-Direct`, `VLESS-Reality-XHTTP-Direct`, `VLESS-Reality-Up-CDN-Down`, `VLESS-XHTTP-CDN-H2`, `VLESS-XHTTP-CDN-H3`, `VLESS-XHTTP-Direct-H3`, `VLESS-XHTTP-Direct-H2`, `Hysteria2-Obfs-Direct`. ② **Shadowrocket CDN Handshake Fix:** Adjusted server-side CDN 8001 inbound decryption from experimental ML-KEM to `"none"`, resolving client empty reply (`curl 52`) drops. Dedicated `shadowrocket.txt` subscription delivers clean `VLESS-XHTTP-CDN-H2` nodes with `encryption=none` and `alpn=h2`, omitting incompatible ECH and complex extra parameters. Documented DoH recommendation for TUN mode to bypass Cloudflare free tier L3 UDP 53 drops. Regression: 12/12 nodes PASS. |
-| v4.9.22 | **Geo data refreshed, CDN latency re-attributed, and a silent benchmark trap.** ① **Xray core stays at v26.3.27** under the official-releases-only rule — `releases/latest` is still v26.3.27 and every v26.7.x / v26.9.x release is flagged `prerelease: true`. Only the routing data (`geoip.dat` / `geosite.dat`, used by `geoip:private` and `geosite:category-pt`) was updated, via the official script's separate `install-geodata` subcommand, which never touches the core binary; `xray run -test` passes and all 7 Xray nodes pass regression. ② **The two CDN nodes slowed from 12.7/15.8 ms to 30–45 ms, and it is not local configuration.** Client-to-edge RTT is 0.8 ms (same-region colo), TCP connect 1.8 ms, and the packet-up interval is confirmed at 10 ms in both the live subscription and the test client. On the **tunnel path** (not `/`, which is the masquerade proxy), first byte is **22–36 ms through Cloudflare but 4.6–5.0 ms straight to the origin nginx** — the extra 20–30 ms sits inside Cloudflare's edge-to-origin leg, which this host cannot tune, so nothing was changed. ③ **cachefly is no longer a safe benchmark source.** Once it rate-limits it answers **HTTP 200 with a 24-byte body** (`I just served you 10mb`, header `x-cf-quota-max-delivery-conns`) — status and curl exit code both look healthy, so a script that does not check `size_download` computes a bogus, tiny throughput. The earlier advice to use cachefly in place of the 429-prone `speed.cloudflare.com` is withdrawn. Use sources near the VPS whose direct throughput far exceeds the proxy's (from SJC, `speedtest.fremont.linode.com` and `sjo-ca-us-ping.vultr.com` measure 2–3.5 Gbps direct), alternate them, fetch a fixed range with `-r`, and count a sample only if `size_download` is complete; distant sources such as `proof.ovh.net` (42 Mbps direct) bottleneck before the proxy does. |
-| v4.9.23 | **Full Xray-core compatibility test from the subscription links, and a parameter review that changed nothing.** ① **Method.** `run_test.py` builds its clients from server-side parameters, so it never tested what a user gets after importing a subscription. New `tools/xray_compat_test.py` reads only the share links, parses them the way v2rayN (Xray core) does, runs `xray run -test` per node, then measures latency and a full-byte download. It covers this project's v2rayN and TUN subscriptions plus the co-located sbbox subscription. ② **Result: all 12 links Xray core can load PASS** — the XHTTP CDN-H2/CDN-H3/Direct-H3, Hysteria2, and three Reality nodes, the 4 TUN-subscription nodes, and sbbox's Hysteria2 and VLESS-Reality. TUIC, AnyTLS and NaiveProxy H2/H3 are **not supported by Xray core** and need the sing-box core. Two blind spots were closed: Hysteria2 had **never** been tested with an Xray client (`run_test.py` uses sing-box for it), and sbbox's VLESS-Reality node was missing from `run_test.py` entirely; both pass. To tell whether Xray supports a protocol: `failed to build outbound handler` means known protocol, bad settings; `failed to load outbound detour config` means unknown protocol. ③ **Parameter review under realistic conditions, no changes.** "Maximum" is not the goal — raising buffers 32→64 MB and MTU to 1500 once made things clearly slower and was rolled back. `tools/xray_rtt_bench.py` puts the client in a network namespace with **160 ms RTT, 1% download loss and a 300↓/50↑ Mbps line** (tbf + netem) and measures both directions. The Hysteria2 link's `upmbps=100&downmbps=1000` has **no measurable effect under Xray core**: as-is 130↓/41↑, bandwidth removed 135↓/42↑, matched to the line 131↓/42↑; at RTT 0 unshaped, upload with `upmbps=100` still reached 308 Mbps. No benefit, so no change (sing-box core handles this parameter differently and was not reviewed here). Same conditions: Reality-Vision 144↓/33↑, Reality-XHTTP 102↓/27↑, XHTTP-H3-Direct 111↓/37↑, sbbox Hysteria2 128↓/40↑, sbbox Reality-Vision 140↓/33↑. **Deliberately untouched:** Hysteria2 server QUIC initial windows (512 KB / 1 MB) and `ignoreClientBandwidth: true` are QDoS defences, not to be opened up for "maximum"; `policy.bufferSize: 4096` was **not** A/B-tested this release, so it stays and no conclusion is drawn. Uploads use `speed.cloudflare.com/__up`, whose 429 responses are detected and reported. |
-| v4.9.24 | **Measured verdicts on the three items v4.9.23 left open.** ① **Benchmark self-correction: shaping queues must be bounded.** The first half of this work shaped the line with an outer tbf and an inner netem whose queue limit was 400,000 packets; tbf's `latency 100ms` does not bound the inner queue, so the harness emulated a **~1-second buffer** (ping during uploads averaged 956–1092 ms against a 160 ms RTT). In it Brutal fills the buffer and BBR is badly misled, which produced a **wrong conclusion** — "sing-box without a bandwidth declaration (BBR) collapses to 8 Mbps upload on a slow line". With netem's own `rate` and a bounded `limit` (in-flight packets plus ~100 ms of queue; `BUF_MS` adjusts it) the same case is 40 Mbps. All numbers below come from the corrected harness. ② **Under the sing-box core, Hysteria2's `upmbps=100` hard-caps upload at ~89 Mbps.** It has no effect under Xray core, but v2rayN runs Hysteria2 on sing-box by default and Mihomo also uses Brutal. sing-box client upload, median of 3 (300↓/50↑ line clean / 1% loss; 1000↓/300↑ line clean / 1% loss): declared 100 → 41/42, **85/85 (range 85–85)**; 300 → —/27, 190/175; 1000 → 31/33, 163/167; no declaration (BBR) → 40/13, 171/160. No value wins on both lines: raising it doubles fast-uplink throughput but costs slow uplinks 25–35% (Brutal sends at the declared rate and floods the user's own uplink queue); no declaration drops to 13 on a slow, lossy uplink. Brutal is meant to be set to the user's real uplink, which a generator cannot know. **Verdict: keep the default at 100** (most home uplinks here are 30–100 Mbps) and **make it configurable** for both the v2rayN link and the Mihomo config: `HY2_UP_MBPS=300 HY2_DOWN_MBPS=1000 bash install.sh`; existing users can edit the node's upload bandwidth in their client. ③ **Xray `policy.bufferSize`: no measurable difference, value unchanged, comment corrected.** Source confirms arm64's default really is 4 KB. Four settings — 4 KB (field removed), 32, 512, 4096 KB — each with an xray restart, on Reality-Vision, Reality-XHTTP, XHTTP-H3-Direct and Hysteria2: unshaped RTT 0 downloads 850/899/961/877, 1393/1454/1347/1389, 905/926/909/860, 550/539/551/528; at 160 ms + 1% loss 134/129/126/136, 123/97/90/95, 111/106/107/95, 119/127/124/131; uploads likewise overlap and xray RSS stayed 58–70 MB. The value stays at 4096 (changing it buys nothing either), but the generator comment claiming the larger buffer "unlocks gigabit throughput" contradicted the data and was corrected. ④ **Hysteria2 server initial windows — shipped in sbbox v2.7.10**, since they belong to the co-located sbbox's external Hysteria2 (UDP 44116): raising the QDoS-hardened 512 KB / 1 MB initial windows to 8 MB / 20 MB took a fast-line 40 MB upload from 109 to 141 and a slow-line 5 MB upload from 3 to 30 Mbps. It does not weaken the defence — both Hysteria2 nodes enforce salamander, and with a wrong or missing obfs password the connection cannot be established at all. `ignoreClientBandwidth: true` stays: turning it off gave no measurable download gain. This project's own Hysteria2 (Xray inbound on 8443) sets no windows, runs on core defaults and already uploads 160–184 Mbps on the fast line. ⑤ Regression `SAMPLES=25 run_test.py` 12/12 PASS; every server setting changed during the A/B runs was restored except item ④. |
-| v4.9.26 | **New node Hysteria2-H3-Direct: best download of all nodes, upload on par with Hysteria2, and traffic that looks like plain HTTP/3.** ① **Design.** Measured under identical conditions (network namespace, 160 ms RTT, line shaping + loss, bounded queues), Hysteria2 was already the best node in both directions, so another "tuned-harder" variant of it would add nothing. What can still improve is how the traffic looks on the wire: the existing Hysteria2 runs on UDP 8443 with salamander, i.e. random-looking UDP on a non-standard port — exactly what ISPs most often shape or block. The new node runs on **UDP 443 without obfuscation**, with the same certificate and masquerade site, so it looks like an ordinary website's HTTP/3. It shares the Hysteria2 password; clients set no obfs. Enabled by default (`FEATURE_HY2_H3`, auto-disabled if UDP 443 is taken), with the same per-source 50/s handshake hashlimit on UDP 443 because unauthenticated peers can now complete a QUIC handshake. ② **Measured download (Mbps, Xray / sing-box client):** 1000↓/300↑ clean **257 / 263** vs Obfs-8443 227 / 206 vs Reality-Vision 198; 1000↓/300↑ 1% loss **159 / 132** vs 126 / 108 vs 128; 300↓/50↑ 1% loss **129 / 139** vs 127 / 118 vs 108. Upload is on par with Obfs-8443 (152 vs 168 clean, 111 vs 196 at 1% loss with overlapping ranges, 44 vs 44 on the slow line). Over the public path (including the cloud hairpin) it measured 613 / 694 Mbps vs 247 / 252 for Obfs-8443 — indicative only. ③ **Found, not fixable by configuration: Reality-XHTTP upload is capped by an HTTP/2 window.** ~47 Mbps at 160 ms regardless of stream-up / packet-up / shorter post interval / 4 connections. Xray's XHTTP over TCP serves HTTP/2 via Go's `net/http` with no HTTP/2 flow-control settings, so Go's default 1 MB upload window applies and a session's upload stays on one connection. It scales exactly with 1 MB ÷ RTT: 183 / 96 / 47 Mbps at 40 / 80 / 160 ms against a predicted 210 / 105 / 52 (Reality-Vision: 203 / 155 / 102). Not exposed in configuration and this project uses official Xray builds only. Its download is better than Vision's (147 vs 121 at 160 ms), so use Reality-XHTTP for download-heavy use and Hysteria2-H3-Direct, Reality-Vision or XHTTP-H3-Direct for upload-heavy use; Reality-Up-CDN-Down's upload leg has the same cap. ④ This release also ships the previously committed but unreleased change that switches Hysteria2 links to the domain and stops generating VLESS-XHTTP-CDN-H2 by default. On the co-located sbbox, whose external Hysteria2 had been deliberately reset to official defaults, only `ignoreClientBandwidth: true` was restored (no download cost; stops a password holder forcing the server to blast); the official default initial windows (8 MB / 20 MB) are equivalent to sbbox v2.7.10's measured best. Regression `SAMPLES=25 run_test.py` 12/12 PASS; subscription-based Xray-core compatibility 14/14 PASS. |
-| v4.9.27 | **Patch: the Shadowrocket subscription now includes Hysteria2-H3-Direct.** Its node filter only matched the `Obfs` Hysteria2, so fresh installs silently left the new node out of `shadowrocket.txt`; it now matches both Hysteria2 nodes (Shadowrocket supports Hysteria2 natively). |
-| v4.9.28 | **Xray keeps a single Hysteria2 node: Hysteria2-H3-Direct.** Based on v4.9.26's like-for-like measurements, Hysteria2-H3-Direct (UDP 443, no obfuscation) is faster on download under all three line conditions (257/263 vs 227/206 clean, 159/132 vs 126/108 at 1% loss on a 1000↓/300↑ line, 129/139 vs 127/118 on 300↓/50↑ with loss), on par for upload, lower latency in regression (2.9 vs 3.9 ms), and looks like ordinary HTTP/3 rather than random-looking UDP on a non-standard port. `Hysteria2-Obfs-Direct` (UDP 8443, salamander) is now **off by default** via the new `FEATURE_HY2_OBFS` (default `false`); `FEATURE_HY2` remains the umbrella switch and `FEATURE_HY2_H3` controls the UDP 443 node. Port-conflict checks, legacy-hysteria migration (it occupies 8443, so it now only disables the obfs node instead of both), subscriptions and Mihomo pruning, install output, `xh info` and `xh diag` all key off the new switch, and `xh diag` gained the missing UDP 443 listen check. The trade-off: Xray no longer offers an obfuscated Hysteria2 by default — re-enable with `FEATURE_HY2_OBFS=true`, or use the co-located sbbox Hysteria2, which has salamander. **Existing clients on Hysteria2-Obfs-Direct must re-pull the subscription.** The 8443 firewall rules are left in place (shared multiport rule with sbbox's 44116; inert with no listener). |
-| v4.9.29 | **Reverse split node, VLESS Encryption on the XHTTP inbound, ECH double-encoding fix.** ① New `VLESS-CDN-Up-Reality-Down`: upload via XHTTP+TLS through Cloudflare, download direct over Reality 443; lands on the same 8001 inbound as `VLESS-Reality-Up-CDN-Down`, no new server port (`FEATURE_CDN_UP_REALITY_DOWN`, default on; excluded from the TUN subscription). ② The 8001 inbound — the only one that crosses the CDN — now uses vlessenc by default (`FEATURE_XHTTP_VLESSENC=true`) so Cloudflare cannot read VLESS payloads after terminating TLS; Reality-Vision stays `none`. Shadowrocket (no vlessenc) keeps Vision + Hysteria2 only. Negative control: clients still sending `encryption: none` time out. ③ `xh ech on` double-encoded the split node's download-leg ECH (`%252B`) and no longer matched the node after the v4.9.21 rename; fixed. ④ Measured at 160 ms RTT / 1% loss (Mbps down/up): Reality-up/CDN-down **101 / 28**, CDN-up/Reality-down 92 / **11**, pure Reality-XHTTP 95 / 30, pure CDN-H3 95 / 87 — downloads within noise; CDN upload in split mode is packet-up and slow. Both kept; Reality-up/CDN-down recommended. ⑤ `tools/xray_rtt_bench.py` can now measure CDN legs (netns resolv.conf + temporary FORWARD/MASQUERADE). Reserved ports widened to 10800-10809 (matches sbbox v2.7.13). `run_test.py` 13/13 PASS. **Clients must re-pull subscriptions.** |
-| v4.9.30 | **nginx 1.31.6, CDN-up/Reality-down upload leg on h3 (11 → 166 Mbps), buffer re-check.** Measured in a netns at 160 ms RTT / 1% download loss (Mbps down/up). ① Xray core unchanged: `releases/latest` is still v26.3.27 and everything after it is a pre-release. ② nginx 1.31.4 → 1.31.6 with byte-identical configure flags and the same OpenSSL (3.5.5, so CVE-2026-90439, which needs OpenSSL ≤ 3.5.0, does not apply); 1.31.5 fixed a use-after-free when proxying with buffering to an HTTP/2 client. Tarball GPG-verified, `nginx -t` run with the new binary before the swap. CDN nodes show no regression (CDN-H3 98/91 → 97/170; Reality-up/CDN-down 109/27 → 108/28). nginx config left as is — nothing measured better. ③ `VLESS-CDN-Up-Reality-Down` upload leg h2 → **h3**: 93/**11** → 102/**102**, and 129/**166** re-measured from the published link (packet-up over h2 through Cloudflare pays a full RTT per POST). Mihomo top-level `alpn` is now exactly `h3`; the Reality download leg keeps h2. Tested and **not adopted**: h3 on the download leg of Reality-up/CDN-down (109 → 101, overlapping). Trade-off: needs UDP 443 to Cloudflare. ④ TCP buffer ceiling kept at 64 MB: the 9-08 slowdown changed 64 MB and MTU 1500 together and was never split; a 32 MB A/B now shows 64 MB equal or better (300↓/50↑ with loss: Vision 119 vs 83, Reality-XHTTP 93 vs 24) with identical ping-under-load, so MTU was the likelier culprit. ⑤ `tools/xray_rtt_bench.py` takes `{"core":"sing-box","sbtag":"<outbound tag>"}` to benchmark sbbox nodes (naive, tuic, AnyTLS) under the same conditions, and `"set":{"server_port":…}` to point at a throwaway test instance. |
-| v4.9.31 | **Fix: with ECH enabled, `VLESS-Reality-Up-CDN-Down` failed on Mihomo (`REALITY authentication failed`).** The ECH block inserted into `download-settings` was indented 6 spaces instead of 8, so `ech-opts` became a sibling of `download-settings` and the following `reality-opts` / `path` / `host` / `reuse-settings` were parsed as children of `ech-opts`. That dropped v4.9.19's `reality-opts: { public-key: "" }` from the download leg, so Mihomo again attempted a Reality handshake against Cloudflare. The YAML stayed valid and `mihomo -t` passed; only real traffic failed, and v2rayN/Xray were unaffected, so the link-based compat test never caught it. Affected every ECH-enabled install since v4.9.20. Verified with the official mihomo v1.19.31 loading all subscription nodes (TUN and DNS listeners off, localhost only), per-node API delay plus a real download: Reality-Up-CDN-Down broken → 509 Mbps; the other six unchanged. Regenerate subscriptions; Mihomo clients must re-pull. |
-| v4.9.32 | **`fs.suid_dumpable = 0`; ignore runtime cache databases.** The proxy processes hold the Reality private key, UUIDs, vlessenc keys and decrypted traffic in memory; with the kernel default `fs.suid_dumpable = 2` (suidsafe) a setuid or credential-changing process that crashes can still dump core. `xh tuning on` now writes `fs.suid_dumpable = 0` (it was 2 on the live host — nothing had set it), alongside the existing `kernel.core_pattern = core` and `* hard core 0`. The co-located sbbox adds the same key in v2.7.17 so both projects keep writing an identical sysctl set. `.gitignore` now ignores `*.db`, `*.db-journal` and `cache.db`: sing-box writes a `cache.db` holding its DNS cache (real domains) into the working directory, and one had already appeared in this repo during v4.9.30 work. |
-| v4.9.33 | **Stop sending ICMP redirects.** With Docker installed `ip_forward = 1`, so the kernel sends ICMP redirects when forwarding a packet back out the interface it arrived on, leaking routing information to the local segment. The send side is on if **either** `all` or the interface is 1: `all`/`default` were already 0, but the uplink `enp0s6` was 1 (it exists before boot, so `default` never applied to it). Negative control — a host bridge with two netns where A is forced via the host to reach B, capturing ICMP type 5 on A: `all=0` + bridge `1` → **2 redirects**; bridge `0` → **0**. The tuning now writes `send_redirects = 0` for `all`, `default` and the current default-route interface (a `.` in a VLAN name becomes `/` per sysctl convention); systemd's udev rule re-applies per-interface keys from `sysctl.d` when the NIC appears, so it survives reboots. The receive side is left as is: with forwarding on, `accept_redirects` needs **both** `all` and the interface, and `all = 0` suffices. The co-located sbbox adds the same keys in v2.7.18. Regression 13/13 PASS. |
-
-> **Note on `minClientVer` / `minversion` (supported in v4.9.8)**:
-> Reality now defaults to `"minClientVer": "1.8.0"`, providing out-of-the-box compatibility for mihomo, Clash Meta, and sing-box clients.
-> - To toggle strict mode (Xray core default version only): run `xh minversion off`.
-> - To re-enable compatibility mode: run `xh minversion on` (or `xh minversion 1.8.0`).
-> - During installation, customize via `REALITY_MIN_CLIENT_VER=1.8.0` or `REALITY_MIN_CLIENT_VER=default`.
+| Record Type | Name | Target IP | Proxy Status | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **A Record** | `reality.example.com` | `Your VPS IP` | **DNS only (Grey Cloud)** | Certificate issuance & Reality / Hy2 direct link |
+| **A Record** | `cdn.example.com` | `Your VPS IP` | **Proxied (Orange Cloud)** | XHTTP CDN node to hide origin IP |
 
 ---
 
-## Prerequisites
+### 1.2 Cloudflare Dashboard Settings
 
-Complete these in Cloudflare before running the script. (For a free domain that can be
-hosted on Cloudflare, try <https://my.dnshe.com/index.php?m=domain_hub> or
-<https://dash.domain.digitalplat.org/dashboard>.)
+Enable the following options in your Cloudflare dashboard:
 
-1. Reality domain DNS → **DNS only** (grey cloud), pointing at your VPS IP; used to issue
-   the certificate.
-2. CDN domain DNS → **Proxied** (orange cloud), pointing at your VPS IP.
-3. SSL/TLS encryption → **Full (strict)**.
-4. Network → **gRPC enabled**.
-5. Cache rules (recommended) → set the XHTTP path to bypass cache; the script prints the
-   expression once deployment finishes.
-6. For ECH → enable ECH in Edge Certificates first. It is off by default.
+1. **SSL/TLS** ➡️ **Overview**: Select **Full (strict)** encryption mode;
+2. **SSL/TLS** ➡️ **Edge Certificates**: Minimum TLS Version: **TLS 1.2**;
+3. **Network**:
+   - Enable **gRPC**
+   - Enable **WebSockets**
+   - Enable **HTTP/3 (with QUIC)**
+   - Enable **0-RTT Connection Resumption**
+4. **Rules** ➡️ **Cache Rules (Optional)**:
+   - Set **Bypass Cache** on your XHTTP path (prevents streaming responses from chunked buffering).
 
-Alternatively, each entry domain can use its own `dist/<domain>/index.html` as the
-fallback page; you can capture a real page with
-[SingleFile](https://chromewebstore.google.com/detail/singlefile/mpiodijhokgodhhofbcjdecpffjipkle)
-and upload it.
+---
 
-If certificate issuance fails for the Reality domain, acme.sh can be used instead:
+### 1.3 SSL Certificate Issuance
+
+The installer automatically requests certificates using `acme.sh`. To issue certificates in advance with `acme-yg`:
 
 ```bash
+# Step 1: Free port 80 if occupied
+systemctl stop nginx xray 2>/dev/null || true
+
+# Step 2: Run acme-yg script
 bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)
+
+# Step 3: Copy certificates to standard path
+mkdir -p /etc/ssl/private
+cp -f /root/ygkkkca/reality.example.com/fullchain.cer /etc/ssl/private/fullchain.cer
+cp -f /root/ygkkkca/reality.example.com/private.key /etc/ssl/private/private.key
+chmod 600 /etc/ssl/private/*.key
 ```
 
 ---
 
-## One-command deployment
+## 2. One-Command Deployment
 
-> **Version requirements**: Xray core ≥ `26.3.27`, Mihomo core ≥ `1.19.24`.
-> The Xray floor comes from the two direct UDP nodes: the Hysteria2 inbound needs official release 26.3.27+. Below that
-> version the installer disables those two nodes automatically.
->
-> Since v4.7.4 **all 7 nodes and all features are on by default**: xpadding (XHTTP padding
-> obfuscation), Hysteria2 finalmask + Salamander obfuscation, VLESS Encryption
-> (ML-KEM-768), and the h3-direct node — with kernel tuning applied at install time
-> (`xh tuning on`, best-effort). ECH is the exception: off by default, enable with
-> `CDN_ECH=y`.
-> For a minimal setup, use
-> `FEATURE_H3_DIRECT=false FEATURE_XPADDING=false FEATURE_CDN_ECH=false FEATURE_AUTO_TUNING=false bash install.sh`.
+### 2.1 Interactive Deployment
 
-Debian / Ubuntu:
+Log in to your VPS terminal as root:
 
 ```bash
 sudo -i
@@ -321,355 +96,142 @@ curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/
 bash ~/install.sh
 ```
 
-The script is re-runnable — use it to change domains, fallback sites and other parameters.
+Follow the prompts to enter:
+1. **Reality / Direct domain** (e.g. `reality.example.com`)
+2. **CDN domain** (e.g. `cdn.example.com`)
 
-### Extension: XHTTP over HTTP/3 (3 h3 nodes)
+---
+
+### 2.2 Zero-Interaction Environment Variable Deployment
+
+Recommended single-line positional parameter installation:
 
 ```bash
-curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/add-quic-h3.sh -o ~/add-quic-h3.sh && bash ~/add-quic-h3.sh
+sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="vps"
 ```
 
-Ported from the upstream `add-quic.sh`, this appends `Vless-xhttp-tls-h3`,
-`Vless-xhttp-split-h2up-h3down` and `Vless-xhttp-split-h3up-h2down`. All three use the CDN
-domain for `sni`/`host`, and nginx's `listen ... quic` is inserted into the **CDN domain's
-server block**, reusing the `location` already there — unlike `add-quic.sh` (Hysteria2),
-which inserts into the Reality block. The two use different config markers and can be
-installed side by side.
+#### Core Environment Variables
 
-## Extension scripts
+| Variable | Default | Description |
+| :--- | :---: | :--- |
+| `AUTO` | `0` | Set `1` for automated non-interactive install. |
+| `REALITY_DOMAIN` | — | **Direct / Reality domain** (Cloudflare Grey Cloud). |
+| `CDN_DOMAIN` | — | **CDN proxied domain** (Cloudflare Orange Cloud). |
+| `FEATURE_AUTO_TUNING` | `true` | Enables BBR+fq, 64MB buffers, 1048576 handles, etc. |
+| `FEATURE_XPADDING` | `true` | Enables XHTTP traffic padding to eliminate length fingerprints. |
+| `FEATURE_CDN_ECH` | `false` | Cloudflare ECH (Encrypted SNI). Requires CF ECH enabled. |
+| `FEATURE_BRUTAL` | `true` | Enables TCP Brutal congestion control (95% host speed). |
+| `REALITY_MIN_CLIENT_VER` | `1.8.0` | Minimum client version compatibility (`1.8.0` for Mihomo/Clash/sing-box). |
 
-Add these after the main deployment as needed. They reuse the existing
-`UUID / Path / VLESS Encryption` and update the client configs and subscription.
+---
+
+## 3. Resident Management Command `xh`
 
 ```bash
-# Direct Hysteria2 (the XHTTP+TLS+H3 node in the same extension is known to be broken, see below)
-curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/add-quic.sh -o ~/add-quic.sh && bash ~/add-quic.sh
-```
-
-> Since v2.0.1 this extension **only emits `Hysteria2-direct` by default**.
-> `Vless-xhttp-tls-h3-direct` requires `FEATURE_XHTTP_H3_NODE=true`.
-> **That node is measurably broken under Shadowrocket** (the same cause as the direct h3
-> node the main script already disables by default). If you want Hysteria2, run the
-> extension as usual and ignore the h3 node.
-
-### Non-interactive (scripted install & automation)
-
-Designed following **Karpathy Engineering Principles** (*Think Before Coding · Simplicity First · Surgical Changes*):
-
-#### Option A: Standard Production One-Liner (Recommended: immune to terminal wrapping & CRLF breaks)
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="oracle-vps"
-```
-> To override additional settings, append them to the command (e.g. `IP_CHOICE=1` `CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`). Script defaults already provide optimized production values (`FALLBACK_MODE=proxy`, `FEATURE_AUTO_TUNING=true`, `FEATURE_XPADDING=true`, `FEATURE_H3_DIRECT=true`, `FEATURE_HY2=true`).
-
-#### Option B: Minimalist One-Liner (Required variables only)
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com"
-```
-
-#### Option C: Custom Ports & Path Template
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
-  AUTO=1 \
-  REALITY_DOMAIN="reality.example.com" \
-  CDN_DOMAIN="cdn.example.com" \
-  H3_PORT=8446 \
-  H2_PORT=8445 \
-  HY2_PORT=8443 \
-  XHTTP_PATH="/$(openssl rand -hex 4)" \
-  NODE_TAG="node-01"
+xh                     # Open interactive management menu
+xh status              # Show service status, listening ports, tuning stats
+xh info                # Show node parameters and subscription links
+xh sub                 # Output subscription links and terminal QR code
+xh resub               # Regenerate all client subscriptions
+xh minversion [on|off] # Reality minimum client version control
+xh ech [show|on|off]   # Cloudflare CDN ECH toggle & subscription sync
+xh ecn [show|on|off]   # TCP ECN toggle & status inspection
+xh cdnh2 [show|on|off] # CDN TCP(h2) fallback node toggle
+xh brutal              # TCP Brutal status and bandwidth rate setting
+xh tuning [win|mac|sb] # Display client OS gigabit tuning commands
+xh conflict            # sysctl conflict detection and self-healing
+xh log [xray|nginx]    # Live logs inspection
+xh update [--auto]     # Update Xray-core with automated rollback
+xh restart             # Restart xray and nginx services
 ```
 
 ---
 
-Available environment variables:
+## 4. Client Tuning Guide for Gigabit Networks
 
-| Variable | Meaning | Default |
-|---|---|---|
-| `AUTO` | `1` for zero prompts | `0` |
-| `REALITY_DOMAIN` / `CDN_DOMAIN` | The two domains, **required** | — |
-| `IP_CHOICE` | `1`=IPv4, `2`=IPv6 | `1` |
-| `FALLBACK_MODE` | `static` (local page) / `proxy` (reverse proxy) | `proxy` |
-| `REALITY_FALLBACK_ORIGIN` / `CDN_FALLBACK_ORIGIN` | Fallback sites in `proxy` mode | sjsu / harvard |
-| `FEATURE_XPADDING` | `false` disables XHTTP padding obfuscation (xpadding) | `true` |
-| `FEATURE_CDN_ECH` | `false` skips the ECH prompt (ECH itself still needs `CDN_ECH=y`) | `true` |
-| `XHTTP_PADDING_HEADER` / `XHTTP_PADDING_KEY` | xpadding fields | `Referer` / `x_padding` |
-| `CDN_ECH` | `y` enables ECH (must be enabled in Cloudflare Edge Certificates first, or the CDN nodes fail the handshake) | `n` |
-| `VISION_UDP443` | `1` makes node 1 use `xtls-rprx-vision-udp443` (client support required) | `0` |
-| `FEATURE_H3_DIRECT` | `false` disables the direct h3 node (UDP 8446; known upstream issues, on by default) | `true` |
-| `FEATURE_H2_DIRECT` | `true` enables direct HTTP/2 TCP node (TCP 8445; off by default for 7-node layout) | `false` |
-| `FEATURE_HY2` | `false` disables the Hysteria2-obfs node (UDP 8443) | `true` |
-| `FEATURE_AUTO_TUNING` | `false` skips the automatic kernel tuning at install time (`xh tuning off` rolls it back at any point) | `true` |
-| `H3_PORT` / `HY2_PORT` | Ports for the two direct UDP nodes (`H3_PORT` may not be 443; it is forced back to 8446) | `8446` / `8443` |
-| `KEEP_LEGACY_UDP` | `true` keeps the old standalone hysteria / quic-h3 extensions (the two new UDP nodes are then disabled) | `false` |
-| `FEATURE_XHTTP_H3_NODE` | Switch for the Hysteria2 extension: `true` restores the `Vless-xhttp-tls-h3-direct` node and its nginx quic listener | `false` |
-| `FEATURE_KEEPALIVE` | `false` skips the keepalive cron | `true` |
-| `FEATURE_AUTOUPDATE` | `false` skips the auto-update cron | `true` |
-| `NODE_TAG` | Node-name suffix, replacing the hostname | hostname (`vps` when empty or `localhost`) |
-| `NODE_NAME_MAP` / `NODE_NAME_FILE` | Custom node names, one `old=new` per line; `NODE_NAME_FILE` points at a file in the same format | — |
+For high-BDP transoceanic gigabit links, apply client network tuning:
 
-With `AUTO=1` and `FALLBACK_MODE=static`, a placeholder `index.html` is generated and the
-manual confirmation is skipped; replace it afterwards as you like.
+- **Windows 10 / 11 (Admin PowerShell)**:
+  ```powershell
+  irm https://reality.example.com/sub/<Token>/win.ps1 | iex  # Or run "xh tuning win" on server
+  ```
+- **macOS (Terminal - expand socket buffer to 32MB)**:
+  ```bash
+  sudo sysctl -w kern.ipc.maxsockbuf=33554432 net.inet.tcp.recvspace=4194304 net.inet.tcp.autorcvbuf=1 net.inet.tcp.autorcvbufmax=33554432 net.inet.tcp.fastopen=3
+  ```
+- **Linux Client**:
+  ```bash
+  sudo sysctl -w net.core.rmem_max=67108864 net.ipv4.tcp_rmem="4096 262144 67108864" net.ipv4.tcp_fastopen=3
+  ```
 
-#### Custom node names
+---
 
-The default node name is `Vless-xhttp-h3-cdn-${hostname}`. Most VPS images have `localhost`
-as their hostname, which makes that suffix useless for telling machines apart in a
-multi-server subscription — so `localhost` is treated as unset and falls back to `vps`.
-For a meaningful suffix, set `NODE_TAG=hk-oracle`.
+## 5. Node Topology & Dual-Track Architecture
 
-To use full airport-style names (emoji plus region), use `NODE_NAME_MAP`, with the
-generated full node name (including suffix) on the left and the display name on the right:
-
-```bash
-NODE_TAG=vps \
-NODE_NAME_MAP='Vless-xhttp-tls-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h2
-Vless-xhttp-h3-cdn-vps=🇺🇸 VLESS-XHTTP-TLS-CF-h3
-Vless-xhttp-h3-direct-vps=🇺🇸 VLESS-XHTTP-TLS-QUIC
-Vless-xhttp-h2-tcp-direct-vps=🇺🇸 VLESS-XHTTP-TLS-TCP
-Hysteria2-obfs-vps=🇺🇸 Hysteria2-QUIC-TLS
-Vless-reality-vision-vps=🇺🇸 VLESS-TCP-REALITY-Vision
-Vless-xhttp-reality-vps=🇺🇸 VLESS-XHTTP-REALITY' \
-AUTO=1 ... bash install.sh
+```mermaid
+flowchart TD
+    Client[Client Device] --> Router{Routing / URL-Test}
+    
+    subgraph Scenario B: Extreme Performance (Daily 90% Traffic)
+        Router -->|Ultra-low latency direct| Reality[VLESS-Reality-Vision<br>TCP 443 Splice Zero-Copy]
+        Router -->|High throughput loss resistance| Hy2[Hysteria 2<br>UDP 443 Brutal Engine]
+        Reality --> VPS[VPS Origin Real IP]
+        Hy2 --> VPS
+    end
+    
+    subgraph Scenario A: Disaster Recovery & Unblocking
+        Router -->|Anti-censorship / Hide Origin| XHTTP[VLESS-XHTTP<br>TCP/UDP 443 xmux Multiplex]
+        XHTTP --> CF[Cloudflare CDN Edge]
+        CF -->|HTTP/2 Stream Back-to-Origin| Nginx[Nginx grpc_pass<br>Zero-buffer pass-through]
+        Nginx --> XrayInbound[Xray Local 8001 Inbound]
+    end
 ```
 
-Renaming applies to `client-config.txt`, both Mihomo YAML files (including the references
-inside proxy-groups) and the subscription generated from them. URI fragments are
-percent-encoded automatically — an unencoded node name containing a space gets truncated at
-the space by clients such as Shadowrocket.
+| # | Node Name (v4.9.29) | Transport | Topology | Highlights |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | Via CDN 443 | **Hides origin IP**, anti-blocking recovery |
+| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8446 | Direct QUIC, `mode=stream-up` |
+| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
+| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
+| **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
+| **6** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN | Upstream direct, downstream hides origin |
+| **7** | `VLESS-CDN-Up-Reality-Down` | Split Routing + vlessenc | Up CDN / Down Reality Direct | Added in v4.9.29, bypasses local UDP 443 QoS |
 
 ---
 
-## Optional: general VPS optimisation script
+## 6. Troubleshooting & FAQ
 
-```bash
-# 1. Download
-curl -O https://raw.githubusercontent.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/main/tools/ubuntu_vps_optimize.sh
-
-# 2. Make it executable
-chmod +x ubuntu_vps_optimize.sh
-
-# 3. Look without touching — detect and print the plan, change nothing
-sudo bash ubuntu_vps_optimize.sh --dry-run
-
-# 4. Run it for real once you are satisfied
-sudo bash ubuntu_vps_optimize.sh
-```
-
-Three modes:
-
-| Command | Effect |
-|---|---|
-| `--dry-run` | Detect and print what would change; writes nothing |
-| *(no argument)* | Detect → back up → optimise → verify |
-| `--rollback` | Full rollback to the pre-run state |
-
-Restart the services afterwards: `systemctl restart xray nginx docker`.
+| Symptom | Root Cause | Quick Solution |
+| :--- | :--- | :--- |
+| **Reality node fails to connect** | Client system clock offset > 30s | Enable "Set time automatically" in OS settings (replay defense) |
+| **Mihomo split-routing error** | Mihomo inherits parent Reality config | Explicitly declare `reality-opts: { public-key: "" }` in `download-settings` |
+| **Direct UDP / Hysteria 2 timeout** | Cloud firewall / Security Group blocking | Allow inbound UDP 443 / 8443 / 8446 and TCP 443 / 8445 in cloud dashboard |
+| **Kernel parameters conflict / overwritten** | External script injected `/etc/sysctl.d/` | Run `xh conflict` to automatically detect and heal sysctl conflicts |
 
 ---
 
-## The `xh` command
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.33)
 
-Available as soon as deployment finishes.
+After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
-```text
-xh                      Interactive menu
-xh status               Service status / listening ports / tuning state / versions
-xh info                 Node parameters and client node links
-xh sub                  Subscription links and QR codes
-xh log [xray|nginx]     Follow the logs
-xh start|stop|restart   Service control
-xh update [--auto]      Update Xray-core (automatic rollback if the self-test fails)
-xh ech [show|on|off]   Cloudflare CDN ECH (encrypted SNI) toggle and auto-sync
-xh ecn [show|on|off]   TCP ECN (Explicit Congestion Notification) toggle & stats
-xh cdnh2 [show|on|off]  CDN TCP(h2) fallback node toggle and auto-sync
-xh tuning [show|on|off] Show / enable / roll back the system-level tuning
-xh diag                 Server-side self-check for when a node will not connect
-xh conflict             Detect other files in /etc/sysctl.d/ that override this project's parameters
-xh keepalive [on|off]   Keepalive toggle
-xh autoupdate [on|off]  Core auto-update toggle
-xh uninstall            Remove all components
-```
+| Area | Versions | Technical Strategy & Tuning Findings |
+| :--- | :--- | :--- |
+| **Official Stable Core Invariant** | v4.9.8–v4.9.18 | Strictly locked to `releases/latest` (v26.3.27), eliminating pre-release MLKEM768 handshake failures; sanitized subscriptions for third-party clients. |
+| **Split-Routing Topology** | v4.9.19–v4.9.29 | Deployed Reality-Up-CDN-Down (0-RTT direct up + CDN full speed down) and CDN-Up-Reality-Down; solved Mihomo shallow copy bug; enabled vlessenc on 8001 against CDN eavesdropping. |
+| **Network & Flow Optimization** | v4.8.x–v4.9.30 | Coordinated BBRv3 with TCP Brutal (locked to 3800 Mbps); maintained **64MB** socket buffer ceiling; RPS/RFS multi-queue softirq balancing; TLS 1.3, TFO, and ECH/ECN integration. |
+| **End-to-End Security & Anti-Flood** | v4.9.17–v4.9.33 | Disabled high-risk wide port hopping by default, converging on single-port Hy2 (UDP 443); Netfilter hashlimit token bucket anti-flood; `fs.suid_dumpable=0`; reserved port protection. |
 
 ---
 
-## System tuning
+## 8. Disclaimer
 
-### What `xh tuning on` does
-
-BBR + fq, `rmem/wmem` (64/32/16 MB by RAM tier), `tcp_fastopen=3`, `tcp_mtu_probing=1`,
-`tcp_slow_start_after_idle=0`, `tcp_notsent_lowat`, `somaxconn=65535`, UDP buffers and
-`udp_mem` (for QUIC/H3), plus `limits.d` and a systemd drop-in (`nofile=1048576`).
-
-Everything is written to its own files — `/etc/sysctl.d/99-xray-xhttp.conf` and
-`/etc/security/limits.d/99-xray-xhttp.conf` — so **your existing `sysctl.conf` is left
-alone**, and the official Xray unit is not modified either (a drop-in is used, so core
-updates will not overwrite it).
-
-All tuning is **best-effort**: on read-only-sysctl environments such as OpenVZ / LXC each
-failing item is skipped with a warning rather than aborting. Roll back with
-`xh tuning off`.
-
-> **Unverified**: whether these parameters actually improve throughput on your machine has
-> not been measured comparatively by this project. That is exactly why they are opt-in —
-> get the nodes working first, then enable and compare if you want to.
+1. This project is an open-source network transmission research and automation deployment tool. It does not provide public proxy services and never accesses user data.
+2. Users must comply with local laws and regulations.
+3. Network technologies evolve rapidly; uninterrupted service is not guaranteed. Users bear all responsibilities arising from using this software.
 
 ---
 
-## Manual deployment
+## Credits & License
 
-If you would rather not run the script, read `docs/` in order. **These documents are
-currently Chinese-only.**
-
-1. [1.环境配置.md](./docs/1.环境配置.md) — Environment setup
-2. [2.文件配置.md](./docs/2.文件配置.md) — File configuration
-3. [3.xpadding配置.md](./docs/3.xpadding配置.md) — xpadding
-4. [4.ECH配置.md](./docs/4.ECH配置.md) — ECH
-5. [5.流程图.md](./docs/5.流程图.md) — Flow diagrams
-6. [6.拓展-上下行不同CDN.md](./docs/6.拓展-上下行不同CDN.md) — Different CDNs up/down
-7. [7.拓展-上下行IPv4IPv6.md](./docs/7.拓展-上下行IPv4IPv6.md) — IPv4 up, IPv6 down
-8. [8.拓展-QUIC添加.md](./docs/8.拓展-QUIC添加.md) — Adding QUIC
-9. [9.卸载.md](./docs/9.卸载.md) — Uninstalling
-10. [10.流控调优.md](./docs/10.流控调优.md) — Tuning reference
-11. [11.管理命令.md](./docs/11.管理命令.md) — The `xh` command
-12. [12.机型调优-OracleARM.md](./docs/12.机型调优-OracleARM.md) — Oracle ARM specifics
-13. [客户端模板.txt](./客户端模板.txt) / [客户端模板-mihomo.yaml](./客户端模板-mihomo.yaml) — Client templates
-
----
-
-## Output files
-
-- `~/client-config.txt` — V2RayN / Shadowrocket nodes
-- `~/client-config-mihomo-full.yaml` — full Mihomo config with routing rules
-- `~/client-config-mihomo-nodes.yaml` — Mihomo nodes only
-- `~/subscription-links.txt`, `~/subscription-*.png` — subscription links and QR codes
-- `/etc/xhttp-cdn/node.env` — node parameters (mode 0600, read by `xh`)
-
-If you already have a Mihomo config, use `mihomo-nodes.yaml`.
-
----
-
-## If something breaks: clean up and re-run
-
-```bash
-pkill -9 -x xray; pkill -9 -f 'xray run'
-rm -f  /etc/systemd/system/xray.service /etc/systemd/system/xray@.service
-rm -rf /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d
-rm -f  /usr/local/bin/xray
-rm -rf /usr/local/etc/xray /usr/local/share/xray /var/log/xray
-systemctl daemon-reload && systemctl reset-failed
-
-pgrep -a xray || echo "✅ clean"
-bash ~/install.sh
-```
-
-Pushing a `v*` tag makes GitHub Actions build and publish a Release automatically.
-
----
-
-## Native Cloudflare CDN ECH (Encrypted Client Hello) & TCP ECN Management (v4.9.20)
-
-In **v4.9.20**, full-stack automation and management for **Cloudflare CDN ECH (Encrypted Client Hello)** and **TCP ECN (Explicit Congestion Notification)** are fully integrated:
-
-### 1. Cloudflare CDN ECH (Encrypted Client Hello) Deep Defense
-- **The Censorship Problem**: Standard TLS 1.3 handshakes send the `server_name` (SNI) in plaintext in the ClientHello (e.g. `cdn.example.com`). Deep Packet Inspection (DPI) firewalls can easily detect and selectively block these domain names even without decrypting TLS payload.
-- **How ECH Solves It**:
-  - The client queries the HTTPS DNS record of the target domain via DoH (e.g., AliDNS `223.5.5.5` or Cloudflare `1.1.1.1`) to retrieve the public ECHConfig keys;
-  - The client encrypts the Inner ClientHello containing the real SNI, and wraps it with an Outer ClientHello addressed to the benign public `cloudflare-ech.com`;
-  - Middleboxes only observe connections to `cloudflare-ech.com` and cannot inspect the real subdomain; Cloudflare edge servers decrypt the inner ClientHello and forward traffic to your origin.
-- **Client & Subscription Support**:
-  - **Xray-core / v2rayN**: Automatically injects `&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F223.5.5.5%2Fdns-query` into URI subscriptions and configures `tlsSettings.ech`;
-  - **Mihomo / Clash Meta**: Automatically injects `ech-opts: { enable: true, query-server-name: cloudflare-ech.com }` into CDN nodes and nested inside `download-settings` for split upload/download nodes;
-  - Manage anytime with `xh ech on` / `xh ech off` / `xh ech show` to toggle and automatically regenerate all subscription formats.
-
-### 2. TCP ECN (Explicit Congestion Notification) & BBRv3 Synergy
-- **Core Value**: Traditional congestion control relies on packet loss to detect network congestion. ECN enables network routers equipped with AQM (e.g. CoDel/RED) to mark packet headers with CE (Congestion Experienced) bits before queues overflow.
-- **Bidirectional Negotiation & Safe Fallback**:
-  - Both proxy environments maintain `net.ipv4.tcp_ecn = 1` for active ECN negotiation;
-  - `net.ipv4.tcp_ecn_fallback = 1` ensures that if middleboxes or peers do not support ECN, the TCP stack immediately and transparently falls back to standard TCP handshakes without connection drops;
-  - Fully compatible with the host's `7.2.5-joeyblog-bbrv3` kernel.
-- **Management CLI**:
-  - Run `xh ecn on` / `xh ecn off` / `xh ecn show` to manage sysctl parameters and inspect kernel CE counters.
-
----
-
-## Disclaimer
-
-**Please read this section in full before deploying.**
-
-### Legal and compliance
-
-This project is an **open-source deployment script for network transports**. It provides
-automation only: it operates no nodes, runs no service, and never touches user traffic.
-Whether to deploy it, how to use it, and every consequence that follows are entirely the
-user's own responsibility.
-
-**Note for users in mainland China**: within mainland China, establishing or using an
-unauthorised channel for international networking without approval from the telecom
-authorities may violate the *Interim Provisions on the Administration of International
-Networking of Computer Information Networks* (Article 6) and its implementing measures,
-along with related regulations. Consequences can include orders to disconnect, warnings,
-fines, and confiscation of unlawful gains. Using it commercially — selling or sharing
-access for profit — is treated far more seriously, and there are decided cases charged as
-"illegal business operation" or "providing programs or tools for intruding into or
-unlawfully controlling computer information systems".
-
-The author does not encourage anyone to break the law in their own jurisdiction.
-**If you fall under such laws, assess the risk yourself and own your choice.** Neither
-this project nor its author bears any legal responsibility for what users do with it.
-
-**Strictly prohibited**: selling or distributing proxy access to the public, telecom and
-online fraud, cross-border gambling, money laundering, distributing unlawful content, or
-any other criminal activity.
-
-### Honest technical notes
-
-- **Nothing here guarantees you will not be detected, or that it will keep working.**
-  Reality, xpadding and Salamander obfuscation raise the cost of traffic analysis; they
-  do not make traffic unidentifiable. Censorship technology keeps moving, and a config
-  that works today can fail tomorrow. Distrust anything claiming to be block-proof.
-- **Getting an IP blocked is normal.** The direct nodes expose the VPS's bare IP; once it
-  is blocked, every direct node on that IP fails at once. That is inherent to this class
-  of setup, not a misconfiguration.
-- **UDP / QUIC is frequently throttled or blocked in mainland China.** Four of the seven
-  nodes depend on UDP (h3-cdn, h3-direct, Hysteria2, and the CDN's UDP 443). Some ISPs
-  apply QoS to UDP at peak hours: those nodes work at first, then slow down or stop,
-  while the TCP nodes stay fine. **That is not a server fault** —
-  `Vless-reality-vision` and `Vless-xhttp-h2-tcp-direct` are the TCP fallbacks kept
-  precisely for this.
-- **Cloudflare's real-world speed varies a lot by region.** Reaching Cloudflare's anycast
-  IPs from mainland China gives highly variable PoPs and route quality, potentially far
-  worse than the numbers above. Measure on your own client before choosing a node.
-- **Every performance figure in this repository is a single measurement** on one machine,
-  at one time, over one route. None of it is a performance promise for any other
-  environment.
-
-### No warranty
-
-This project is provided "as is" under the MIT licence, without warranty of any kind,
-express or implied, including but not limited to merchantability, fitness for a
-particular purpose, and non-infringement. The author is not liable for any direct or
-indirect loss arising from use or inability to use it, including but not limited to
-server suspension, data loss, account loss, or legal liability.
-
----
-
-## Credits and licence
-
-Derived from [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) (MIT).
-The product shape — management command, non-interactive deployment, self-healing keepalive
-and automatic core updates — is inspired by
-[yonggekkk/argosbx](https://github.com/yonggekkk/argosbx) (GPL-3.0); that code is
-reimplemented here rather than copied.
-
-See [NOTICE.md](./NOTICE.md). Licence: [MIT](./LICENSE).
-
-## References
-
-- Xray beginner's guide: <https://xtls.github.io/document/level-0/ch07-xray-server.html>
-- XHTTP: Beyond REALITY: <https://github.com/XTLS/Xray-core/discussions/4113>
-- XHTTP + CDN split upload/download discussion: <https://github.com/XTLS/Xray-core/discussions/4118>
-- Xray SockoptObject docs: <https://xtls.github.io/config/transports/sockopt.html>
-- Xray-core v26.2.6 (xpadding): <https://github.com/XTLS/Xray-core/releases/tag/v26.2.6>
-- xpadding leak discussion: <https://github.com/XTLS/Xray-core/issues/4346>, <https://github.com/XTLS/BBS/issues/25>
-- Mihomo XHTTP discussion: <https://github.com/MetaCubeX/mihomo/discussions/2669>
+- Built on top of [Xray-core](https://github.com/XTLS/Xray-core) and [sing-box](https://github.com/SagerNet/sing-box).
+- Released under the [MIT License](./LICENSE). Issues and Pull Requests are welcome!
