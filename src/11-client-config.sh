@@ -6,6 +6,14 @@ info "[6/7] 生成客户端配置"
 VISION_FLOW="${VISION_FLOW:-xtls-rprx-vision}"
 XHTTP_PATH_ENC=${XHTTP_PATH//\//%2F}
 
+if [[ -z "${VPS_IP_URI:-}" ]]; then
+  if [[ "$IP_CHOICE" == "2" ]]; then
+    VPS_IP_URI="[${VPS_IP}]"
+  else
+    VPS_IP_URI="${VPS_IP}"
+  fi
+fi
+
 # ==================================================
 # TUN 模式下的节点自身流量豁免（v1.2.3）
 # ==================================================
@@ -140,7 +148,12 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
 else
   DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
-  XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
+fi
+
+if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-false}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-false}" == true ]]; then
+  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
+else
+  REALITY_UP_CDN_DOWN_NODE_LINE=""
 fi
 
 # 上行腿用 h3（v4.9.30）：netns 160ms RTT / 1% 丢包实测，上行 h2 11 Mbps（3 次均为 11）
@@ -250,7 +263,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h2-cdn + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + h2-direct(${FEATURE_H2_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Hysteria2-obfs(${FEATURE_HY2_OBFS:-false}) + Reality x2 + Reality-up-CDN-down"
+info "节点集: h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-true}) [精简默认关闭: h2-cdn(${FEATURE_CDN_H2:-false}), Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

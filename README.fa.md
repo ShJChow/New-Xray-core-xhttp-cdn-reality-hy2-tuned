@@ -182,15 +182,16 @@ flowchart TD
     end
 ```
 
-| # | نام نود (v4.9.29) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
+| # | نام نود (v4.9.35) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
 | :--- | :--- | :--- | :--- | :--- |
 | **۱** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | از مسیر CDN 443 | **پنهان‌سازی IP اصلی**، عبور از فیلترینگ شدید |
 | **۲** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | مستقیم UDP 8446 | پروتکل QUIC مستقیم، `mode=stream-up` |
 | **۳** | `Hysteria2-H3-Direct` | Hysteria 2 | مستقیم UDP 443 | ساختار استاندارد HTTP/3، بالاترین سرعت دانلود |
 | **۴** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | مستقیم TCP 443 | **فناوری xtls-rprx-vision**، بالاترین سرعت تک‌جریان |
 | **۵** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | مستقیم TCP 443 | استتار Reality با مبهم‌سازی پرکردن داده |
-| **۶** | `VLESS-Reality-Up-CDN-Down` | تفکیک مسیر + vlessenc | ارسال Reality / دریافت CDN | ارسال بدون CDN، دریافت با IP پنهان |
-| **۷** | `VLESS-CDN-Up-Reality-Down` | تفکیک مسیر + vlessenc | ارسال CDN (h3) / دریافت Reality | v4.9.34: بازگشت مسیر ارسال به h3 (ارسال از طریق CF با h2 ثابت 10 Mbps → h3 34 Mbps)؛ نیازمند UDP 443 به CF |
+| **۶** | `VLESS-CDN-Up-Reality-Down` | تفکیک مسیر + vlessenc | ارسال CDN (h3) / دریافت Reality | v4.9.29 اضافه شد؛ v4.9.34 بازگشت ارسال به h3 (۳۴ مگابیت) |
+
+> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -205,7 +206,7 @@ flowchart TD
 
 ---
 
-## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.34)
+## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.35)
 
 خلاصهٔ دستاوردهای فنی حاصل از ده‌ها مرحله آزمایش عملی در شرایط افت پکت و تأخیر بین‌المللی (160ms+ / 1%):
 
@@ -216,6 +217,7 @@ flowchart TD
 | **بهینه‌سازی شبکه و جریان** | v4.8.x–v4.9.30 | همگام‌سازی با BBRv3 و TCP Brutal (قفل روی ۳۸۰۰ مگابیت)؛ تثبیت بافر با کارایی اثبات‌شدهٔ **۶۴ مگابایت**؛ تعادل وقفه نرم‌افزاری RPS/RFS؛ پشتیبانی از TLS 1.3 و ECH/ECN. |
 | **امنیت جامع و مقابله با سیل پکت** | v4.9.17–v4.9.33 | غیرفعال‌سازی پرش پورت پیش‌فرض و همگرایی روی تک‌پورت Hy2 (پورت UDP 443)؛ سیستم محدودکنندهٔ hashlimit در Netfilter؛ جلوگیری از دامپ حافظه (`fs.suid_dumpable=0`). |
 | **بازبینی کندی نودها** | v4.9.34 | آزمون مجدد همهٔ نودها (netns، 160ms/1% افت، 300↓/50↑): افت سمت سرور وجود ندارد؛ brutal و bbr هم‌پوشان → brutal حفظ شد؛ مسیر ارسال `CDN-Up-Reality-Down` به h3 بازگشت (10 → 34 Mbps)؛ رفع اشکال `tools/xray_rtt_bench.py` برای نودهای CDN. |
+| **ساده‌سازی پیش‌فرض توپولوژی** | v4.9.35 | حذف پیش‌فرض `VLESS-XHTTP-CDN-H2` و `VLESS-Reality-Up-CDN-Down` برای تمرکز بر ۶ نود پرسرعت؛ امکان فعال‌سازی بر حسب نیاز. |
 
 ---
 

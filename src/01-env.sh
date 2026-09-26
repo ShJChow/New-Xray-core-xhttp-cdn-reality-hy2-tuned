@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.34"
+PROJECT_VERSION="4.9.35"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -107,22 +107,11 @@ FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
-# FEATURE_UP_CDN_DOWN_MIHOMO（v4.9.19 完美修复并默认开启）：是否把 7 号节点
-# Vless-xhttp-reality-up-cdn-down 下发进 mihomo 配置。**默认开启**。
-#
-# 【历史根因溯源】：此前在 mihomo 上测试报 REALITY authentication failed，
-# 曾误以为是 mihomo 内核限制。经深入查阅 MetaCubeX/mihomo Go 源码（adapter/outbound/vless.go
-# 第 764 行与 reality.go）：
-#   downloadRealityCfg := v.realityConfig
-#   if ds.RealityOpts != nil { downloadRealityCfg, err = ds.RealityOpts.Parse() }
-# 若 download-settings 未声明 reality-opts，下行腿会自动继承父级的 realityConfig，
-# 导致 mihomo 连接下行腿 CDN 域名（Cloudflare 443）时强行发起 REALITY 握手认证，
-# Cloudflare 证书不符必然报 authentication failed！
-# 【攻克方案】：在 download-settings 中显式声明 `reality-opts: { public-key: "" }`，
-# 使得 ds.RealityOpts.Parse() 返回 nil，彻底覆写清空继承的 realityConfig，
-# 下行腿恢复标准 TLS 1.3 握手；同时扁平化 path/host/reuse-settings 结构。
-# 实测 mihomo v1.19.30+ 完美跑通，0-RTT 极速上行 + CDN 满速下行！
-FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-true}
+# FEATURE_REALITY_UP_CDN_DOWN（v4.9.35 默认关闭精简）：是否生成上下行分离节点
+# VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN 443）。
+# 默认关闭保持核心节点精简，需要时可通过 FEATURE_REALITY_UP_CDN_DOWN=true 开启。
+FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-false}
+FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN}}
 
 # FEATURE_CDN_UP_REALITY_DOWN（v4.9.29）：反向的上下行分离节点
 # VLESS-CDN-Up-Reality-Down —— 上行 XHTTP+TLS 经 Cloudflare CDN，下行 XHTTP+Reality 直连。
