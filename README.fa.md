@@ -182,17 +182,16 @@ flowchart TD
     end
 ```
 
-| # | نام نود (v4.9.38) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
+| # | نام نود (v4.9.39) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
 | :--- | :--- | :--- | :--- | :--- |
 | **۱** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | از مسیر CDN TCP 443 | **مسیر پایدار TCP**، راه خروج اضطراری هنگام مسدودسازی UDP |
-| **۲** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | از مسیر CDN 443 | **پنهان‌سازی IP اصلی**، عبور از فیلترینگ شدید |
-| **۳** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | مستقیم UDP 8443 | پروتکل QUIC مستقیم، `mode=stream-up` |
-| **۴** | `Hysteria2-H3-Direct` | Hysteria 2 | مستقیم UDP 443 | ساختار استاندارد HTTP/3، بالاترین سرعت دانلود |
-| **۵** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | مستقیم TCP 443 | **فناوری xtls-rprx-vision**، بالاترین سرعت تک‌جریان |
-| **۶** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | مستقیم TCP 443 | استتار Reality با مبهم‌سازی پرکردن داده |
-| **۷** | `VLESS-Reality-Up-CDN-Down` | تفکیک مسیر + vlessenc | ارسال Reality مستقیم / دریافت CDN (h2) | اتصال مستقیم فوق‌سریع Reality + دریافت ضد فیلتر از CDN |
+| **۲** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | مستقیم UDP 8443 | پروتکل QUIC مستقیم، `mode=stream-up` |
+| **۳** | `Hysteria2-H3-Direct` | Hysteria 2 | مستقیم UDP 443 | ساختار استاندارد HTTP/3، بالاترین سرعت دانلود |
+| **۴** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | مستقیم TCP 443 | **فناوری xtls-rprx-vision**، بالاترین سرعت تک‌جریان |
+| **۵** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | مستقیم TCP 443 | استتار Reality با مبهم‌سازی پرکردن داده |
+| **۶** | `VLESS-Reality-Up-CDN-Down` | تفکیک مسیر + vlessenc | ارسال Reality مستقیم / دریافت CDN (h2) | اتصال مستقیم فوق‌سریع Reality + دریافت ضد فیلتر از CDN |
 
-> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -207,7 +206,7 @@ flowchart TD
 
 ---
 
-## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.38)
+## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.39)
 
 خلاصهٔ دستاوردهای فنی حاصل از ده‌ها مرحله آزمایش عملی در شرایط افت پکت و تأخیر بین‌المللی (160ms+ / 1%):
 
@@ -222,6 +221,7 @@ flowchart TD
 | **بهینه‌سازی تفکیک مسیر** | v4.9.36 | جایگزینی نود تفکیک مسیر با `VLESS-Reality-Up-CDN-Down` (ارسال مستقیم Reality + دریافت H2 از CDN) به عنوان یکی از ۶ رکن اصلی؛ رفع باگ پارامتر دانلود در کلاینت بدون xpadding. |
 | **تثبیت تزریق احراز هویت** | v4.9.37 | افزودن تابع `rawurlencode` و مکانیزم فال‌بک `HY2_PASSWORD` در تولید پیکربندی کلاینت جهت رفع مشکل حذف یا خطای اتصال نود Hysteria 2 در اشتراک‌ها. |
 | **بازیابی پیش‌فرض CDN-H2** | v4.9.38 | فعال‌سازی مجدد نود `VLESS-XHTTP-CDN-H2` به صورت پیش‌فرض (مجموعاً ۷ نود اصلی)، جهت تضمین دسترسی پایدار از طریق TCP هنگام اختلال یا افت سرعت در پروتکل UDP. |
+| **حذف پیش‌فرض CDN-H3** | v4.9.39 | حذف پیش‌فرض نود `VLESS-XHTTP-CDN-H3` (تمرکز بر ۶ نود اصلی پایدار) جهت جلوگیری از افت کیفیت ناشی از QoS روی UDP 443 در شبکهٔ Cloudflare؛ حفظ قابلیت فعال‌سازی با `xh cdnh3`. |
 
 ---
 

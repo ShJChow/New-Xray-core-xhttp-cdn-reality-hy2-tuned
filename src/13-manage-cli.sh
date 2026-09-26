@@ -1306,10 +1306,22 @@ for home in user_homes:
         has_h2 = any('#VLESS-XHTTP-CDN-H2' in l for l in lines)
         if enable:
             if not has_h2:
+                added = False
                 for line in lines:
                     if '#VLESS-XHTTP-CDN-H3' in line:
                         h2_line = line.replace('alpn=h3', 'alpn=h2,http%2F1.1').replace('#VLESS-XHTTP-CDN-H3', '#VLESS-XHTTP-CDN-H2')
                         new_lines.append(h2_line)
+                        added = True
+                    elif not added and ('#VLESS-XHTTP-Direct-H3' in line or '#VLESS-Reality' in line):
+                        # 兜底：从直连节点提取参数构造
+                        h2_line = line.replace('alpn=h3', 'alpn=h2,http%2F1.1').replace('mode=stream-up', 'mode=auto')
+                        h2_line = re.sub(r'@[^:]+:[0-9]+', '@${CDN_DOMAIN}:443', h2_line)
+                        h2_line = re.sub(r'sni=[^&]+', 'sni=${CDN_DOMAIN}', h2_line)
+                        h2_line = re.sub(r'#[^#]+$', '#VLESS-XHTTP-CDN-H2', h2_line)
+                        if '&host=' not in h2_line:
+                            h2_line = h2_line.replace('&path=', '&host=${CDN_DOMAIN}&path=')
+                        new_lines.append(h2_line)
+                        added = True
                     new_lines.append(line)
             else:
                 new_lines = lines
@@ -1328,12 +1340,26 @@ for home in user_homes:
             has_h2 = any('VLESS-XHTTP-CDN-H2' in p.get('name', '') for p in proxies)
             if enable and not has_h2:
                 new_proxies = []
+                added = False
                 for p in proxies:
                     if 'VLESS-XHTTP-CDN-H3' in p.get('name', ''):
                         h2_p = copy.deepcopy(p)
                         h2_p['name'] = p['name'].replace('VLESS-XHTTP-CDN-H3', 'VLESS-XHTTP-CDN-H2')
                         h2_p['alpn'] = ['h2', 'http/1.1']
                         new_proxies.append(h2_p)
+                        added = True
+                    elif not added and ('VLESS-XHTTP-Direct-H3' in p.get('name', '') or 'VLESS-Reality' in p.get('name', '')):
+                        h2_p = copy.deepcopy(p)
+                        h2_p['name'] = 'VLESS-XHTTP-CDN-H2'
+                        h2_p['server'] = '${CDN_DOMAIN}'
+                        h2_p['port'] = 443
+                        h2_p['servername'] = '${CDN_DOMAIN}'
+                        h2_p['alpn'] = ['h2', 'http/1.1']
+                        if 'xhttp-opts' in h2_p:
+                            h2_p['xhttp-opts']['host'] = '${CDN_DOMAIN}'
+                            h2_p['xhttp-opts']['mode'] = 'auto'
+                        new_proxies.append(h2_p)
+                        added = True
                     new_proxies.append(p)
                 cfg['proxies'] = new_proxies
             elif not enable and has_h2:
@@ -1349,7 +1375,7 @@ cmd_cdnh2() {
   case "$action" in
     show|status)
       echo ""
-      echo -e "${CYAN}=== CDN TCP(h2) 备用节点状态 ===${NC}"
+      echo -e "${CYAN}=== CDN TCP(h2) 节点状态 ===${NC}"
       local cur_h2="${FEATURE_CDN_H2:-false}"
       if [[ "$cur_h2" == "true" ]]; then
         echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
@@ -1362,11 +1388,10 @@ cmd_cdnh2() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 当运营商在网络高峰时段对 UDP 443 (HTTP/3 / QUIC) 实施 QoS 限速或断流时，"
-      echo -e "    开启此项可生成走 TCP 443 的 VLESS-XHTTP-CDN-H2 备用节点，保障 CDN 链路高可用。"
+      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，为 6 大核心主力节点之一，保障 CDN 链路稳健可用。"
       echo -e "  • 快捷命令:"
-      echo -e "      ${MANAGE_CMD} cdnh2 on       # 开启 CDN TCP(h2) 备用节点并同步更新订阅"
-      echo -e "      ${MANAGE_CMD} cdnh2 off      # 关闭 CDN TCP(h2) 备用节点并恢复精简订阅"
+      echo -e "      ${MANAGE_CMD} cdnh2 on       # 开启 CDN TCP(h2) 节点并同步更新订阅"
+      echo -e "      ${MANAGE_CMD} cdnh2 off      # 关闭 CDN TCP(h2) 节点并恢复精简订阅"
       echo ""
       ;;
     on)
@@ -1385,6 +1410,120 @@ cmd_cdnh2() {
       ;;
     *)
       echo "用法: ${MANAGE_CMD} cdnh2 [show|on|off]"
+      ;;
+  esac
+}
+
+sync_client_configs_cdnh3() {
+  local enable="$1"
+  python3 -c "
+import os, sys, re, yaml, copy
+
+enable = ('$enable' == 'true')
+user_homes = ['${USER_HOME:-/home/ubuntu}', '/home/ubuntu', '/home/opc', '/root']
+seen = set()
+
+for home in user_homes:
+    if not home or home in seen or not os.path.isdir(home):
+        continue
+    seen.add(home)
+    txt_file = os.path.join(home, 'client-config.txt')
+    nodes_file = os.path.join(home, 'client-config-mihomo-nodes.yaml')
+    full_file = os.path.join(home, 'client-config-mihomo-full.yaml')
+
+    if os.path.isfile(txt_file):
+        with open(txt_file, 'r', encoding='utf-8') as f:
+            lines = [l.strip() for l in f if l.strip()]
+        new_lines = []
+        has_h3 = any('#VLESS-XHTTP-CDN-H3' in l for l in lines)
+        if enable:
+            if not has_h3:
+                added = False
+                for line in lines:
+                    new_lines.append(line)
+                    if '#VLESS-XHTTP-CDN-H2' in line:
+                        h3_line = line.replace('alpn=h2,http%2F1.1', 'alpn=h3').replace('#VLESS-XHTTP-CDN-H2', '#VLESS-XHTTP-CDN-H3')
+                        new_lines.append(h3_line)
+                        added = True
+                if not added:
+                    for line in lines:
+                        if '#VLESS-XHTTP-Direct-H3' in line:
+                            h3_line = line.replace('${REALITY_DOMAIN}', '${CDN_DOMAIN}').replace('${VPS_IP}', '${CDN_DOMAIN}').replace(':${H3_PORT}', ':443').replace('#VLESS-XHTTP-Direct-H3', '#VLESS-XHTTP-CDN-H3')
+                            new_lines.append(h3_line)
+                        new_lines.append(line)
+            else:
+                new_lines = lines
+        else:
+            new_lines = [l for l in lines if '#VLESS-XHTTP-CDN-H3' not in l]
+        with open(txt_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(new_lines) + '\n')
+
+    for yfile in [nodes_file, full_file]:
+        if os.path.isfile(yfile):
+            with open(yfile, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f)
+            if not isinstance(cfg, dict):
+                continue
+            proxies = cfg.get('proxies', [])
+            has_h3 = any('VLESS-XHTTP-CDN-H3' in p.get('name', '') for p in proxies)
+            if enable and not has_h3:
+                new_proxies = []
+                for p in proxies:
+                    new_proxies.append(p)
+                    if 'VLESS-XHTTP-CDN-H2' in p.get('name', ''):
+                        h3_p = copy.deepcopy(p)
+                        h3_p['name'] = p['name'].replace('VLESS-XHTTP-CDN-H2', 'VLESS-XHTTP-CDN-H3')
+                        h3_p['alpn'] = ['h3']
+                        new_proxies.append(h3_p)
+                cfg['proxies'] = new_proxies
+            elif not enable and has_h3:
+                cfg['proxies'] = [p for p in proxies if 'VLESS-XHTTP-CDN-H3' not in p.get('name', '')]
+            with open(yfile, 'w', encoding='utf-8') as f:
+                yaml.dump(cfg, f, allow_unicode=True, sort_keys=False)
+" 2>/dev/null || true
+  cmd_resub
+}
+
+cmd_cdnh3() {
+  local action="${1:-show}"
+  case "$action" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== CDN QUIC(h3) 备用节点状态 ===${NC}"
+      local cur_h3="${FEATURE_CDN_H3:-false}"
+      if [[ "$cur_h3" == "true" ]]; then
+        echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
+      else
+        echo -e "  当前状态:       ${YELLOW}未开启 (Disabled)${NC}"
+      fi
+      local cdn_domain="${CDN_DOMAIN:-}"
+      if [[ -n "$cdn_domain" ]]; then
+        echo -e "  CDN 域名:       ${cdn_domain}"
+      fi
+      echo ""
+      echo -e "说明："
+      echo -e "  • 开启此项可生成走 UDP 443 (HTTP/3 / QUIC) 的 VLESS-XHTTP-CDN-H3 备用节点。"
+      echo -e "  • 快捷命令:"
+      echo -e "      ${MANAGE_CMD} cdnh3 on       # 开启 CDN QUIC(h3) 备用节点并同步更新订阅"
+      echo -e "      ${MANAGE_CMD} cdnh3 off      # 关闭 CDN QUIC(h3) 备用节点并恢复精简订阅"
+      echo ""
+      ;;
+    on)
+      info "正在开启 CDN QUIC(h3) 节点..."
+      update_node_env "FEATURE_CDN_H3" "true"
+      export FEATURE_CDN_H3=true
+      sync_client_configs_cdnh3 "true"
+      info "CDN QUIC(h3) 节点已成功开启并同步更新订阅！"
+      ;;
+    off)
+      info "正在关闭 CDN QUIC(h3) 节点..."
+      update_node_env "FEATURE_CDN_H3" "false"
+      export FEATURE_CDN_H3=false
+      sync_client_configs_cdnh3 "false"
+      info "CDN QUIC(h3) 节点已成功关闭并恢复精简订阅！"
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} cdnh3 [show|on|off]"
       ;;
   esac
 }
@@ -1617,8 +1756,9 @@ cmd_menu() {
     echo " 13) Reality 兼容模式 / minversion (minClientVer)"
     echo " 14) CDN ECH 加密 SNI 开关 (show / on / off)"
     echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
-    echo " 16) CDN TCP(h2) 备用节点开关 (show / on / off)"
-    echo " 17) 卸载"
+    echo " 16) CDN TCP(h2) 节点开关 (show / on / off)"
+    echo " 17) CDN QUIC(h3) 备用节点开关 (show / on / off)"
+    echo " 18) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -1638,7 +1778,8 @@ cmd_menu() {
       14) read -rp "  show / on / off: " a; cmd_ech "${a:-show}" ;;
       15) read -rp "  show / on / off: " a; cmd_ecn "${a:-show}" ;;
       16) read -rp "  show / on / off: " a; cmd_cdnh2 "${a:-show}" ;;
-      17) cmd_uninstall; break ;;
+      17) read -rp "  show / on / off: " a; cmd_cdnh3 "${a:-show}" ;;
+      18) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -1661,7 +1802,8 @@ xray-xhttp 管理命令
   xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
   xh ech [show|on|off]              Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
-  xh cdnh2 [show|on|off]            CDN TCP(h2) 备用节点开关与订阅同步
+  xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
+  xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节
   xh keepalive [on|off|show]
@@ -1689,6 +1831,7 @@ case "${1:-menu}" in
   ech)        shift; cmd_ech "$@" ;;
   ecn)        shift; cmd_ecn "$@" ;;
   cdnh2|h2cdn) shift; cmd_cdnh2 "$@" ;;
+  cdnh3|h3cdn) shift; cmd_cdnh3 "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;

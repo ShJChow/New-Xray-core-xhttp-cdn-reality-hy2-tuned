@@ -274,17 +274,16 @@ flowchart TD
     end
 ```
 
-| # | 节点名称（v4.9.38） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.39） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | **TCP 稳健回源**，UDP 封锁时的 CDN 逃生通道 |
-| **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | 经 CDN UDP 443 | **隐藏真实 IP**，防封锁与救砖 |
-| **3** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8443 | 直连 QUIC，`mode=stream-up` |
-| **4** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
-| **5** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
-| **6** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
-| **7** | `VLESS-Reality-Up-CDN-Down` | 上下行分离 + vlessenc | 上行 Reality 直连 / 下行 CDN（h2） | 0-RTT 直连上行 + CDN 满速下行防封 |
+| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8443 | 直连 QUIC，`mode=stream-up` |
+| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
+| **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
+| **6** | `VLESS-Reality-Up-CDN-Down` | 上下行分离 + vlessenc | 上行 Reality 直连 / 下行 CDN（h2） | 0-RTT 直连上行 + CDN 满速下行防封 |
 
-> 默认关闭、按需开启：`VLESS-CDN-Up-Reality-Down`（`FEATURE_CDN_UP_REALITY_DOWN`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
+> 默认关闭、按需开启：`VLESS-XHTTP-CDN-H3`（`FEATURE_CDN_H3`）、`VLESS-CDN-Up-Reality-Down`（`FEATURE_CDN_UP_REALITY_DOWN`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
 
 ---
 
@@ -299,7 +298,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.38)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.39)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -314,6 +313,7 @@ flowchart TD
 | **拓扑置换与分离优化** | v4.9.36 | 将分离节点置换为 `VLESS-Reality-Up-CDN-Down`（Reality 直连上行 + CDN H2 满速下行），替代原 CDN-Up-Reality-Down 维持 6 大主力架构；修复无 xpadding 模式下 extra downloadSettings 缺失缺陷 |
 | **凭据注入加固与 Hy2 修复** | v4.9.37 | 补齐客户端配置生成模块中的 `rawurlencode` 函数与 `HY2_PASSWORD` 兜底机制，根治独立生成或订阅更新时 Hysteria 2 节点因认证密码缺失导致的连接被拒或客户端静默剔除缺陷 |
 | **CDN-H2 默认恢复** | v4.9.38 | 恢复默认开启 `VLESS-XHTTP-CDN-H2` 节点（共 7 条核心主力节点），保障晚高峰或运营商封锁 UDP 443 时 CDN TCP 兜底通道开箱即用 |
+| **精简下线 CDN-H3** | v4.9.39 | 默认精简剔除 `VLESS-XHTTP-CDN-H3` 节点（收敛为 6 大核心主力节点），避免 Cloudflare CDN 边缘 UDP 443 在部分运营商网络下的 QoS 丢包与高延迟抖动；保留 `FEATURE_CDN_H3` 与 `xh cdnh3` 支持按需开启 |
 
 ---
 

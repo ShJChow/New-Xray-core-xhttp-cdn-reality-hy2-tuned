@@ -259,11 +259,12 @@ fi
 # 不需要任何服务端改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP。
 # 之所以必须另开一条而不能给节点 1 加个 h3：mihomo 仅在 alpn **恰好等于** h3 时才走
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
-# 不设 FEATURE 开关，与节点 1 一致：它不依赖任何服务端能力（没有新端口、没有新入站），
-# CDN 存在则它必然可生成。真正决定它能否用的是 Cloudflare 侧是否开着 HTTP/3
-# （默认开启，`curl -sI https://<cdn域名>/ | grep alt-svc` 可确认），
-# 那是安装脚本无从探测也无权更改的东西，做成开关只会给出虚假的控制感。
-H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+# 默认关闭（FEATURE_CDN_H3=true 时启用），避免 QUIC 经 CDN 在部分网络环境下的 QoS 丢包。
+if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
+  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+else
+  H3_CDN_NODE_LINE=""
+fi
 
 # h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
 # alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
@@ -293,7 +294,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-true}) [备用默认关闭: CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
+info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-true}) [备用默认关闭: h3-cdn(${FEATURE_CDN_H3:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
@@ -336,7 +337,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_CDN_H2 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO FEATURE_CDN_UP_REALITY_DOWN; do
+  for feat in FEATURE_CDN_H2 FEATURE_CDN_H3 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO FEATURE_CDN_UP_REALITY_DOWN; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else

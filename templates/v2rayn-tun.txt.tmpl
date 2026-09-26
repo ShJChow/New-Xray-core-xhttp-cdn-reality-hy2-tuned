@@ -84,8 +84,8 @@ v2rayN 里的设置位置
         4. Hysteria2-H3-Direct               域名 + UDP ${HY2_H3_PORT} (无混淆，标准 HTTP/3 形态)
         (可选) Hysteria2-Obfs-Direct         域名 + UDP ${HY2_PORT} (salamander，默认关闭)
         5. VLESS-XHTTP-Direct-H3             裸 IP + UDP ${H3_PORT}
-  最弱  6. VLESS-XHTTP-CDN-H3                域名 + QUIC/h3
-        (可选) VLESS-XHTTP-CDN-H2            域名 + TCP/h2 (默认关闭)
+  最弱  6. VLESS-XHTTP-CDN-H2                域名 + TCP/h2
+        (可选) VLESS-XHTTP-CDN-H3            域名 + QUIC/h3 (默认关闭)
 
 注意「最弱」指的是**对 TUN 配置的敏感度**，不是速度。节点 6 实测是最快的一条
 （iOS onexray 下快于 Hysteria2），只是它经 CDN、server 是域名，必须把上面的
