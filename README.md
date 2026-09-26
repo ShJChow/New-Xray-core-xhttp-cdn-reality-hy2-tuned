@@ -26,7 +26,7 @@
   - [Linux](#3-linux-客户端)
 - [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
 - [六、常见问题与排错](#六常见问题与排错)
-- [七、版本迭代与核心调优演进记录 (v4.8 - v4.9.33)](#七版本迭代与核心调优演进记录-v48---v4933)
+- [七、版本迭代与核心调优演进记录 (v4.8 - v4.9.34)](#七版本迭代与核心调优演进记录-v48---v4934)
 - [八、免责声明](#八免责声明)
 
 ---
@@ -282,7 +282,7 @@ flowchart TD
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 | **6** | `VLESS-Reality-Up-CDN-Down` | 上下行分离 + vlessenc | 上行 Reality 直连 / 下行 CDN | 上行不经 CDN，下行隐藏源站 |
-| **7** | `VLESS-CDN-Up-Reality-Down` | 上下行分离 + vlessenc | 上行 CDN / 下行 Reality 直连 | v4.9.29 新增，解决本地 UDP 443 干扰 |
+| **7** | `VLESS-CDN-Up-Reality-Down` | 上下行分离 + vlessenc | 上行 CDN（h3）/ 下行 Reality 直连 | v4.9.29 新增；v4.9.34 上行腿恢复 h3（经 CF 上行 h2 恒 10 Mbps → h3 34 Mbps），依赖客户端到 CF 的 UDP 443 |
 
 > 默认关闭、按需开启：`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
 
@@ -299,7 +299,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.33)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.34)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -309,6 +309,7 @@ flowchart TD
 | **双轨分离拓扑** | v4.9.19–v4.9.29 | 落地 Reality-Up-CDN-Down（0-RTT 直连上行+CDN 满速下行）与 CDN-Up-Reality-Down；攻克 Mihomo 继承 bug；8001 启用 vlessenc 防 CDN 窥探 |
 | **网络流控极限调优** | v4.8.x–v4.9.30 | 协同 BBRv3 与 TCP Brutal（锁定 3800 Mbps）；实测维持 **64MB** Socket 缓冲上限；多队列 RPS/RFS 软中断均衡；支持 TLS 1.3、TFO 与 ECH/ECN |
 | **全链路安全防洪** | v4.9.17–v4.9.33 | 默认关闭高风险大范围端口跳跃，收敛为单端口 Hy2（UDP 443）；Netfilter hashlimit 令牌桶防伪造洪泛；`fs.suid_dumpable=0` 防内存转储；保留端口防短连接碰撞 |
+| **节点变慢复盘** | v4.9.34 | netns 160ms/1% 丢包、300↓/50↑ 全节点复测：服务端未退化（Vision 124↓ vs 9-23 的 119）；443 入站 brutal vs bbr 120/112、146/142 重叠 → 维持 brutal；经 CF 上行 h2 恒 10 Mbps、h3 34 Mbps → `CDN-Up-Reality-Down` 上行腿恢复 h3；`tools/xray_rtt_bench.py` 修复 CDN 节点被改写为本机地址（绕过 CF、CDN-H3 撞 Hy2 UDP 443 全部无效） |
 
 ---
 

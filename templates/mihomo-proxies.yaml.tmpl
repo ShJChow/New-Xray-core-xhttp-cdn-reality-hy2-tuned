@@ -269,10 +269,9 @@ proxies:
     tls: true
     encryption: ${XHTTP_ENCRYPTION}
     network: xhttp
-    # 上行腿 h2：经 Cloudflare CDN 走 TCP(h2)
+    # 上行腿 h3（v4.9.30 实测上行 11 → 102 Mbps）；mihomo 只在 alpn 恰好为 h3 时才走 HTTP/3
     alpn:
-      - h2
-      - http/1.1
+      - h3
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome${MIHOMO_ECH_PROXY_BLOCK}
     xhttp-opts:

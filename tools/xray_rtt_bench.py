@@ -15,6 +15,8 @@ LINKS = xlinks.load_nodes([f"{SUB}/v2rayn-raw.txt", "/root/sbbox/nodes.txt"])
 RAW = xlinks.load_raw([f"{SUB}/v2rayn-raw.txt", "/root/sbbox/nodes.txt"])
 SB_BIN = os.environ.get("SB_BIN", "/root/sbbox/sing-box")
 SB_CLIENT = os.environ.get("SB_CLIENT", "/root/sbbox/sbox_client.json")
+NODE_ENV = "/etc/xhttp-cdn/node.env"
+CDN_HOST = next((l.split("=", 1)[1].strip().strip("\"'") for l in open(NODE_ENV) if l.startswith("CDN_DOMAIN=")), "") if os.path.exists(NODE_ENV) else ""
 
 def sb_hy2(name, tgt):
     """按 v2rayN(sing-box 内核) 的映射把 hysteria2 链接转成 sing-box 出站：upmbps/downmbps → up_mbps/down_mbps"""
@@ -116,7 +118,11 @@ try:
             continue
         ob = copy.deepcopy(LINKS[v["link"]])
         tgt = "10.201.0.1"
-        if ob["protocol"] == "vless": ob["settings"]["vnext"][0]["address"] = tgt
+        # 经 CDN 的节点保留原地址走真实 Cloudflare：改成 veth 对端会绕过 CF，
+        # H3 还会撞上 UDP 443 的 Hysteria2 入站而全部「无效」
+        if ob["protocol"] == "vless":
+            vn = ob["settings"]["vnext"][0]
+            if not (CDN_HOST and vn["address"] == CDN_HOST): vn["address"] = tgt
         else: ob["settings"]["address"] = tgt
         for p, val in v.get("patch", []): setpath(ob, p, val)
         ob["tag"] = f"o{i}"; outs.append(ob)

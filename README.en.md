@@ -23,7 +23,7 @@ Supports all major client platforms: V2rayN, Clash Verge Rev, Mihomo Party, Sing
 - [4. Client Tuning Guide for Gigabit Networks](#4-client-tuning-guide-for-gigabit-networks)
 - [5. Node Topology & Dual-Track Architecture](#5-node-topology--dual-track-architecture)
 - [6. Troubleshooting & FAQ](#6-troubleshooting--faq)
-- [7. Release History & Core Tuning Evolution (v4.8 - v4.9.33)](#7-release-history--core-tuning-evolution-v48---v4933)
+- [7. Release History & Core Tuning Evolution (v4.8 - v4.9.34)](#7-release-history--core-tuning-evolution-v48---v4934)
 - [8. Disclaimer](#8-disclaimer)
 - [Credits & License](#credits--license)
 
@@ -195,7 +195,7 @@ flowchart TD
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
 | **6** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN | Upstream direct, downstream hides origin |
-| **7** | `VLESS-CDN-Up-Reality-Down` | Split Routing + vlessenc | Up CDN / Down Reality Direct | Added in v4.9.29, bypasses local UDP 443 QoS |
+| **7** | `VLESS-CDN-Up-Reality-Down` | Split Routing + vlessenc | Up CDN (h3) / Down Reality Direct | Added in v4.9.29; v4.9.34 restores h3 on the upload leg (upload via CF: h2 flat 10 Mbps → h3 34 Mbps), needs client UDP 443 to CF |
 
 ---
 
@@ -210,7 +210,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.33)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.34)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -220,6 +220,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Split-Routing Topology** | v4.9.19–v4.9.29 | Deployed Reality-Up-CDN-Down (0-RTT direct up + CDN full speed down) and CDN-Up-Reality-Down; solved Mihomo shallow copy bug; enabled vlessenc on 8001 against CDN eavesdropping. |
 | **Network & Flow Optimization** | v4.8.x–v4.9.30 | Coordinated BBRv3 with TCP Brutal (locked to 3800 Mbps); maintained **64MB** socket buffer ceiling; RPS/RFS multi-queue softirq balancing; TLS 1.3, TFO, and ECH/ECN integration. |
 | **End-to-End Security & Anti-Flood** | v4.9.17–v4.9.33 | Disabled high-risk wide port hopping by default, converging on single-port Hy2 (UDP 443); Netfilter hashlimit token bucket anti-flood; `fs.suid_dumpable=0`; reserved port protection. |
+| **Slowdown Review** | v4.9.34 | All-node re-bench (netns 160ms/1% loss, 300↓/50↑): no server-side regression (Vision 124↓ vs 119 on 9-23); 443 inbound brutal vs bbr 120/112 and 146/142 overlap → keep brutal; upload via CF is a flat 10 Mbps on h2 vs 34 on h3 → `CDN-Up-Reality-Down` upload leg back to h3; `tools/xray_rtt_bench.py` no longer rewrites CDN nodes to the local address (which bypassed CF and made CDN-H3 hit the Hy2 UDP 443 inbound). |
 
 ---
 
