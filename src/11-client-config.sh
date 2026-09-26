@@ -14,6 +14,14 @@ if [[ -z "${VPS_IP_URI:-}" ]]; then
   fi
 fi
 
+if [[ -z "${XHTTP_ENCRYPTION:-}" ]]; then
+  if [[ "${FEATURE_XHTTP_VLESSENC:-true}" == true && -n "${VLESSENC_ENCRYPTION:-}" ]]; then
+    XHTTP_ENCRYPTION="$VLESSENC_ENCRYPTION"
+  else
+    XHTTP_ENCRYPTION="none"
+  fi
+fi
+
 # ==================================================
 # TUN 模式下的节点自身流量豁免（v1.2.3）
 # ==================================================
