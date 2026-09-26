@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.35"
+PROJECT_VERSION="4.9.36"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -107,17 +107,17 @@ FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
-# FEATURE_REALITY_UP_CDN_DOWN（v4.9.35 默认关闭精简）：是否生成上下行分离节点
-# VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN 443）。
-# 默认关闭保持核心节点精简，需要时可通过 FEATURE_REALITY_UP_CDN_DOWN=true 开启。
-FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-false}
+# FEATURE_REALITY_UP_CDN_DOWN（v4.9.36 默认启用）：上下行分离节点
+# VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN H2 443）。
+# 0-RTT Reality 极速直连上行 + Cloudflare CDN 满速下行防封。默认作为 6 大核心节点之一。
+FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-true}
 FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN}}
 
-# FEATURE_CDN_UP_REALITY_DOWN（v4.9.29）：反向的上下行分离节点
+# FEATURE_CDN_UP_REALITY_DOWN（v4.9.29 新增，v4.9.36 默认关闭）：反向的上下行分离节点
 # VLESS-CDN-Up-Reality-Down —— 上行 XHTTP+TLS 经 Cloudflare CDN，下行 XHTTP+Reality 直连。
 # 与 Reality-Up-CDN-Down 一样落到同一个 8001 入站（Reality 443 回落 / Nginx 8003 回源），
-# 服务端不需要新入站。
-FEATURE_CDN_UP_REALITY_DOWN=${FEATURE_CDN_UP_REALITY_DOWN:-true}
+# 默认关闭保持核心节点精简，需要时可通过 FEATURE_CDN_UP_REALITY_DOWN=true 开启。
+FEATURE_CDN_UP_REALITY_DOWN=${FEATURE_CDN_UP_REALITY_DOWN:-false}
 
 # FEATURE_XHTTP_VLESSENC（v4.9.29）：8001 XHTTP 入站启用 VLESS Encryption（默认开启）。
 # 8001 是唯一经过 CDN 的入站，Cloudflare 边缘会解开外层 TLS，不加 vlessenc 时

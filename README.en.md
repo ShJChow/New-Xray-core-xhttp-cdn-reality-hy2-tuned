@@ -187,16 +187,16 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.35) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.36) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | Via CDN 443 | **Hides origin IP**, anti-blocking recovery |
-| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8446 | Direct QUIC, `mode=stream-up` |
+| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
 | **3** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
-| **6** | `VLESS-CDN-Up-Reality-Down` | Split Routing + vlessenc | Up CDN (h3) / Down Reality Direct | Added in v4.9.29; v4.9.34 restores h3 on the upload leg (34 Mbps) |
+| **6** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN (h2) | 0-RTT direct up + CDN full speed down anti-blocking |
 
-> Disabled by default, toggleable on demand: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> Disabled by default, toggleable on demand: `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -211,7 +211,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.35)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.36)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -222,7 +222,8 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Network & Flow Optimization** | v4.8.x–v4.9.30 | Coordinated BBRv3 with TCP Brutal (locked to 3800 Mbps); maintained **64MB** socket buffer ceiling; RPS/RFS multi-queue softirq balancing; TLS 1.3, TFO, and ECH/ECN integration. |
 | **End-to-End Security & Anti-Flood** | v4.9.17–v4.9.33 | Disabled high-risk wide port hopping by default, converging on single-port Hy2 (UDP 443); Netfilter hashlimit token bucket anti-flood; `fs.suid_dumpable=0`; reserved port protection. |
 | **Slowdown Review** | v4.9.34 | All-node re-bench (netns 160ms/1% loss, 300↓/50↑): no server-side regression (Vision 124↓ vs 119 on 9-23); 443 inbound brutal vs bbr 120/112 and 146/142 overlap → keep brutal; upload via CF is a flat 10 Mbps on h2 vs 34 on h3 → `CDN-Up-Reality-Down` upload leg back to h3; `tools/xray_rtt_bench.py` no longer rewrites CDN nodes to the local address (which bypassed CF and made CDN-H3 hit the Hy2 UDP 443 inbound). |
-| **Topology Streamlining** | v4.9.35 | Streamlined default installation by removing `VLESS-XHTTP-CDN-H2` (10M upload ceiling) and `VLESS-Reality-Up-CDN-Down` (Go H2 1MB window cap and leaks origin IP) from default setup; focused on 6 high-performance core nodes. |
+| **Topology Streamlining** | v4.9.35 | Streamlined default installation by removing `VLESS-XHTTP-CDN-H2` (10M upload ceiling) and `VLESS-Reality-Up-CDN-Down` from default setup; focused on 6 high-performance core nodes. |
+| **Split-Routing Optimization** | v4.9.36 | Swapped split routing node to `VLESS-Reality-Up-CDN-Down` (Reality Direct Up + CDN H2 Down) to replace CDN-Up-Reality-Down as one of the 6 core pillars; resolved missing downloadSettings extra parameter without xpadding. |
 
 ---
 
