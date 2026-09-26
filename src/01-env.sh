@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.37"
+PROJECT_VERSION="4.9.38"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -75,15 +75,15 @@ FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
-# 节点集：默认 7 条，全部由 Xray 单核心提供
+# 节点集：默认 7 条核心主力节点，全部由 Xray 单核心提供
 # ==================================================
-#   1. Vless-xhttp-h2-cdn    经 CDN，h2/TCP
-#   2. Vless-xhttp-h3-cdn    经 CDN，h3/QUIC
-#   3. Vless-xhttp-h3-direct 直连 UDP 8446，h3/QUIC
-#   4. Hysteria2-obfs        直连 UDP 8443，Salamander 混淆
-#   5. Vless-reality-vision  直连 TCP 443，Vision
-#   6. Vless-xhttp-reality   直连 TCP 443，XHTTP 上下行不分离
-#   7. Vless-xhttp-reality-up-cdn-down 直连上行 / CDN 下行
+#   1. VLESS-XHTTP-CDN-H2    经 CDN，h2/TCP
+#   2. VLESS-XHTTP-CDN-H3    经 CDN，h3/QUIC
+#   3. VLESS-XHTTP-Direct-H3 直连 UDP 8443，h3/QUIC
+#   4. Hysteria2-H3-Direct   直连 UDP 443，标准 HTTP/3
+#   5. VLESS-Reality-Vision-Direct 直连 TCP 443，Vision
+#   6. VLESS-Reality-XHTTP-Direct  直连 TCP 443，XHTTP 上下行不分离
+#   7. VLESS-Reality-Up-CDN-Down   直连上行 / CDN 下行
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
@@ -100,8 +100,8 @@ FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 默认关闭（保持以 CDN-H3 与直连节点为主，精简节点），需要时可通过 FEATURE_CDN_H2=true 开启。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
+# 默认开启（作为 7 大核心主力节点之一，提供 UDP 封锁时的 TCP CDN 兜底逃生通道）。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
 
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。

@@ -187,16 +187,17 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.37) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.38) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | Via CDN 443 | **Hides origin IP**, anti-blocking recovery |
-| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
-| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
-| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
-| **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
-| **6** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN (h2) | 0-RTT direct up + CDN full speed down anti-blocking |
+| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | **Robust TCP fallback**, anti-blocking CDN escape hatch |
+| **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | Via CDN 443 | **Hides origin IP**, anti-blocking recovery |
+| **3** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
+| **4** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
+| **5** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
+| **6** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
+| **7** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN (h2) | 0-RTT direct up + CDN full speed down anti-blocking |
 
-> Disabled by default, toggleable on demand: `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> Disabled by default, toggleable on demand: `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -211,7 +212,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.37)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.38)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -225,6 +226,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Topology Streamlining** | v4.9.35 | Streamlined default installation by removing `VLESS-XHTTP-CDN-H2` (10M upload ceiling) and `VLESS-Reality-Up-CDN-Down` from default setup; focused on 6 high-performance core nodes. |
 | **Split-Routing Optimization** | v4.9.36 | Swapped split routing node to `VLESS-Reality-Up-CDN-Down` (Reality Direct Up + CDN H2 Down) to replace CDN-Up-Reality-Down as one of the 6 core pillars; resolved missing downloadSettings extra parameter without xpadding. |
 | **Credential Injection Hardening** | v4.9.37 | Added `rawurlencode` definition and `HY2_PASSWORD` fallback to client config generation, fixing dropped/unauthenticated Hysteria 2 nodes during standalone generation or subscription refresh. |
+| **CDN-H2 Default Restored** | v4.9.38 | Restored `VLESS-XHTTP-CDN-H2` to default enabled (7 core nodes in total), providing an out-of-the-box TCP escape hatch during UDP 443 QoS throttling or ISP blocks. |
 
 ---
 

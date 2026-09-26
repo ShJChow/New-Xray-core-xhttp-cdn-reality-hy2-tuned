@@ -293,7 +293,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-true}) [精简默认关闭: h2-cdn(${FEATURE_CDN_H2:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
+info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-cdn + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-true}) [备用默认关闭: CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
