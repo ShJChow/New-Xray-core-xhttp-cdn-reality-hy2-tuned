@@ -274,7 +274,7 @@ flowchart TD
     end
 ```
 
-| # | 节点名称（v4.9.36） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.37） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | 经 CDN 443 | **隐藏真实 IP**，防封锁与救砖 |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8443 | 直连 QUIC，`mode=stream-up` |
@@ -298,7 +298,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.36)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.37)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -311,6 +311,7 @@ flowchart TD
 | **节点变慢复盘** | v4.9.34 | netns 160ms/1% 丢包、300↓/50↑ 全节点复测：服务端未退化（Vision 124↓ vs 9-23 的 119）；443 入站 brutal vs bbr 120/112、146/142 重叠 → 维持 brutal；经 CF 上行 h2 恒 10 Mbps、h3 34 Mbps → `CDN-Up-Reality-Down` 上行腿恢复 h3；`tools/xray_rtt_bench.py` 修复 CDN 节点被改写为本机地址（绕过 CF、CDN-H3 撞 Hy2 UDP 443 全部无效） |
 | **精简拓扑与默认下线** | v4.9.35 | 默认安装精简剔除 `VLESS-XHTTP-CDN-H2`（上行 10M 硬上限）与 `VLESS-Reality-Up-CDN-Down`，聚焦 6 条核心主力节点；支持通过环境变量按需开启 |
 | **拓扑置换与分离优化** | v4.9.36 | 将分离节点置换为 `VLESS-Reality-Up-CDN-Down`（Reality 直连上行 + CDN H2 满速下行），替代原 CDN-Up-Reality-Down 维持 6 大主力架构；修复无 xpadding 模式下 extra downloadSettings 缺失缺陷 |
+| **凭据注入加固与 Hy2 修复** | v4.9.37 | 补齐客户端配置生成模块中的 `rawurlencode` 函数与 `HY2_PASSWORD` 兜底机制，根治独立生成或订阅更新时 Hysteria 2 节点因认证密码缺失导致的连接被拒或客户端静默剔除缺陷 |
 
 ---
 

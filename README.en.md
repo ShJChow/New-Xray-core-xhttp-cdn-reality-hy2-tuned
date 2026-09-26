@@ -187,7 +187,7 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.36) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.37) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (QUIC) + vlessenc | Via CDN 443 | **Hides origin IP**, anti-blocking recovery |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
@@ -211,7 +211,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.36)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.37)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -224,6 +224,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Slowdown Review** | v4.9.34 | All-node re-bench (netns 160ms/1% loss, 300↓/50↑): no server-side regression (Vision 124↓ vs 119 on 9-23); 443 inbound brutal vs bbr 120/112 and 146/142 overlap → keep brutal; upload via CF is a flat 10 Mbps on h2 vs 34 on h3 → `CDN-Up-Reality-Down` upload leg back to h3; `tools/xray_rtt_bench.py` no longer rewrites CDN nodes to the local address (which bypassed CF and made CDN-H3 hit the Hy2 UDP 443 inbound). |
 | **Topology Streamlining** | v4.9.35 | Streamlined default installation by removing `VLESS-XHTTP-CDN-H2` (10M upload ceiling) and `VLESS-Reality-Up-CDN-Down` from default setup; focused on 6 high-performance core nodes. |
 | **Split-Routing Optimization** | v4.9.36 | Swapped split routing node to `VLESS-Reality-Up-CDN-Down` (Reality Direct Up + CDN H2 Down) to replace CDN-Up-Reality-Down as one of the 6 core pillars; resolved missing downloadSettings extra parameter without xpadding. |
+| **Credential Injection Hardening** | v4.9.37 | Added `rawurlencode` definition and `HY2_PASSWORD` fallback to client config generation, fixing dropped/unauthenticated Hysteria 2 nodes during standalone generation or subscription refresh. |
 
 ---
 

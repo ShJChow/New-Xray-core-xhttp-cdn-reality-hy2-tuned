@@ -22,6 +22,27 @@ if [[ -z "${XHTTP_ENCRYPTION:-}" ]]; then
   fi
 fi
 
+if ! declare -f rawurlencode >/dev/null 2>&1; then
+  rawurlencode() {
+    local string="$1"
+    local encoded="" i char hex
+    local LC_ALL=C
+
+    for ((i = 0; i < ${#string}; i++)); do
+      char="${string:i:1}"
+      case "$char" in
+        [a-zA-Z0-9.~_-]) encoded+="$char" ;;
+        *) printf -v hex '%%%02X' "'$char"; encoded+="$hex" ;;
+      esac
+    done
+    printf '%s' "$encoded"
+  }
+fi
+
+if [[ -z "${HY2_PASSWORD:-}" && -f "/usr/local/etc/xray/config.json" ]]; then
+  HY2_PASSWORD=$(grep -A 10 '"protocol": "hysteria"' /usr/local/etc/xray/config.json | grep '"auth":' | head -n 1 | sed -E 's/.*"auth":[[:space:]]*"([^"]+)".*/\1/' || true)
+fi
+
 # ==================================================
 # TUN 模式下的节点自身流量豁免（v1.2.3）
 # ==================================================
