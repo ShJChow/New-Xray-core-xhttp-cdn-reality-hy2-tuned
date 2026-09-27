@@ -214,7 +214,7 @@ H3EOF
 fi
 
 # h2-direct（v4.7.0）：与上面的 h3-direct 共用 UUID2、decryption 和 XHTTP_PATH，
-# 仅传输层不同（TCP + alpn h2/http1.1）。客户端把两者编成 fallback 对，
+# 仅传输层不同（TCP + alpn h2）。客户端把两者编成 fallback 对，
 # UDP 被封时自动落到这条。sockopt 与 Reality 入站保持一致。
 if [[ "$FEATURE_H2_DIRECT" == true ]]; then
   XRAY_H2_DIRECT_INBOUND=$(cat <<H2EOF

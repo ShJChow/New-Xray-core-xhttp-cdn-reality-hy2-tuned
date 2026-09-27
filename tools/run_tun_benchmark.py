@@ -66,7 +66,7 @@ n0 = {
     "streamSettings": {
         "network": "xhttp",
         "security": "tls",
-        "tlsSettings": {"serverName": CDN_DOMAIN, "alpn": ["h2", "http/1.1"], "fingerprint": "chrome"},
+        "tlsSettings": {"serverName": CDN_DOMAIN, "alpn": ["h2"], "fingerprint": "chrome"},
         "xhttpSettings": xh_opts(CDN_DOMAIN, "auto")
     }
 }
@@ -125,7 +125,7 @@ dl = {
     "port": 443,
     "network": "xhttp",
     "security": "tls",
-    "tlsSettings": {"serverName": CDN_DOMAIN, "alpn": ["h2", "http/1.1"], "fingerprint": "chrome"},
+    "tlsSettings": {"serverName": CDN_DOMAIN, "alpn": ["h2"], "fingerprint": "chrome"},
     "xhttpSettings": xh_opts(CDN_DOMAIN, "auto")
 }
 n6 = json.loads(json.dumps(n5))

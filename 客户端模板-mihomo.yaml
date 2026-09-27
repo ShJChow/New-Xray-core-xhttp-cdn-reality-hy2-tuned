@@ -117,7 +117,6 @@ proxies:
     # alpn 必须恰好只有 h3，mihomo 才会走 HTTP/3
     alpn:
       - h2
-      - http/1.1
     servername: YOUR_CDN_DOMAIN
     client-fingerprint: chrome
     encryption: YOUR_VLESSENC_ENCRYPTION
@@ -200,7 +199,6 @@ proxies:
         tls: true
         alpn:
           - h2
-          - http/1.1
         servername: YOUR_CDN_DOMAIN
         client-fingerprint: chrome
         reality-opts:

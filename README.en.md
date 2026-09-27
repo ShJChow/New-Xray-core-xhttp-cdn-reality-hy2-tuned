@@ -229,6 +229,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **CDN-H3 Default Streamlined** | v4.9.39 | Pruned `VLESS-XHTTP-CDN-H3` by default (converging to 6 core pillar nodes) to prevent Cloudflare edge UDP 443 QoS throttling and jitter; retained `FEATURE_CDN_H3` and `xh cdnh3` for on-demand activation. |
 | **HTTP/1.1 Fully Deprecated** | v4.9.40 | Purged `http/1.1` from server inbounds, client URIs, and Mihomo configs, strictly enforcing modern multiplexed ALPN (`h2` / `h3`) to eliminate protocol downgrade and head-of-line blocking; synchronized with sbbox v2.7.24. |
 | **Nginx Fallback Loopback & Routing Optimization** | v4.9.41 | Bound Nginx camouflage port 8003 strictly to `127.0.0.1:8003` to prevent public exposure and scanner probing; enhanced Mihomo routing rules by fixing iCloud misrouting to Microsoft services and adding dedicated `iCloud Services` proxy group and Microsoft rule set. |
+| **Complete ALPN Purification** | v4.9.42 | Completely eliminated legacy `http/1.1` from manage CLI commands (`xh cdnh2`/`cdnh3`), client example templates, and benchmark scripts, strictly locking the multiplexed ALPN floor to HTTP/2 (`h2`) and HTTP/3 (`h3`) to avoid any accidental protocol fallback. |
 
 ---
 

@@ -1309,12 +1309,12 @@ for home in user_homes:
                 added = False
                 for line in lines:
                     if '#VLESS-XHTTP-CDN-H3' in line:
-                        h2_line = line.replace('alpn=h3', 'alpn=h2,http%2F1.1').replace('#VLESS-XHTTP-CDN-H3', '#VLESS-XHTTP-CDN-H2')
+                        h2_line = line.replace('alpn=h3', 'alpn=h2').replace('#VLESS-XHTTP-CDN-H3', '#VLESS-XHTTP-CDN-H2')
                         new_lines.append(h2_line)
                         added = True
                     elif not added and ('#VLESS-XHTTP-Direct-H3' in line or '#VLESS-Reality' in line):
                         # 兜底：从直连节点提取参数构造
-                        h2_line = line.replace('alpn=h3', 'alpn=h2,http%2F1.1').replace('mode=stream-up', 'mode=auto')
+                        h2_line = line.replace('alpn=h3', 'alpn=h2').replace('mode=stream-up', 'mode=auto')
                         h2_line = re.sub(r'@[^:]+:[0-9]+', '@${CDN_DOMAIN}:443', h2_line)
                         h2_line = re.sub(r'sni=[^&]+', 'sni=${CDN_DOMAIN}', h2_line)
                         h2_line = re.sub(r'#[^#]+$', '#VLESS-XHTTP-CDN-H2', h2_line)
@@ -1442,7 +1442,7 @@ for home in user_homes:
                 for line in lines:
                     new_lines.append(line)
                     if '#VLESS-XHTTP-CDN-H2' in line:
-                        h3_line = line.replace('alpn=h2,http%2F1.1', 'alpn=h3').replace('#VLESS-XHTTP-CDN-H2', '#VLESS-XHTTP-CDN-H3')
+                        h3_line = line.replace('alpn=h2,http%2F1.1', 'alpn=h3').replace('alpn=h2', 'alpn=h3').replace('#VLESS-XHTTP-CDN-H2', '#VLESS-XHTTP-CDN-H3')
                         new_lines.append(h3_line)
                         added = True
                 if not added:
