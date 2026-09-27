@@ -180,7 +180,7 @@ else
   XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
 
-if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-true}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-true}" == true ]]; then
+if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-false}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-false}" == true ]]; then
   REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
 else
   REALITY_UP_CDN_DOWN_NODE_LINE=""
@@ -293,7 +293,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-true}) [备用默认关闭: h3-cdn(${FEATURE_CDN_H3:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
+info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 [备用默认关闭: Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false}), h3-cdn(${FEATURE_CDN_H3:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

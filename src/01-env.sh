@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.42"
+PROJECT_VERSION="4.9.43"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -75,14 +75,13 @@ FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 AUTO=${AUTO:-0}
 
 # ==================================================
-# 节点集：默认 6 条核心主力节点，全部由 Xray 单核心提供
+# 节点集：默认 5 条核心主力节点，全部由 Xray 单核心提供
 # ==================================================
 #   1. VLESS-XHTTP-CDN-H2    经 CDN，h2/TCP
 #   2. VLESS-XHTTP-Direct-H3 直连 UDP 8443，h3/QUIC
 #   3. Hysteria2-H3-Direct   直连 UDP 443，标准 HTTP/3
 #   4. VLESS-Reality-Vision-Direct 直连 TCP 443，Vision
 #   5. VLESS-Reality-XHTTP-Direct  直连 TCP 443，XHTTP 上下行不分离
-#   6. VLESS-Reality-Up-CDN-Down   直连上行 / CDN 下行
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
 FEATURE_HY2=${FEATURE_HY2:-true}
@@ -99,7 +98,7 @@ FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 默认开启（作为 6 大核心主力节点之一，提供 UDP 封锁时的 TCP CDN 兜底逃生通道）。
+# 默认开启（作为 5 大核心主力节点之一，提供 UDP 封锁时的 TCP CDN 兜底逃生通道）。
 FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
@@ -110,10 +109,10 @@ FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
-# FEATURE_REALITY_UP_CDN_DOWN（v4.9.36 默认启用）：上下行分离节点
+# FEATURE_REALITY_UP_CDN_DOWN（v4.9.43 默认关闭精简）：上下行分离节点
 # VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN H2 443）。
-# 0-RTT Reality 极速直连上行 + Cloudflare CDN 满速下行防封。默认作为 6 大核心节点之一。
-FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-true}
+# 默认关闭保持核心节点精简，需要时可通过 FEATURE_REALITY_UP_CDN_DOWN=true 开启。
+FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-false}
 FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN}}
 
 # FEATURE_CDN_UP_REALITY_DOWN（v4.9.29 新增，v4.9.36 默认关闭）：反向的上下行分离节点

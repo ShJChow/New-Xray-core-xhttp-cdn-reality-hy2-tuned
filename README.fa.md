@@ -182,16 +182,15 @@ flowchart TD
     end
 ```
 
-| # | نام نود (v4.9.41) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
+| # | نام نود (v4.9.43) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
 | :--- | :--- | :--- | :--- | :--- |
 | **۱** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | از مسیر CDN TCP 443 | **مسیر پایدار TCP**، راه خروج اضطراری هنگام مسدودسازی UDP |
 | **۲** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | مستقیم UDP 8443 | پروتکل QUIC مستقیم، `mode=stream-up` |
 | **۳** | `Hysteria2-H3-Direct` | Hysteria 2 | مستقیم UDP 443 | ساختار استاندارد HTTP/3، بالاترین سرعت دانلود |
 | **۴** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | مستقیم TCP 443 | **فناوری xtls-rprx-vision**، بالاترین سرعت تک‌جریان |
 | **۵** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | مستقیم TCP 443 | استتار Reality با مبهم‌سازی پرکردن داده |
-| **۶** | `VLESS-Reality-Up-CDN-Down` | تفکیک مسیر + vlessenc | ارسال Reality مستقیم / دریافت CDN (h2) | اتصال مستقیم فوق‌سریع Reality + دریافت ضد فیلتر از CDN |
 
-> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -206,7 +205,7 @@ flowchart TD
 
 ---
 
-## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.41)
+## ۷. تاریخچهٔ نسخه‌ها و روند بهینه‌سازی (v4.8 - v4.9.43)
 
 خلاصهٔ دستاوردهای فنی حاصل از ده‌ها مرحله آزمایش عملی در شرایط افت پکت و تأخیر بین‌المللی (160ms+ / 1%):
 
@@ -225,6 +224,7 @@ flowchart TD
 | **حذف کامل پروتکل قدیمی HTTP/1.1** | v4.9.40 | حذف کامل `http/1.1` از ورودی‌های سرور، کلاینت و Mihomo، الزام استفاده از ALPN چندکاناله مدرن (`h2` / `h3`) جهت پیشگیری از افت کیفیت و انسداد ابتدای خط؛ همگام با sbbox v2.7.24. |
 | **تثبیت حلقهٔ لوکال Nginx و بهینه‌سازی قوانین هدایت** | v4.9.41 | اتصال انحصاری پورت استتار ۸۰۰۳ به `127.0.0.1:8003` جهت ممانعت از پویش مستقیم در اینترنت؛ اصلاح تفکیک ترافیک iCloud از مایکروسافت در کلاینت Mihomo با ایجاد گروه اختصاصی iCloud و مجموعه قوانین مایکروسافت. |
 | **پالایش کامل ALPN و پاکسازی نهایی** | v4.9.42 | پاکسازی کامل ارجاعات قدیمی `http/1.1` از دستورات مدیریتی (`xh cdnh2`/`cdnh3`)، الگوهای کلاینت و اسکریپت‌های تست؛ تثبیت کف پروتکل روی `h2` و `h3` جهت جلوگیری از هرگونه افت ناخواسته پروتکل. |
+| **حذف پیش‌فرض نود تفکیک مسیر** | v4.9.43 | حذف پیش‌فرض نود تفکیک مسیر `VLESS-Reality-Up-CDN-Down` و تمرکز بر ۵ نود اصلی پرسرعت جهت کاهش پیچیدگی نگهداری و اورهد اتصالات؛ حفظ کلید `FEATURE_REALITY_UP_CDN_DOWN` جهت فعال‌سازی اختیاری. |
 
 ---
 

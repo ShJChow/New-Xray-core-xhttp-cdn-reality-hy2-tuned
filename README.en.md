@@ -187,16 +187,15 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.41) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.43) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | **Robust TCP fallback**, anti-blocking CDN escape hatch |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
 | **3** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
-| **6** | `VLESS-Reality-Up-CDN-Down` | Split Routing + vlessenc | Up Reality Direct / Down CDN (h2) | 0-RTT direct up + CDN full speed down anti-blocking |
 
-> Disabled by default, toggleable on demand: `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> Disabled by default, toggleable on demand: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -211,7 +210,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.41)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.43)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -230,6 +229,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **HTTP/1.1 Fully Deprecated** | v4.9.40 | Purged `http/1.1` from server inbounds, client URIs, and Mihomo configs, strictly enforcing modern multiplexed ALPN (`h2` / `h3`) to eliminate protocol downgrade and head-of-line blocking; synchronized with sbbox v2.7.24. |
 | **Nginx Fallback Loopback & Routing Optimization** | v4.9.41 | Bound Nginx camouflage port 8003 strictly to `127.0.0.1:8003` to prevent public exposure and scanner probing; enhanced Mihomo routing rules by fixing iCloud misrouting to Microsoft services and adding dedicated `iCloud Services` proxy group and Microsoft rule set. |
 | **Complete ALPN Purification** | v4.9.42 | Completely eliminated legacy `http/1.1` from manage CLI commands (`xh cdnh2`/`cdnh3`), client example templates, and benchmark scripts, strictly locking the multiplexed ALPN floor to HTTP/2 (`h2`) and HTTP/3 (`h3`) to avoid any accidental protocol fallback. |
+| **Split-Routing Deprecated by Default** | v4.9.43 | Deprecated `VLESS-Reality-Up-CDN-Down` from default installation to converge on 5 core high-performance nodes, significantly reducing multi-path connection overhead; preserved `FEATURE_REALITY_UP_CDN_DOWN` flag for on-demand use. |
 
 ---
 

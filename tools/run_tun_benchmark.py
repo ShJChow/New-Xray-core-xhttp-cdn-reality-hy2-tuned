@@ -137,8 +137,9 @@ xray_nodes = [
     ("n2-h3-direct", n2, 10802),
     ("n4-raw-reality-vision", n4_raw, 10804),
     ("n5-reality-xhttp", n5, 10805),
-    ("n6-reality-up-cdn-down", n6, 10806),
 ]
+if env.get("FEATURE_REALITY_UP_CDN_DOWN", "false") == "true":
+    xray_nodes.append(("n6-reality-up-cdn-down", n6, 10806))
 
 xray_cfg = {
     "log": {"loglevel": "warning"},
@@ -244,13 +245,14 @@ try:
         ("Xray", "n3-hy2-obfs", 10803, "Hysteria 2 + Salamander"),
         ("Xray", "n4-raw-reality-vision", 10804, "VLESS + RAW + Reality + Vision"),
         ("Xray", "n5-reality-xhttp", 10805, "VLESS + Reality + XHTTP"),
-        ("Xray", "n6-reality-up-cdn-down", 10806, "Reality Up + CDN Down"),
         ("sbbox", "tuic", 11801, "TUIC v5 + BBR"),
         ("sbbox", "hysteria2", 11802, "Hysteria 2 + Fixed Port + Brutal"),
         ("sbbox", "naive-h3", 11803, "NaiveProxy + QUIC/H3 + BBR"),
         ("sbbox", "naive-h2", 11804, "NaiveProxy + TCP/H2 TLS"),
         ("sbbox", "anytls", 11805, "AnyTLS + TLS 1.3"),
     ]
+    if env.get("FEATURE_REALITY_UP_CDN_DOWN", "false") == "true":
+        all_tests.insert(6, ("Xray", "n6-reality-up-cdn-down", 10806, "Reality Up + CDN Down"))
 
     # Wait for inbounds to be ready
     print("等待所有本地代理端口就绪...", flush=True)
