@@ -1345,7 +1345,7 @@ for home in user_homes:
                     if 'VLESS-XHTTP-CDN-H3' in p.get('name', ''):
                         h2_p = copy.deepcopy(p)
                         h2_p['name'] = p['name'].replace('VLESS-XHTTP-CDN-H3', 'VLESS-XHTTP-CDN-H2')
-                        h2_p['alpn'] = ['h2', 'http/1.1']
+                        h2_p['alpn'] = ['h2']
                         new_proxies.append(h2_p)
                         added = True
                     elif not added and ('VLESS-XHTTP-Direct-H3' in p.get('name', '') or 'VLESS-Reality' in p.get('name', '')):
@@ -1354,7 +1354,7 @@ for home in user_homes:
                         h2_p['server'] = '${CDN_DOMAIN}'
                         h2_p['port'] = 443
                         h2_p['servername'] = '${CDN_DOMAIN}'
-                        h2_p['alpn'] = ['h2', 'http/1.1']
+                        h2_p['alpn'] = ['h2']
                         if 'xhttp-opts' in h2_p:
                             h2_p['xhttp-opts']['host'] = '${CDN_DOMAIN}'
                             h2_p['xhttp-opts']['mode'] = 'auto'

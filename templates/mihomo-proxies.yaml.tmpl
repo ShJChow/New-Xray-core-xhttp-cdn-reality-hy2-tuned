@@ -19,7 +19,6 @@ proxies:
     network: xhttp
     alpn:
       - h2
-      - http/1.1
     servername: ${CDN_DOMAIN}
     client-fingerprint: chrome
     encryption: ${XHTTP_ENCRYPTION}${MIHOMO_ECH_PROXY_BLOCK}
@@ -109,7 +108,6 @@ proxies:
     network: xhttp
     alpn:
       - h2
-      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     encryption: ${VLESSENC_ENCRYPTION}
@@ -172,7 +170,6 @@ proxies:
     network: tcp
     alpn:
       - h2
-      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:
@@ -193,7 +190,6 @@ proxies:
     network: xhttp
     alpn:
       - h2
-      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:
@@ -223,7 +219,6 @@ proxies:
     network: xhttp
     alpn:
       - h2
-      - http/1.1
     servername: ${REALITY_DOMAIN}
     client-fingerprint: chrome
     reality-opts:
@@ -243,7 +238,6 @@ proxies:
         tls: true
         alpn:
           - h2
-          - http/1.1
         servername: ${CDN_DOMAIN}
         client-fingerprint: chrome${MIHOMO_ECH_DOWNLOAD_BLOCK}
         reality-opts:
@@ -291,7 +285,6 @@ proxies:
         tls: true
         alpn:
           - h2
-          - http/1.1
         servername: ${REALITY_DOMAIN}
         client-fingerprint: chrome
         ech-opts:

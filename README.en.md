@@ -187,7 +187,7 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.39) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.40) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | **Robust TCP fallback**, anti-blocking CDN escape hatch |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
@@ -211,7 +211,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.39)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.40)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -227,6 +227,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Credential Injection Hardening** | v4.9.37 | Added `rawurlencode` definition and `HY2_PASSWORD` fallback to client config generation, fixing dropped/unauthenticated Hysteria 2 nodes during standalone generation or subscription refresh. |
 | **CDN-H2 Default Restored** | v4.9.38 | Restored `VLESS-XHTTP-CDN-H2` to default enabled (7 core nodes in total), providing an out-of-the-box TCP escape hatch during UDP 443 QoS throttling or ISP blocks. |
 | **CDN-H3 Default Streamlined** | v4.9.39 | Pruned `VLESS-XHTTP-CDN-H3` by default (converging to 6 core pillar nodes) to prevent Cloudflare edge UDP 443 QoS throttling and jitter; retained `FEATURE_CDN_H3` and `xh cdnh3` for on-demand activation. |
+| **HTTP/1.1 Fully Deprecated** | v4.9.40 | Purged `http/1.1` from server inbounds, client URIs, and Mihomo configs, strictly enforcing modern multiplexed ALPN (`h2` / `h3`) to eliminate protocol downgrade and head-of-line blocking; synchronized with sbbox v2.7.24. |
 
 ---
 

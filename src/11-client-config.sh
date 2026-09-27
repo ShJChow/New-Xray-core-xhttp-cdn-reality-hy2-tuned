@@ -166,9 +166,9 @@ else
 fi
 
 if [[ "$CDN_ECH_ENABLED" == true ]]; then
-  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%2C%22ech%22%3A%22${CDN_ECH_QUERY_ENC}%22%7D"
+  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%2C%22ech%22%3A%22${CDN_ECH_QUERY_ENC}%22%7D"
 else
-  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%2C%22http%2F1.1%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
+  DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
 fi
 if [[ "$FEATURE_XPADDING" == true ]]; then
   DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
@@ -181,7 +181,7 @@ else
 fi
 
 if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-true}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-true}" == true ]]; then
-  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
+  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
 else
   REALITY_UP_CDN_DOWN_NODE_LINE=""
 fi
@@ -250,12 +250,12 @@ fi
 
 # h2-cdn: 经 CDN 的 TCP(h2) 链路（默认关闭，FEATURE_CDN_H2=true 时启用）
 if [[ "$FEATURE_CDN_H2" == true ]]; then
-  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
+  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
 else
   H2_CDN_NODE_LINE=""
 fi
 
-# h3-cdn（v4.7.4）：节点 1 的 QUIC 版，只差 alpn（h2,http/1.1 → h3）与节点名。
+# h3-cdn（v4.7.4）：节点 1 的 QUIC 版，只差 alpn（h2 → h3）与节点名。
 # 不需要任何服务端改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP。
 # 之所以必须另开一条而不能给节点 1 加个 h3：mihomo 仅在 alpn **恰好等于** h3 时才走
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
@@ -266,10 +266,9 @@ else
   H3_CDN_NODE_LINE=""
 fi
 
-# h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn。
-# alpn 里的 http/1.1 必须写成 http%2F1.1——裸斜杠会被解析成 URI 的 path 分隔符。
+# h2-direct（v4.7.0）：h3-direct 的 TCP 版，只差 port 与 alpn (h2)。
 if [[ "$FEATURE_H2_DIRECT" == true ]]; then
-  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2,http%2F1.1&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H2${NODE_SUFFIX}"
+  H2_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H2_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H2${NODE_SUFFIX}"
 else
   H2_DIRECT_NODE_LINE=""
 fi
