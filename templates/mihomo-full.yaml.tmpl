@@ -281,6 +281,20 @@ proxy-groups:
     include-all: true
     icon: https://fastly.jsdelivr.net/gh/clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/microsoft.svg
 
+  - name: iCloud服务
+    type: select
+    interval: 300
+    timeout: 3000
+    url: https://www.google.com/generate_204
+    lazy: true
+    max-failed-times: 3
+    hidden: false
+    proxies:
+      - 全局直连
+      - 节点选择
+    include-all: true
+    icon: https://fastly.jsdelivr.net/gh/xiaolin-007/clash@main/icon/iCloud.svg
+
   - name: 苹果服务
     type: select
     interval: 300
@@ -401,6 +415,13 @@ rule-providers:
     interval: 86400
     url: https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt
     path: ./ruleset/loyalsoldier/reject.yaml
+  microsoft:
+    type: http
+    behavior: domain
+    format: yaml
+    interval: 86400
+    url: https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/microsoft.txt
+    path: ./ruleset/loyalsoldier/microsoft.yaml
   icloud:
     type: http
     behavior: domain
@@ -540,15 +561,17 @@ rules:
 ${MIHOMO_NODE_DIRECT_RULE}
   - DOMAIN-SUFFIX,${REALITY_DOMAIN},全局直连
   - DOMAIN-SUFFIX,${CDN_DOMAIN},全局直连
-  - DOMAIN-SUFFIX,googleapis.cn,节点选择
-  - DOMAIN-SUFFIX,gstatic.com,节点选择
-  - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,节点选择
+  - DOMAIN-SUFFIX,google.com,谷歌服务
+  - DOMAIN-SUFFIX,googleapis.cn,谷歌服务
+  - DOMAIN-SUFFIX,gstatic.com,谷歌服务
+  - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,谷歌服务
   - DOMAIN-SUFFIX,github.io,节点选择
   - DOMAIN,v2rayse.com,节点选择
   - RULE-SET,applications,全局直连
   - RULE-SET,private,全局直连
   - RULE-SET,reject,广告过滤
-  - RULE-SET,icloud,微软服务
+  - RULE-SET,microsoft,微软服务
+  - RULE-SET,icloud,iCloud服务
   - RULE-SET,apple,苹果服务
   - RULE-SET,YouTube,YouTube
   - RULE-SET,Netflix,Netflix
