@@ -297,7 +297,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.43)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.44)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -317,6 +317,7 @@ flowchart TD
 | **Nginx 回落回环加固与分流优化** | v4.9.41 | 将 Nginx 伪装站 8003 端口严格绑定至 `127.0.0.1:8003` 本地回环，杜绝向公网暴露回落伪装端口，防止网络空间测绘引擎主动探测；优化 Mihomo 客户端分流规则，修复 iCloud 错分至微软服务的规则集误配，新增独立的 `iCloud服务` 策略组与专用 Microsoft 规则集 |
 | **ALPN 彻底纯化与残留清理** | v4.9.42 | 彻底清除管理命令行（`xh cdnh2`/`cdnh3`）、客户端示例模板与压测工具中遗留的 `http/1.1`，确保全协议链路纯化锁定现代多路复用 `h2`（HTTP/2 为协议下限）与 `h3`（HTTP/3），消除任何动态切组或重载时的协议回退隐患 |
 | **精简下线分离节点** | v4.9.43 | 默认精简剔除上下行分离节点 `VLESS-Reality-Up-CDN-Down`，收敛为 5 大核心主力节点，大幅降低多链路维护复杂度与连接建立开销；保留 `FEATURE_REALITY_UP_CDN_DOWN` 开关支持按需开启 |
+| **网卡 fq 队列开机持久化** | v4.9.44 | 修复重启后 fq 失效：`net.core.default_qdisc=fq` 只对此后新建的 qdisc 生效，网卡在 sysctl 加载前就已建好，实测重启后出口网卡是 `mq` + `pfifo_fast`，此前的 fq、`initcwnd 32`、`txqueuelen`、RPS/RFS 都只在 `xh tuning on` 时执行一次。现写成 `/usr/local/sbin/xray-xhttp-nic-tune` + `xray-xhttp-nic.service`（OpenRC 用 `/etc/local.d`）开机重设，`xh tuning off` 与卸载时移除；单核机器也会设置 fq（RPS 仍只在多核时开启）。核对：`tc qdisc show dev <网卡>` 应为 `mq` 下挂 `fq`，不能只看 sysctl。同机 sbbox 在 v2.7.32 同步加入，两边统一为 mq + 每队列 fq，谁后执行结果都相同。另修 `xh version` 因 node.env 值带引号而误报「xh 被更新过」。**不采纳**：把 443 Reality 入站 Brutal 换回 BBR——加测重传率（netns 160ms，N=3）：1% 丢包 300↓/50↑ 下行 121 vs 108 Mbps、重传 1.33% vs 0.71%；0% 丢包 300↓/50↑ 143 vs 130、0.86% vs 0.06%；100↓/20↑ 71 vs 69、0.06% vs 0.01%，Brutal 吞吐不输且不会定速超发灌爆线路，维持 |
 
 ---
 

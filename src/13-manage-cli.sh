@@ -864,6 +864,9 @@ cmd_tuning() {
       ;;
     off)
       rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
+      # v4.9.44：网卡运行时参数的开机重设（xray-xhttp-nic.service）一并移除；
+      # 当前的 fq / initcwnd 保持到下次重启，与 sysctl 的回滚方式一致。
+      remove_nic_tune
       # v4.7.3：只删本项目自己的 drop-in。用户手工加固的 override.conf 一律不动
       # ——除非它的内容与旧版生成物逐字一致（说明是本项目留下的，用户没改过）。
       # 旧实现无条件 rm override.conf，会连用户的 Restart=always / OOMScoreAdjust
@@ -1712,6 +1715,7 @@ cmd_uninstall() {
   rm -f  /etc/ssl/private/private.key /etc/ssl/private/fullchain.cer
 
   rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
+  remove_nic_tune
   sysctl --system >/dev/null 2>&1 || true
 
   local home="${USER_HOME:-/root}"
@@ -1846,8 +1850,9 @@ case "${1:-menu}" in
     # 这里用 if 而非 `[[ ]] && echo`：后者作为分支最后一条语句，会在条件为假时
     # 把整个 xh version 的退出码变成 1（此处已是脚本末尾，没有后续命令兜底）。
     XH_INSTALLED_VER=""
+    # node.env 里的值带引号（PROJECT_VERSION="4.9.44"），去掉再比，否则版本相同也会误报
     [[ -f "$NODE_ENV_FILE" ]] && \
-      XH_INSTALLED_VER=$(sed -n 's/^PROJECT_VERSION=//p' "$NODE_ENV_FILE" | head -1)
+      XH_INSTALLED_VER=$(sed -n 's/^PROJECT_VERSION=//p' "$NODE_ENV_FILE" | head -1 | tr -d "\"'")
     if [[ -n "$XH_INSTALLED_VER" && "$XH_INSTALLED_VER" != "${XH_VERSION:-}" ]]; then
       echo "  （本机节点安装于 ${XH_INSTALLED_VER}，之后 xh 被更新过；节点配置不会因 xh 更新而改变）"
     fi

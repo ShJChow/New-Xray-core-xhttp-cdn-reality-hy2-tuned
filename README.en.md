@@ -210,7 +210,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.43)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.44)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -230,6 +230,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Nginx Fallback Loopback & Routing Optimization** | v4.9.41 | Bound Nginx camouflage port 8003 strictly to `127.0.0.1:8003` to prevent public exposure and scanner probing; enhanced Mihomo routing rules by fixing iCloud misrouting to Microsoft services and adding dedicated `iCloud Services` proxy group and Microsoft rule set. |
 | **Complete ALPN Purification** | v4.9.42 | Completely eliminated legacy `http/1.1` from manage CLI commands (`xh cdnh2`/`cdnh3`), client example templates, and benchmark scripts, strictly locking the multiplexed ALPN floor to HTTP/2 (`h2`) and HTTP/3 (`h3`) to avoid any accidental protocol fallback. |
 | **Split-Routing Deprecated by Default** | v4.9.43 | Deprecated `VLESS-Reality-Up-CDN-Down` from default installation to converge on 5 core high-performance nodes, significantly reducing multi-path connection overhead; preserved `FEATURE_REALITY_UP_CDN_DOWN` flag for on-demand use. |
+| **fq Qdisc Persisted Across Reboots** | v4.9.44 | Fixed fq being lost on reboot: `net.core.default_qdisc=fq` only applies to qdiscs created afterwards, and the NIC exists before sysctl.d is loaded, so after a reboot the egress NIC was actually `mq` + `pfifo_fast`; fq, `initcwnd 32`, `txqueuelen` and RPS/RFS used to run only once during `xh tuning on`. They are now written to `/usr/local/sbin/xray-xhttp-nic-tune` + `xray-xhttp-nic.service` (OpenRC: `/etc/local.d`) and re-applied at boot; `xh tuning off` and uninstall remove them. Single-core hosts now get fq too (RPS still multi-core only). Verify with `tc qdisc show dev <nic>` (expect `fq` under `mq`), not with sysctl. The co-hosted sbbox adds the same in v2.7.32; both now use mq + per-queue fq, so whichever runs last yields the same result. Also fixed `xh version` falsely reporting an updated xh because the node.env value is quoted. **Not adopted**: switching the 443 Reality inbound from Brutal back to BBR — with retransmissions measured (netns 160ms, N=3): 1% loss 300↓/50↑ 121 vs 108 Mbps, retrans 1.33% vs 0.71%; 0% loss 300↓/50↑ 143 vs 130, 0.86% vs 0.06%; 100↓/20↑ 71 vs 69, 0.06% vs 0.01%. Brutal is no slower and does not flood the line, so it stays. |
 
 ---
 

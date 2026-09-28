@@ -98,6 +98,122 @@ try_sysctl() {
   fi
 }
 
+# ---------- 网卡运行时参数的开机重设（v4.9.44）----------
+# 与同机 sbbox（v2.7.32 起的 sbbox-nic.service）写法一致：出口网卡 mq 下每个 TX 队列挂 fq，
+# 两边谁后执行结果都相同，不会互相覆盖成另一种队列结构。
+NIC_TUNE_BIN="/usr/local/sbin/xray-xhttp-nic-tune"
+NIC_TUNE_UNIT="xray-xhttp-nic.service"
+NIC_TUNE_OPENRC="/etc/local.d/xray-xhttp-nic.start"
+
+write_nic_tune_script() {
+  install -d -m 755 "$(dirname "$NIC_TUNE_BIN")" 2>/dev/null || true
+  cat > "$NIC_TUNE_BIN" <<'NICTUNEEOF'
+#!/usr/bin/env bash
+# 由 xh tuning on 生成 / xh tuning off 移除，开机由 xray-xhttp-nic.service 执行。
+# 重设 sysctl 管不到、重启即丢的网卡运行时参数；全部 best-effort，可重复执行。
+def_route=$(ip route show default 2>/dev/null | head -1)
+def_dev=$(echo "$def_route" | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+
+# 1. 默认路由初始拥塞窗口 initcwnd / initrwnd 32，加速 TLS 握手
+if [[ -n "$def_route" ]]; then
+  clean_route=$(echo "$def_route" | sed 's/ initcwnd [0-9]*//g; s/ initrwnd [0-9]*//g')
+  ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
+fi
+
+# 2. 出口网卡发送队列长度；MTU 低于 1480 时抬到 1480
+if [[ -n "$def_dev" ]]; then
+  ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
+  cur_mtu=$(cat "/sys/class/net/$def_dev/mtu" 2>/dev/null || echo 1500)
+  if [[ "$cur_mtu" -lt 1480 && "$cur_mtu" -gt 0 ]]; then
+    ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
+  fi
+fi
+
+# 3. RPS/RFS 多核软中断均衡（仅多核）+ fq 队列（仅在 default_qdisc=fq 即 BBR 可用时设置）
+cores=$(nproc 2>/dev/null || echo 1)
+rps_mask=$(printf '%x' $((2**cores - 1)))
+flow_entries=$((8192 * cores))
+want_fq=0
+[[ "$(sysctl -n net.core.default_qdisc 2>/dev/null)" == "fq" ]] && command -v tc >/dev/null 2>&1 && want_fq=1
+fq_opts="limit 20480 flow_limit 4096 quantum 18028 initial_quantum 90140"
+for d in /sys/class/net/*; do
+  [[ -e "$d" ]] || continue
+  dev=$(basename "$d")
+  case "$dev" in
+    lo|docker*|veth*|br-*|virbr*|zt*|tailscale*|wg*|tun*|tap*) continue;;
+  esac
+  [[ -d "/sys/class/net/$dev/queues" ]] || continue
+  num_rx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'rx-*' | wc -l)
+  [[ "$num_rx" -le 0 ]] && num_rx=1
+  if [[ "$cores" -gt 1 ]]; then
+    for rxq in /sys/class/net/"$dev"/queues/rx-*/rps_cpus; do
+      [[ -f "$rxq" ]] && echo "$rps_mask" > "$rxq" 2>/dev/null || true
+    done
+    for rxq_dir in /sys/class/net/"$dev"/queues/rx-*/; do
+      [[ -f "${rxq_dir}rps_flow_cnt" ]] && echo "$((flow_entries / num_rx))" > "${rxq_dir}rps_flow_cnt" 2>/dev/null || true
+    done
+  fi
+  if [[ "$want_fq" -eq 1 ]]; then
+    num_tx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'tx-*' | wc -l)
+    if [[ "$num_tx" -gt 1 ]]; then
+      tc qdisc replace dev "$dev" root handle 1: mq 2>/dev/null || true
+      for i in $(seq 1 "$num_tx"); do
+        tc qdisc replace dev "$dev" parent 1:$i fq $fq_opts 2>/dev/null || true
+      done
+    else
+      tc qdisc replace dev "$dev" root fq $fq_opts 2>/dev/null || true
+    fi
+  fi
+done
+exit 0
+NICTUNEEOF
+  chmod 755 "$NIC_TUNE_BIN"
+}
+
+# 写脚本 → 立即执行一次 → 挂开机自启（systemd oneshot；OpenRC 用 local.d）
+install_nic_tune() {
+  write_nic_tune_script || { warn "写入 ${NIC_TUNE_BIN} 失败，跳过网卡层调优"; return 0; }
+  "$NIC_TUNE_BIN" || true
+  if [[ "$SERVICE_TYPE" == "systemd" ]]; then
+    cat > "/etc/systemd/system/${NIC_TUNE_UNIT}" <<NICUNITEOF
+# 由 xh tuning on 生成 / xh tuning off 移除：开机重设 fq / initcwnd / txqueuelen / RPS
+[Unit]
+Description=Xray XHTTP NIC runtime tuning (fq qdisc, initcwnd, RPS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${NIC_TUNE_BIN}
+
+[Install]
+WantedBy=multi-user.target
+NICUNITEOF
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable "$NIC_TUNE_UNIT" >/dev/null 2>&1 \
+      && info "网卡层调优已挂开机自启（${NIC_TUNE_UNIT}：fq / initcwnd / txqueuelen / RPS）" \
+      || warn "启用 ${NIC_TUNE_UNIT} 失败，重启后网卡层调优不会自动恢复"
+  elif [[ -d /etc/local.d ]]; then
+    ln -sf "$NIC_TUNE_BIN" "$NIC_TUNE_OPENRC" 2>/dev/null && \
+      info "网卡层调优已挂开机自启（${NIC_TUNE_OPENRC}，需 rc-update add local default）"
+  else
+    warn "未识别到 systemd / OpenRC local.d，网卡层调优重启后不会自动恢复"
+  fi
+  local qd
+  qd=$(tc qdisc show 2>/dev/null | awk '$2=="fq"' | wc -l)
+  info "当前 fq 队列数: ${qd}（核对：tc qdisc show）"
+}
+
+remove_nic_tune() {
+  if [[ -f "/etc/systemd/system/${NIC_TUNE_UNIT}" ]]; then
+    systemctl disable "$NIC_TUNE_UNIT" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/${NIC_TUNE_UNIT}"
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  rm -f "$NIC_TUNE_BIN" "$NIC_TUNE_OPENRC"
+}
+
 apply_system_tuning() {
   local SYSCTL_APPLIED=() SYSCTL_SKIPPED=() TUNING_BBR_OK=false
   local MEM_MB CPU_CORES ARCH PAGE_SIZE MEM_PAGES
@@ -286,62 +402,15 @@ apply_system_tuning() {
   try_sysctl fs.nr_open 1048576
   align_default_nofile
 
-  # ---------- 路由与网络硬件队列增强（best-effort）----------
-  # 1. 优化默认路由初始拥塞窗口（initcwnd/initrwnd 32），加速 TLS 握手
-  local def_route clean_route def_dev
-  def_route=$(ip route show default 2>/dev/null | head -1)
-  if [[ -n "$def_route" ]]; then
-    clean_route=$(echo "$def_route" | sed 's/ initcwnd [0-9]*//g; s/ initrwnd [0-9]*//g')
-    ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
-    def_dev=$(echo "$def_route" | awk '{print $5}')
-    if [[ -n "$def_dev" ]]; then
-      ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
-      local cur_mtu
-      cur_mtu=$(cat "/sys/class/net/$def_dev/mtu" 2>/dev/null || echo 1500)
-      if [[ "$cur_mtu" -lt 1480 && "$cur_mtu" -gt 0 ]]; then
-        ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
-      fi
-    fi
-  fi
-
-  # 2. RPS/RFS 多核软中断调优与网卡流控
+  # ---------- 网卡运行时参数：fq / initcwnd / txqueuelen / RPS（best-effort）----------
+  # v4.9.44：这几项都不是 sysctl，此前只在这里执行一次，**重启即丢**：
+  # net.core.default_qdisc=fq 只对此后新建的 qdisc 生效，而网卡在 initramfs 阶段、
+  # sysctl.d 加载前就已建好，实测重启后出口网卡是 mq + pfifo_fast。
+  # 现改为写开机脚本 + systemd oneshot，这里先执行一次，开机再执行一次。
   if [[ "$CPU_CORES" -gt 1 ]]; then
-    local rps_mask flow_entries num_rx
-    rps_mask=$(printf '%x' $((2**CPU_CORES - 1)))
-    flow_entries=$((8192 * CPU_CORES))
-    try_sysctl net.core.rps_sock_flow_entries "$flow_entries"
-    for d in /sys/class/net/*; do
-      [[ -e "$d" ]] || continue
-      local dev
-      dev=$(basename "$d")
-      case "$dev" in
-        lo|docker*|veth*|br-*|virbr*|zt*|tailscale*|wg*|tun*|tap*) continue;;
-      esac
-      [[ -d "/sys/class/net/$dev/queues" ]] || continue
-      num_rx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'rx-*' | wc -l)
-      [[ "$num_rx" -le 0 ]] && num_rx=1
-      for rxq in /sys/class/net/$dev/queues/rx-*/rps_cpus; do
-        [[ -f "$rxq" ]] && echo "$rps_mask" > "$rxq" 2>/dev/null || true
-      done
-      for rxq_dir in /sys/class/net/$dev/queues/rx-*/; do
-        [[ -f "${rxq_dir}rps_flow_cnt" ]] && echo "$((flow_entries / num_rx))" > "${rxq_dir}rps_flow_cnt" 2>/dev/null || true
-      done
-
-      # 多队列网卡 / 单队列网卡 fq 流控优化
-      if command -v tc >/dev/null 2>&1 && [[ "$TUNING_BBR_OK" == "true" ]]; then
-        local num_tx
-        num_tx=$(find "/sys/class/net/$dev/queues/" -maxdepth 1 -name 'tx-*' | wc -l)
-        if [[ "$num_tx" -gt 1 ]]; then
-          tc qdisc replace dev "$dev" root handle 1: mq 2>/dev/null || true
-          for i in $(seq 1 "$num_tx"); do
-            tc qdisc replace dev "$dev" parent 1:$i fq limit 20480 flow_limit 4096 quantum 18028 initial_quantum 90140 2>/dev/null || true
-          done
-        else
-          tc qdisc replace dev "$dev" root fq limit 20480 flow_limit 4096 quantum 18028 initial_quantum 90140 2>/dev/null || true
-        fi
-      fi
-    done
+    try_sysctl net.core.rps_sock_flow_entries "$((8192 * CPU_CORES))"
   fi
+  install_nic_tune
 
   # 3. TCP MSS Clamp 防护（避免 Jumbo Frame 与公网 MTU 冲突导致的黑洞丢包）
   if command -v iptables >/dev/null 2>&1; then
