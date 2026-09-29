@@ -801,7 +801,7 @@ detect_bbr_version() {
 
 patch_tcp_brutal_tso_segs() {
   # 内核 7.1 起 tcp_congestion_ops 把 min_tso_segs(sk) 改成 tso_segs(sk, mss_now)，
-  # 上游 tcp-brutal（HyNetworks/apernet）至今未适配：在 7.1+ 上 dkms 编译直接失败，
+  # 上游 tcp-brutal（HyNetworks/apernet）2.0.0 及更早未适配（2.0.1 起自带，见下方跳过判断）：在 7.1+ 上 dkms 编译直接失败，
   # 结果是 brutal 静默不可用，而本项目的 sockopt 里写着 tcpcongestion=brutal。
   # 判别式直接 grep 目标内核头文件，不用 LINUX_VERSION_CODE 猜边界。
   local src f mk
@@ -810,6 +810,10 @@ patch_tcp_brutal_tso_segs() {
     f="$src/brutal_cc.c"; mk="$src/Makefile"
     [ -f "$f" ] && [ -f "$mk" ] || continue
     grep -q 'HAVE_TSO_SEGS_MSS' "$f" 2>/dev/null && continue   # 已打过，幂等
+    # 上游 v2.0.1 起自带适配（BRUTAL_HAVE_TSO_SEGS）且语义正确：新钩子 tso_segs 的返回值是
+    # 「一次发送的段数」，本补丁把它接到恒返回 2 的 min_tso_segs 上，会把 TSO 限成每次 2 段。
+    # 上游已适配时一律不打，本补丁只留给 2.0.0 及更早的源码。
+    grep -q 'BRUTAL_HAVE_TSO_SEGS' "$f" 2>/dev/null && continue
 
     awk '
       /^static u32 brutal_min_tso_segs\(struct sock \*sk\)$/ {
