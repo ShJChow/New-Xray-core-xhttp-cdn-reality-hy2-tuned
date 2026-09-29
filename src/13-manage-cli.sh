@@ -567,6 +567,22 @@ cmd_diag() {
         fi
       fi
 
+      # v4.9.45：续期方式与 CDN 代理状态是否冲突。
+      # CDN 域名开了 Cloudflare 代理后，standalone（HTTP-01）续期会被 CF 301 到 https
+      # 再回源 443（Reality / 伪装站），60 天后续期必败，而平时一切正常、日志无异常。
+      local _wr; _wr=$(. "$_ac" 2>/dev/null; printf '%s' "${Le_Webroot:-}")
+      case "$_wr" in
+        dns_*) chk "acme 续期方式: DNS-01（${_wr}），与 CDN 代理状态无关" 0 ;;
+        *)
+          if cdn_behind_proxy; then
+            chk "acme 续期方式为 standalone，但 ${CDN_DOMAIN} 已走 CDN 代理，自动续期会失败" 1 \
+              "执行 CF_Token=<Cloudflare API Token> ${MANAGE_CMD} cert dnscf 切换为 DNS-01"
+          else
+            chk "acme 续期方式: standalone（${CDN_DOMAIN:-CDN 域名} 当前直连本机，可用）" 0
+          fi
+          ;;
+      esac
+
       # reloadcmd 是否覆盖了所有读这份证书的服务
       if [[ -z "$_rc" ]]; then
         chk "acme reloadcmd 为空" 1 "续期后没有任何服务会重新加载新证书"
@@ -1658,6 +1674,76 @@ cmd_ecn() {
   esac
 }
 
+# ---------- 证书续期方式（v4.9.45）----------
+# 找到本项目双域名证书在 acme.sh 里的域名配置文件
+acme_domain_conf() {
+  local _d
+  for _d in "$HOME/.acme.sh/${REALITY_DOMAIN}_ecc" "$HOME/.acme.sh/${REALITY_DOMAIN}"; do
+    [[ -f "$_d/${REALITY_DOMAIN}.conf" ]] && { printf '%s' "$_d/${REALITY_DOMAIN}.conf"; return 0; }
+  done
+  return 1
+}
+
+# CDN 域名是否走了代理：解析结果里不含本机 IP 即视为经 CDN（Cloudflare 橙云）
+cdn_behind_proxy() {
+  [[ -n "${CDN_DOMAIN:-}" && -n "${VPS_IP:-}" ]] || return 1
+  local _ips
+  _ips=$(getent ahostsv4 "$CDN_DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u)
+  [[ -n "$_ips" ]] || return 1
+  ! grep -Fxq "$VPS_IP" <<< "$_ips"
+}
+
+cmd_cert() {
+  local action="${1:-show}" conf
+  conf=$(acme_domain_conf) || fail "未找到 acme.sh 的域名配置（${REALITY_DOMAIN:-未设置}）"
+  local acct="$HOME/.acme.sh/account.conf"
+  case "$action" in
+    show|status)
+      local wr nr
+      wr=$(. "$conf" 2>/dev/null; printf '%s' "${Le_Webroot:-}")
+      nr=$(. "$conf" 2>/dev/null; printf '%s' "${Le_NextRenewTimeStr:-}")
+      echo "证书到期:   $(openssl x509 -in /etc/ssl/private/fullchain.cer -noout -enddate 2>/dev/null | cut -d= -f2)"
+      echo "下次续期:   ${nr:-未知}"
+      case "$wr" in
+        dns_*) echo "续期方式:   DNS-01（${wr}）" ;;
+        *)     echo "续期方式:   standalone（HTTP-01，续期时停 nginx 占用 80 端口）" ;;
+      esac
+      if cdn_behind_proxy; then echo "CDN 域名:   已走 CDN 代理"; else echo "CDN 域名:   直连本机（或解析失败）"; fi
+      grep -q '^SAVED_CF_Token=' "$acct" 2>/dev/null && echo "CF Token:   已保存（account.conf）" || echo "CF Token:   未保存"
+      if [[ "$wr" != dns_* ]] && cdn_behind_proxy; then
+        warn "CDN 已走代理，standalone 续期会失败：CF_Token=<API Token> ${MANAGE_CMD} cert dnscf"
+      fi
+      ;;
+    dnscf)
+      # Token 来源：环境变量 CF_Token 优先，否则沿用 account.conf 里已保存的
+      local tok="${CF_Token:-}"
+      [[ -n "$tok" ]] || tok=$(sed -nE "s/^SAVED_CF_Token='?([^']*)'?\$/\1/p" "$acct" 2>/dev/null | head -1)
+      [[ -n "$tok" ]] || fail "需要 Cloudflare API Token（Zone.DNS 编辑权限）：CF_Token=<token> ${MANAGE_CMD} cert dnscf"
+      # 先验证 Token 能看到 CDN 域名所在的 Zone，避免切过去之后续期时才失败
+      local zone="${CDN_DOMAIN#*.}" resp
+      # 请求头经 stdin（curl -K -）传入，Token 不出现在进程参数里（ps 可见）
+      resp=$(printf 'header = "Authorization: Bearer %s"\n' "$tok" | curl -fsS --max-time 20 -K - \
+        "https://api.cloudflare.com/client/v4/zones?name=${zone}" 2>/dev/null) || fail "Cloudflare API 请求失败（Token 无效或网络不通）"
+      python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("success") and d.get("result") else 1)' <<< "$resp" \
+        || fail "该 Token 看不到 Zone ${zone}，请检查权限（需 Zone.Zone 读 + Zone.DNS 编辑）"
+      info "Token 已验证：可访问 Zone ${zone}"
+      if [[ -n "${CF_Token:-}" ]]; then
+        cp -a "$acct" "${acct}.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+        sed -i '/^SAVED_CF_Token=/d' "$acct"
+        printf "SAVED_CF_Token='%s'\n" "$CF_Token" >> "$acct"
+        chmod 600 "$acct"
+      fi
+      cp -a "$conf" "${conf}.bak-$(date +%Y%m%d%H%M%S)"
+      # 续期模式记在 Le_Webroot；DNS-01 不需要停 nginx，清空 Pre/PostHook
+      sed -i -E "s/^Le_Webroot=.*/Le_Webroot='dns_cf'/; s/^Le_PreHook=.*/Le_PreHook=''/; s/^Le_PostHook=.*/Le_PostHook=''/" "$conf"
+      grep -q "^Le_Webroot='dns_cf'" "$conf" || fail "写入续期方式失败：$conf"
+      info "已切换为 DNS-01 续期（dns_cf），续期时不再停 nginx"
+      info "可用 LE 测试环境演练：acme.sh --issue --server letsencrypt_test --dns dns_cf -d ${REALITY_DOMAIN} -d ${CDN_DOMAIN} --keylength ec-256 --config-home /tmp/acme-test --cert-home /tmp/acme-test/certs"
+      ;;
+    *) fail "用法: ${MANAGE_CMD} cert [show|dnscf]" ;;
+  esac
+}
+
 cmd_uninstall() {
   echo -e "${RED}[!] 将删除 Xray / Nginx / ACME / Hysteria2 及本项目的配置、证书、订阅文件${NC}"
   read -rp "确认卸载？输入 yes 继续: " reply
@@ -1806,6 +1892,7 @@ xray-xhttp 管理命令
   xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
   xh ech [show|on|off]              Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
+  xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
@@ -1834,6 +1921,7 @@ case "${1:-menu}" in
   minversion|minver) shift; cmd_minversion "$@" ;;
   ech)        shift; cmd_ech "$@" ;;
   ecn)        shift; cmd_ecn "$@" ;;
+  cert)       shift; cmd_cert "$@" ;;
   cdnh2|h2cdn) shift; cmd_cdnh2 "$@" ;;
   cdnh3|h3cdn) shift; cmd_cdnh3 "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受

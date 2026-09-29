@@ -133,7 +133,9 @@ bash ~/install.sh
 ```bash
 sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="oracle-vps"
 ```
-> 如需覆盖更多自定义项，直接在末尾空格追加即可（如 `IP_CHOICE=1`、`CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`）。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_HY2=true` 等优化配置，绝大多数场景无需重复传入。
+> 如需覆盖更多自定义项，直接在末尾空格追加即可（如 `IP_CHOICE=1`、`CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`）。
+>
+> **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_HY2=true` 等优化配置，绝大多数场景无需重复传入。
 
 #### 方案 A-2：Heredoc 结构化批处理版（多环境变量批量定义）
 ```bash
@@ -297,7 +299,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.44)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.45)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -318,6 +320,7 @@ flowchart TD
 | **ALPN 彻底纯化与残留清理** | v4.9.42 | 彻底清除管理命令行（`xh cdnh2`/`cdnh3`）、客户端示例模板与压测工具中遗留的 `http/1.1`，确保全协议链路纯化锁定现代多路复用 `h2`（HTTP/2 为协议下限）与 `h3`（HTTP/3），消除任何动态切组或重载时的协议回退隐患 |
 | **精简下线分离节点** | v4.9.43 | 默认精简剔除上下行分离节点 `VLESS-Reality-Up-CDN-Down`，收敛为 5 大核心主力节点，大幅降低多链路维护复杂度与连接建立开销；保留 `FEATURE_REALITY_UP_CDN_DOWN` 开关支持按需开启 |
 | **网卡 fq 队列开机持久化** | v4.9.44 | 修复重启后 fq 失效：`net.core.default_qdisc=fq` 只对此后新建的 qdisc 生效，网卡在 sysctl 加载前就已建好，实测重启后出口网卡是 `mq` + `pfifo_fast`，此前的 fq、`initcwnd 32`、`txqueuelen`、RPS/RFS 都只在 `xh tuning on` 时执行一次。现写成 `/usr/local/sbin/xray-xhttp-nic-tune` + `xray-xhttp-nic.service`（OpenRC 用 `/etc/local.d`）开机重设，`xh tuning off` 与卸载时移除；单核机器也会设置 fq（RPS 仍只在多核时开启）。核对：`tc qdisc show dev <网卡>` 应为 `mq` 下挂 `fq`，不能只看 sysctl。同机 sbbox 在 v2.7.32 同步加入，两边统一为 mq + 每队列 fq，谁后执行结果都相同。另修 `xh version` 因 node.env 值带引号而误报「xh 被更新过」。**不采纳**：把 443 Reality 入站 Brutal 换回 BBR——加测重传率（netns 160ms，N=3）：1% 丢包 300↓/50↑ 下行 121 vs 108 Mbps、重传 1.33% vs 0.71%；0% 丢包 300↓/50↑ 143 vs 130、0.86% vs 0.06%；100↓/20↑ 71 vs 69、0.06% vs 0.01%，Brutal 吞吐不输且不会定速超发灌爆线路，维持 |
+| **证书续期改走 DNS-01** | v4.9.45 | 修复 CDN 走 Cloudflare 代理后证书**自动续期必败**：安装器只用 standalone（HTTP-01），首次签发时若 CDN 还是灰云能成功，之后 HTTP-01 验证会被 CF「Always Use HTTPS」301 到 https、回源 443（Reality / 伪装站），续期前钩子还会停掉 nginx——续期日失败、证书到期当天 CDN 526、h3-direct / hy2 握手失败，平时一切正常、日志无异常。现安装时传 `CF_Token` 即用 `dns_cf` 签发（acme.sh 保存 Token 供续期）；新增 `xh cert [show\|dnscf]` 查看 / 切换续期方式（切换前先用 CF API 验证 Token 能访问该 Zone，Token 经 stdin 传给 curl、不进进程参数）；`xh diag` 新增「standalone + CDN 已走代理」检查。本机用 LE staging 对真实配置副本完整跑通 `--renew`（TXT 写入、双域验证、TXT 清理）。同机 sbbox 在 v2.7.33 同步加入 DNS-01 签发与续期钩子自动挂载 |
 
 ---
 

@@ -36,6 +36,17 @@ issue_dual_cert() {
     force_flag="--force"
   fi
 
+  # v4.9.45：传入 CF_Token（Cloudflare API Token，Zone.DNS 编辑权限）时走 DNS-01。
+  # CDN 域名开了 Cloudflare 代理（橙云）后，HTTP-01 验证会被 CF 的 Always Use HTTPS
+  # 301 到 https 再回源 443，而那里是 Reality / 伪装站，不是 acme.sh 的 80 端口——
+  # 首次签发时若还是灰云能成功，60 天后自动续期必败，证书到期当天 CDN 526、
+  # h3-direct / hy2 握手失败。DNS-01 与代理状态无关，续期时也不必停 nginx。
+  # acme.sh 会把 CF_Token 存进 account.conf（SAVED_CF_Token），续期自动沿用。
+  if [[ -n "${CF_Token:-}" ]]; then
+    acme.sh --issue --dns dns_cf -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --keylength ec-256 $force_flag
+    return
+  fi
+
   if [[ "$IP_CHOICE" == "2" ]]; then
     acme.sh --issue -d "$REALITY_DOMAIN" -d "$CDN_DOMAIN" --standalone --listen-v6 --keylength ec-256 $force_flag \
       --pre-hook "${NGINX_STOP_CMD} 2>/dev/null || true" \
@@ -51,13 +62,25 @@ issue_dual_cert() {
 if have_existing_dual_cert; then
   info "检测到已存在的双域名证书，跳过重新签发，直接复用"
 else
-  info "未检测到可复用的双域名证书，开始申请 (需要 80 端口空闲)..."
+  if [[ -n "${CF_Token:-}" ]]; then
+    info "未检测到可复用的双域名证书，使用 Cloudflare DNS-01 申请（CF_Token 已提供）..."
+  else
+    info "未检测到可复用的双域名证书，开始申请 (需要 80 端口空闲)..."
+  fi
   if ! ISSUE_OUTPUT=$(issue_dual_cert 2>&1); then
     echo "$ISSUE_OUTPUT"
+    if [[ -n "${CF_Token:-}" ]]; then
+      error "双域名证书申请失败（DNS-01），请确认 CF_Token 对该 Zone 有 DNS 编辑权限"
+    fi
     error "双域名证书申请失败，请确认 80 端口未被占用、本机防火墙已放行 80 端口且域名 DNS 已正确解析"
   fi
   echo "$ISSUE_OUTPUT"
   have_existing_dual_cert || error "证书申请流程已结束，但未能在 ${ACME_CERT_HOME} 找到有效的双域名证书"
+fi
+
+if [[ -z "${CF_Token:-}" ]] && ! grep -q "^Le_Webroot='dns_" "$ACME_CERT_CONF" 2>/dev/null; then
+  warn "证书续期方式为 standalone（HTTP-01）：CDN 域名开启 Cloudflare 代理后自动续期会失败"
+  warn "装完后执行 CF_Token=<API Token> ${MANAGE_CMD:-xh} cert dnscf 切换为 DNS-01（xh diag 会持续检查）"
 fi
 
 echo ""

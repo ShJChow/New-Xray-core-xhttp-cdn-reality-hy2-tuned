@@ -110,6 +110,9 @@ Recommended single-line positional parameter installation:
 sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="vps"
 ```
 
+> **If the CDN domain is proxied by Cloudflare (orange cloud), append `CF_Token="<API Token>"`** (Zone.Zone read + Zone.DNS edit): certificates are issued and renewed via DNS-01, no port 80 and no nginx stop on renewal. Without it the installer uses standalone (HTTP-01), which fails to renew once the CDN is proxied; on existing installs run `CF_Token=<API Token> xh cert dnscf`, and check with `xh cert show` / `xh diag`.
+
+
 #### Core Environment Variables
 
 | Variable | Default | Description |
@@ -210,7 +213,7 @@ flowchart TD
 
 ---
 
-## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.44)
+## 7. Release History & Core Tuning Evolution (v4.8 - v4.9.45)
 
 After dozens of iterative rounds across high-latency cross-Pacific topologies (160ms+ / 1% packet loss), core technical milestones are summarized below:
 
@@ -231,6 +234,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Complete ALPN Purification** | v4.9.42 | Completely eliminated legacy `http/1.1` from manage CLI commands (`xh cdnh2`/`cdnh3`), client example templates, and benchmark scripts, strictly locking the multiplexed ALPN floor to HTTP/2 (`h2`) and HTTP/3 (`h3`) to avoid any accidental protocol fallback. |
 | **Split-Routing Deprecated by Default** | v4.9.43 | Deprecated `VLESS-Reality-Up-CDN-Down` from default installation to converge on 5 core high-performance nodes, significantly reducing multi-path connection overhead; preserved `FEATURE_REALITY_UP_CDN_DOWN` flag for on-demand use. |
 | **fq Qdisc Persisted Across Reboots** | v4.9.44 | Fixed fq being lost on reboot: `net.core.default_qdisc=fq` only applies to qdiscs created afterwards, and the NIC exists before sysctl.d is loaded, so after a reboot the egress NIC was actually `mq` + `pfifo_fast`; fq, `initcwnd 32`, `txqueuelen` and RPS/RFS used to run only once during `xh tuning on`. They are now written to `/usr/local/sbin/xray-xhttp-nic-tune` + `xray-xhttp-nic.service` (OpenRC: `/etc/local.d`) and re-applied at boot; `xh tuning off` and uninstall remove them. Single-core hosts now get fq too (RPS still multi-core only). Verify with `tc qdisc show dev <nic>` (expect `fq` under `mq`), not with sysctl. The co-hosted sbbox adds the same in v2.7.32; both now use mq + per-queue fq, so whichever runs last yields the same result. Also fixed `xh version` falsely reporting an updated xh because the node.env value is quoted. **Not adopted**: switching the 443 Reality inbound from Brutal back to BBR — with retransmissions measured (netns 160ms, N=3): 1% loss 300↓/50↑ 121 vs 108 Mbps, retrans 1.33% vs 0.71%; 0% loss 300↓/50↑ 143 vs 130, 0.86% vs 0.06%; 100↓/20↑ 71 vs 69, 0.06% vs 0.01%. Brutal is no slower and does not flood the line, so it stays. |
+| **Certificate Renewal via DNS-01** | v4.9.45 | Fixed **certain auto-renewal failure** once the CDN domain is proxied by Cloudflare: the installer only used standalone (HTTP-01); issuance succeeds while the CDN record is still DNS-only, but afterwards CF's Always Use HTTPS 301-redirects the challenge to https and back to origin 443 (Reality / camouflage site), and the pre-hook even stops nginx — renewal fails silently, and on expiry the CDN returns 526 and h3-direct / hy2 handshakes fail. Passing `CF_Token` at install now issues with `dns_cf` (acme.sh saves the token for renewals). New `xh cert [show\|dnscf]` shows / switches the renewal mode (validates the token against the zone via the CF API first; the token reaches curl via stdin, never argv). `xh diag` now flags "standalone + CDN proxied". Verified with a full LE-staging `--renew` on a copy of the real config. The co-hosted sbbox adds DNS-01 issuance and automatic renewal-hook installation in v2.7.33. |
 
 ---
 
