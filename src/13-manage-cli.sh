@@ -105,6 +105,11 @@ update_node_env() {
 # ---------------- 子命令 ----------------
 
 cmd_status() {
+  if [[ -s "${STATE_DIR}/updates-available" ]]; then
+    echo -e "${YELLOW}[!] 有可用更新（每周检查，需手动执行）：${NC}"
+    sed 's/^/  /' "${STATE_DIR}/updates-available"
+    echo ""
+  fi
   echo -e "${CYAN}[+] 服务状态${NC}"
   for s in xray nginx hysteria-server; do
     if [[ "$SERVICE_TYPE" == "openrc" ]]; then
@@ -1014,14 +1019,23 @@ cmd_brutal() {
     del|rm)
       del_tcp_brutal_rule "$@"
       ;;
+    update|up)
+      update_tcp_brutal
+      [[ " $* " == *" --now "* ]] && reload_tcp_brutal
+      ;;
+    reload)
+      reload_tcp_brutal
+      ;;
     *)
-      echo "用法: ${MANAGE_CMD} brutal [show|on|off|speed|add|del]"
+      echo "用法: ${MANAGE_CMD} brutal [show|on|off|speed|add|del|update|reload]"
       echo "  ${MANAGE_CMD} brutal show          查看 TCP Brutal 状态与活跃连接"
       echo "  ${MANAGE_CMD} brutal on [mbps]     开启 Xray TCP Brutal（默认设为本机最大速率的 95%）"
       echo "  ${MANAGE_CMD} brutal off           关闭 Xray TCP Brutal（回落至 BBR）"
       echo "  ${MANAGE_CMD} brutal speed [mbps]  修改全局默认下发速率（不填则自动设为本机 95% 速率）"
       echo "  ${MANAGE_CMD} brutal add <IP> [M]  为指定客户端 IP 设定独立下发速率"
       echo "  ${MANAGE_CMD} brutal del <IP>      删除指定客户端 IP 规则"
+      echo "  ${MANAGE_CMD} brutal update [--now] 更新内核模块到上游最新版（校验 sha256；默认下次开机生效，--now 立即重载）"
+      echo "  ${MANAGE_CMD} brutal reload        立即重载为已编译的新版模块（Xray 停止数秒）"
       ;;
   esac
 }
@@ -1074,7 +1088,7 @@ cmd_autoupdate() {
     on)
       cron_write "$(crontab -l 2>/dev/null | grep "$CRON_TAG" | grep -v 'update --auto'; \
         echo "0 4 * * 0 /usr/local/bin/xh update --auto >/dev/null 2>&1 ${CRON_TAG} autoupdate")"
-      info "内核自动更新已开启（每周日 04:00，失败自动回滚）"
+      info "自动更新已开启（每周日 04:00：Xray-core 自动更新、失败回滚；nginx / tcp-brutal 只检查并提醒；日志 journalctl -t xh-autoupdate）"
       ;;
     off)
       cron_write "$(crontab -l 2>/dev/null | grep "$CRON_TAG" | grep -v 'update --auto')"
@@ -1674,6 +1688,124 @@ cmd_ecn() {
   esac
 }
 
+# ---------- nginx 更新（v4.9.47：每周只提醒，手动更新并校验 PGP 签名）----------
+# 跟随 nginx.org 的 mainline（nginx 官方推荐生产使用；安装器同样装 mainline）。
+# 源码包必须通过 nginx 官方发布签名校验，且签名密钥的主指纹必须在下面的固定列表里——
+# 防止下载源或密钥文件被替换。列表来自 https://nginx.org/en/pgp_keys.html（2026-09-29 核对）：
+#   Sergey Kandaurov / Roman Arutyunyan / Konstantin Pavlov / Sergey Budnevitch
+NGINX_PGP_KEYS="pluknet arut thresh sb"
+NGINX_PGP_FPRS="D6786CE303D9A9022998DC6CC8464D549AF75C0A 43387825DDB1BB97EC36BA5D007C8D7C15D87369 13C82A63B603576156E30A4EA0EA981B66B0D967 7338973069ED3F443F4D37DFA64FD5B17ADB39A8"
+
+nginx_latest_mainline() {
+  curl -fsSL --max-time 20 https://nginx.org/en/download.html 2>/dev/null \
+    | sed 's/Stable version.*//' | grep -o 'nginx-[0-9][0-9.]*\.tar\.gz' | head -1 \
+    | sed 's/^nginx-//; s/\.tar\.gz$//'
+}
+
+nginx_build_deps() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get install -y -qq gcc make libpcre2-dev zlib1g-dev libssl-dev gnupg >/dev/null 2>&1
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q gcc make pcre2-devel zlib-devel openssl-devel gnupg2 >/dev/null 2>&1
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y -q gcc make pcre2-devel zlib-devel openssl-devel gnupg2 >/dev/null 2>&1
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache build-base pcre2-dev zlib-dev openssl-dev linux-headers gnupg >/dev/null 2>&1
+  fi
+}
+
+# nginx_verify_pgp <tarball> <asc>：签名有效且签名者主指纹在固定列表内才返回 0
+nginx_verify_pgp() {
+  local tgz="$1" asc="$2" gh k fpr ok=1
+  command -v gpg >/dev/null 2>&1 || { warn "未安装 gpg，无法校验 nginx 签名"; return 1; }
+  gh=$(mktemp -d) && chmod 700 "$gh"
+  for k in $NGINX_PGP_KEYS; do
+    curl -fsSL --max-time 20 "https://nginx.org/keys/${k}.key" 2>/dev/null | GNUPGHOME="$gh" gpg -q --batch --import 2>/dev/null
+  done
+  # VALIDSIG 行最后一个字段是签名密钥的主指纹
+  fpr=$(GNUPGHOME="$gh" gpg --batch --status-fd 1 --verify "$asc" "$tgz" 2>/dev/null | awk '$2=="VALIDSIG"{print $NF}')
+  rm -rf "$gh"
+  if [[ -n "$fpr" ]] && [[ " $NGINX_PGP_FPRS " == *" $fpr "* ]]; then
+    info "nginx 源码 PGP 签名校验通过（签名者主指纹 ${fpr}）"; ok=0
+  else
+    warn "nginx 源码 PGP 签名校验失败（签名者：${fpr:-无有效签名}），拒绝使用"
+  fi
+  return $ok
+}
+
+cmd_nginx() {
+  local action="${1:-show}" a
+  local bin cur latest
+  bin=$(command -v nginx) || fail "未找到 nginx"
+  cur=$("$bin" -v 2>&1 | sed -n 's|.*nginx/||p')
+  case "$action" in
+    show|status)
+      latest=$(nginx_latest_mainline)
+      echo "nginx 当前: ${cur}   mainline 最新: ${latest:-查询失败}"
+      "$bin" -V 2>&1 | grep -E 'built with|running with'
+      ;;
+    check)
+      # 每周任务调用：只检查、写提醒
+      latest=$(nginx_latest_mainline)
+      [[ -n "$latest" ]] || { warn "查询 nginx 最新版本失败"; return 0; }
+      if [[ "$(printf '%s\n%s\n' "$latest" "$cur" | sort -V | tail -1)" != "$cur" ]]; then
+        update_notice nginx "${cur} → ${latest}（手动更新：${MANAGE_CMD} nginx update）"
+        info "nginx 有新版本：${cur} → ${latest}"
+      else
+        update_notice nginx ""
+        info "nginx 已是最新 mainline：${cur}"
+      fi
+      ;;
+    update|up)
+      latest=$(nginx_latest_mainline)
+      [[ -n "$latest" ]] || { warn "无法从 nginx.org 获取最新版本"; return 1; }
+      if [[ "$(printf '%s\n%s\n' "$latest" "$cur" | sort -V | tail -1)" == "$cur" ]]; then
+        info "nginx 已是最新 mainline：${cur}"; update_notice nginx ""; return 0
+      fi
+      info "nginx ${cur} → ${latest}"
+      if [[ " $* " != *" -y "* ]]; then
+        read -rp "下载并校验签名、按原编译参数重新编译并替换 nginx（约需数分钟，替换时重启 nginx）？[y/N] " a
+        [[ "${a,,}" == "y" ]] || { info "已取消"; return 0; }
+      fi
+      local args tmp src log="/var/log/xh-nginx-build.log"
+      args=$("$bin" -V 2>&1 | sed -n 's/^configure arguments: //p')
+      [[ -n "$args" ]] || { warn "读取不到原编译参数"; return 1; }
+      nginx_build_deps
+      tmp=$(mktemp -d) || return 1
+      if ! curl -fsSL --max-time 120 "https://nginx.org/download/nginx-${latest}.tar.gz" -o "$tmp/n.tgz" \
+         || ! curl -fsSL --max-time 20 "https://nginx.org/download/nginx-${latest}.tar.gz.asc" -o "$tmp/n.asc"; then
+        warn "下载 nginx ${latest} 源码或签名失败"; rm -rf "$tmp"; return 1
+      fi
+      nginx_verify_pgp "$tmp/n.tgz" "$tmp/n.asc" || { rm -rf "$tmp"; return 1; }
+      tar -xzf "$tmp/n.tgz" -C "$tmp" || { rm -rf "$tmp"; return 1; }
+      src="$tmp/nginx-${latest}"
+      info "编译中（日志 ${log}）..."
+      # 参数来自本机二进制自身的 nginx -V，含 --with-cc-opt 等，需 eval 还原
+      if ! ( cd "$src" && eval "./configure $args" && make -j"$(nproc 2>/dev/null || echo 1)" ) >"$log" 2>&1; then
+        warn "nginx ${latest} 编译失败，保留 ${cur}（详见 ${log}）"; rm -rf "$tmp"; return 1
+      fi
+      if ! "$src/objs/nginx" -t -q >>"$log" 2>&1; then
+        warn "新二进制测试现有配置失败，保留 ${cur}（详见 ${log}）"; rm -rf "$tmp"; return 1
+      fi
+      local bak="${bin}.bak-${cur}"
+      cp -a "$bin" "$bak" || { rm -rf "$tmp"; fail "备份旧 nginx 失败"; }
+      install -m 755 "$src/objs/nginx" "${bin}.new" && mv -f "${bin}.new" "$bin"
+      rm -rf "$tmp"
+      if svc restart nginx >/dev/null 2>&1 && sleep 1 && "$bin" -v 2>&1 | grep -q "nginx/${latest}" \
+         && ss -lnt 2>/dev/null | grep -q ':8003 '; then
+        local o; for o in "${bin}".bak-*; do [[ "$o" == "$bak" ]] || rm -f "$o"; done
+        update_notice nginx ""
+        info "nginx 已更新：${cur} → ${latest}（旧二进制备份 ${bak}）"
+      else
+        warn "新 nginx 启动或端口复核失败，回滚到 ${cur}"
+        cp -a "$bak" "$bin"; svc restart nginx || true
+        return 1
+      fi
+      ;;
+    *) echo "用法: ${MANAGE_CMD} nginx [show|check|update [-y]]" ;;
+  esac
+}
+
 # ---------- 证书续期方式（v4.9.45）----------
 # 找到本项目双域名证书在 acme.sh 里的域名配置文件
 acme_domain_conf() {
@@ -1801,6 +1933,7 @@ cmd_uninstall() {
   rm -f  /etc/ssl/private/private.key /etc/ssl/private/fullchain.cer
 
   rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
+  rm -f /etc/profile.d/xh-updates.sh
   remove_nic_tune
   sysctl --system >/dev/null 2>&1 || true
 
@@ -1893,12 +2026,13 @@ xray-xhttp 管理命令
   xh ech [show|on|off]              Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
+  xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
-  xh brutal [show|on|off|speed|add|del]            TCP Brutal 极速拥塞控制 / 速率调节
+  xh brutal [show|on|off|speed|add|del|update|reload]  TCP Brutal 拥塞控制 / 速率调节 / 模块更新
   xh keepalive [on|off|show]
-  xh autoupdate [on|off|show]
+  xh autoupdate [on|off|show]       每周日 04:00 自动更新 Xray-core，并检查 nginx / tcp-brutal 新版本（只提醒）
   xh guard              健康检查并拉起异常服务（cron 调用）
   xh uninstall          卸载全部组件
   xh version
@@ -1917,7 +2051,23 @@ case "${1:-menu}" in
   start)      cmd_start ;;
   stop)       cmd_stop ;;
   restart)    cmd_restart ;;
-  update)     shift; cmd_update "$@" ;;
+  update)
+    shift
+    if [[ " $* " == *" --auto "* ]]; then
+      # v4.9.47：每周任务顺带「检查」nginx 与 tcp-brutal 新版本——只写提醒（登录时与
+      # xh status 显示），不自动安装，更新由管理员手动执行并校验签名 / 哈希。
+      # 放在分发处：cmd_update 的 fail 会直接 exit，子 shell 隔离后互不影响；
+      # 已有 cron 行无需改动。输出写入 syslog（journalctl -t xh-autoupdate）。
+      {
+        ( cmd_update "$@" ) || true
+        ( cmd_nginx check ) || true
+        ( check_tcp_brutal_update ) || true
+      } 2>&1 | logger -t xh-autoupdate
+    else
+      cmd_update "$@"
+    fi
+    ;;
+  nginx)      shift; cmd_nginx "$@" ;;
   minversion|minver) shift; cmd_minversion "$@" ;;
   ech)        shift; cmd_ech "$@" ;;
   ecn)        shift; cmd_ecn "$@" ;;

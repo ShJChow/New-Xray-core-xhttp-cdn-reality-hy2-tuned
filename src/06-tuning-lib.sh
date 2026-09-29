@@ -1024,6 +1024,142 @@ with open('$cfg', 'w') as f:
   fi
 }
 
+# ---------- 更新提醒与 GitHub 资产校验（v4.9.47）----------
+# 每周任务只「检查并提醒」、不自动安装：有新版本时写入提醒文件，登录 shell 与
+# xh status 会显示；实际更新由管理员手动执行，且下载物必须通过校验。
+XH_UPDATE_NOTICE="${STATE_DIR:-/etc/xhttp-cdn}/updates-available"
+XH_UPDATE_PROFILE="/etc/profile.d/xh-updates.sh"
+
+# update_notice <组件> [提醒文本]：有文本则写入 / 替换该组件的提醒，无文本则清除
+update_notice() {
+  local comp="$1" msg="${2:-}" f="$XH_UPDATE_NOTICE"
+  mkdir -p "$(dirname "$f")" 2>/dev/null || return 0
+  { grep -v "^\[${comp}\] " "$f" 2>/dev/null; [[ -n "$msg" ]] && echo "[${comp}] ${msg}"; } > "${f}.tmp"
+  mv -f "${f}.tmp" "$f"
+  if [[ -s "$f" ]]; then
+    printf '%s\n' "# 由 xh 生成：检查到新版本时在 root 登录时提醒；无待更新项时自动删除" \
+      "[ -s ${f} ] && [ \"\$(id -u)\" = 0 ] && case \$- in *i*) printf '\\033[33m[xh] 有可用更新（手动执行对应命令）：\\033[0m\\n'; sed 's/^/  /' ${f};; esac" \
+      > "$XH_UPDATE_PROFILE"
+  else
+    rm -f "$f" "$XH_UPDATE_PROFILE"
+  fi
+}
+
+# gh_latest_tag <owner/repo>：GitHub releases/latest 的 tag（只含正式版）
+gh_latest_tag() {
+  curl -fsSL --max-time 20 "https://api.github.com/repos/$1/releases/latest" 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
+}
+
+# fetch_verified_github_asset <owner/repo> <tag> <资产名> <输出文件>
+# 双重校验：文件 sha256 必须同时等于① 发布者上传的 hashes.txt 中的值，② GitHub 在上传时
+# 独立计算并通过 API 返回的资产 digest。任一缺失或不符即删除文件并返回失败。
+fetch_verified_github_asset() {
+  local repo="$1" tag="$2" asset="$3" out="$4" base api_sum list_sum got
+  base="https://github.com/${repo}/releases/download/${tag}"
+  api_sum=$(curl -fsSL --max-time 20 "https://api.github.com/repos/${repo}/releases/tags/${tag}" 2>/dev/null \
+    | python3 -c 'import json,sys
+a=sys.argv[1]
+for x in json.load(sys.stdin).get("assets",[]):
+    if x.get("name")==a: print((x.get("digest") or "").replace("sha256:",""))' "$asset" 2>/dev/null)
+  list_sum=$(curl -fsSL --max-time 20 "${base}/hashes.txt" 2>/dev/null \
+    | awk -v a="$asset" '{n=$2; sub(/.*\//,"",n); if (n==a) {print $1; exit}}')
+  if [[ -z "$api_sum" || -z "$list_sum" ]]; then
+    warn "缺少校验数据（GitHub digest: ${api_sum:-无}，hashes.txt: ${list_sum:-无}），拒绝使用 ${asset}"; return 1
+  fi
+  [[ "$api_sum" == "$list_sum" ]] || { warn "GitHub digest 与 hashes.txt 不一致，拒绝使用 ${asset}"; return 1; }
+  curl -fsSL --max-time 120 "${base}/${asset}" -o "$out" || { warn "下载 ${asset} 失败"; return 1; }
+  got=$(sha256sum "$out" | cut -d' ' -f1)
+  if [[ "$got" != "$api_sum" ]]; then
+    rm -f "$out"; warn "${asset} sha256 校验失败（期望 ${api_sum:0:16}…，实际 ${got:0:16}…）"; return 1
+  fi
+  info "${asset} ${tag} sha256 校验通过（hashes.txt 与 GitHub digest 一致）：${got:0:16}…"
+}
+
+# ---------- tcp-brutal 模块更新（v4.9.47，手动）----------
+# 只把新版编译进 DKMS（下次开机自动加载），不动运行中的模块；立即生效用 reload。
+# 同机 sbbox（v2.7.35 起）也能更新 brutal，两边共用一把锁，避免并发跑 dkms。
+BRUTAL_UPDATE_LOCK="/run/tcp-brutal-update.lock"
+
+brutal_dkms_installed_ver() {
+  dkms status 2>/dev/null | sed -n 's|^tcp-brutal/\([^,]*\),.*: installed.*|\1|p' | sort -V | tail -1
+}
+
+# 每周任务调用：只检查、写提醒
+check_tcp_brutal_update() {
+  command -v dkms >/dev/null 2>&1 || return 0
+  local inst latest
+  inst=$(brutal_dkms_installed_ver); [[ -n "$inst" ]] || return 0
+  latest=$(gh_latest_tag apernet/tcp-brutal); latest="${latest#v}"
+  [[ -n "$latest" ]] || { warn "查询 tcp-brutal 最新版本失败"; return 0; }
+  if [[ "$(printf '%s\n%s\n' "$latest" "$inst" | sort -V | tail -1)" != "$inst" ]]; then
+    update_notice tcp-brutal "${inst} → ${latest}（手动更新：${MANAGE_CMD:-xh} brutal update）"
+    info "tcp-brutal 有新版本：${inst} → ${latest}"
+  else
+    update_notice tcp-brutal ""
+    info "tcp-brutal 已是最新：${inst}"
+  fi
+}
+
+update_tcp_brutal() {
+  command -v dkms >/dev/null 2>&1 || { info "未安装 dkms，跳过 tcp-brutal 更新"; return 0; }
+  [[ -n "$(dkms status 2>/dev/null | grep '^tcp-brutal/')" ]] || { info "未安装 tcp-brutal，跳过"; return 0; }
+  exec 9>"$BRUTAL_UPDATE_LOCK"
+  flock -w 900 9 || { warn "另一个 tcp-brutal 更新正在进行，跳过"; return 0; }
+
+  local tag ver inst tmp
+  inst=$(brutal_dkms_installed_ver)
+  tag=$(gh_latest_tag apernet/tcp-brutal); ver="${tag#v}"
+  [[ -n "$ver" ]] || { warn "查询 tcp-brutal 最新版本失败"; flock -u 9; return 1; }
+  if [[ -n "$inst" && "$(printf '%s\n%s\n' "$ver" "$inst" | sort -V | tail -1)" == "$inst" ]]; then
+    info "tcp-brutal 已是最新：DKMS ${inst}，运行中 $(cat /sys/module/brutal/version 2>/dev/null || echo 未加载)"
+    update_notice tcp-brutal ""; flock -u 9; return 0
+  fi
+  tmp=$(mktemp -d) || { flock -u 9; return 1; }
+  if ! fetch_verified_github_asset apernet/tcp-brutal "$tag" tcp-brutal.dkms.tar.gz "$tmp/t.tgz"; then
+    rm -rf "$tmp"; flock -u 9; return 1
+  fi
+  tar -xzf "$tmp/t.tgz" -C "$tmp" 2>/dev/null
+  if [[ "$(sed -n 's/^PACKAGE_VERSION="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$tmp"/*/dkms.conf 2>/dev/null | head -1)" != "$ver" ]]; then
+    warn "源码包内版本与 ${tag} 不符，已中止"; rm -rf "$tmp"; flock -u 9; return 1
+  fi
+
+  info "tcp-brutal ${inst:-无} → ${ver}：编译进 DKMS ..."
+  [[ -d "/usr/src/tcp-brutal-${ver}" ]] || dkms ldtarball "$tmp/t.tgz" >/dev/null 2>&1
+  patch_tcp_brutal_tso_segs
+  if dkms install "tcp-brutal/${ver}" -k "$(uname -r)" --force >/dev/null 2>&1 && \
+     [[ "$(brutal_dkms_installed_ver)" == "$ver" ]]; then
+    local v
+    for v in $(dkms status 2>/dev/null | sed -n 's|^tcp-brutal/\([^,]*\),.*|\1|p' | sort -u); do
+      [[ "$v" == "$ver" ]] || dkms remove "tcp-brutal/${v}" --all >/dev/null 2>&1 || true
+    done
+    update_notice tcp-brutal ""
+    info "tcp-brutal ${ver} 已编译安装，下次开机生效（立即生效：${MANAGE_CMD} brutal reload，会短暂中断 443 连接）"
+  else
+    warn "tcp-brutal ${ver} 编译失败，保留现有 ${inst:-版本}"
+    dkms remove "tcp-brutal/${ver}" --all >/dev/null 2>&1 || true
+  fi
+  rm -rf "$tmp"; flock -u 9
+}
+
+# 热替换运行中的 brutal 模块：卸载需要引用计数归零，即先停掉持有 brutal 连接的 Xray
+reload_tcp_brutal() {
+  local want cur
+  want=$(modinfo -F version brutal 2>/dev/null); cur=$(cat /sys/module/brutal/version 2>/dev/null)
+  [[ -n "$want" ]] || fail "未找到 brutal 模块文件"
+  if [[ "$cur" == "$want" ]]; then info "运行中的 brutal 已是 ${cur}"; return 0; fi
+  warn "将重载 brutal 模块 ${cur:-未加载} → ${want}，期间 Xray 会停止数秒"
+  svc stop xray || true
+  sleep 1
+  if lsmod | grep -q '^brutal '; then
+    rmmod brutal 2>/dev/null || { svc start xray || true; fail "brutal 仍被占用，无法卸载（ss -ti | grep brutal 查看持有者）"; }
+  fi
+  modprobe brutal || { svc start xray || true; fail "加载新 brutal 模块失败"; }
+  systemctl restart tcp-brutal-rules.service 2>/dev/null || true
+  svc start xray || warn "Xray 启动失败，请检查 ${MANAGE_CMD} log"
+  info "brutal 模块已重载：$(cat /sys/module/brutal/version 2>/dev/null)"
+}
+
 set_tcp_brutal_speed() {
   local mbps="${1:-}"
   if [[ -z "$mbps" || "$mbps" == "auto" ]]; then

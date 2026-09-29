@@ -299,7 +299,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.46)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.47)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -322,6 +322,7 @@ flowchart TD
 | **网卡 fq 队列开机持久化** | v4.9.44 | 修复重启后 fq 失效：`net.core.default_qdisc=fq` 只对此后新建的 qdisc 生效，网卡在 sysctl 加载前就已建好，实测重启后出口网卡是 `mq` + `pfifo_fast`，此前的 fq、`initcwnd 32`、`txqueuelen`、RPS/RFS 都只在 `xh tuning on` 时执行一次。现写成 `/usr/local/sbin/xray-xhttp-nic-tune` + `xray-xhttp-nic.service`（OpenRC 用 `/etc/local.d`）开机重设，`xh tuning off` 与卸载时移除；单核机器也会设置 fq（RPS 仍只在多核时开启）。核对：`tc qdisc show dev <网卡>` 应为 `mq` 下挂 `fq`，不能只看 sysctl。同机 sbbox 在 v2.7.32 同步加入，两边统一为 mq + 每队列 fq，谁后执行结果都相同。另修 `xh version` 因 node.env 值带引号而误报「xh 被更新过」。**不采纳**：把 443 Reality 入站 Brutal 换回 BBR——加测重传率（netns 160ms，N=3）：1% 丢包 300↓/50↑ 下行 121 vs 108 Mbps、重传 1.33% vs 0.71%；0% 丢包 300↓/50↑ 143 vs 130、0.86% vs 0.06%；100↓/20↑ 71 vs 69、0.06% vs 0.01%，Brutal 吞吐不输且不会定速超发灌爆线路，维持 |
 | **证书续期改走 DNS-01** | v4.9.45 | 修复 CDN 走 Cloudflare 代理后证书**自动续期必败**：安装器只用 standalone（HTTP-01），首次签发时若 CDN 还是灰云能成功，之后 HTTP-01 验证会被 CF「Always Use HTTPS」301 到 https、回源 443（Reality / 伪装站），续期前钩子还会停掉 nginx——续期日失败、证书到期当天 CDN 526、h3-direct / hy2 握手失败，平时一切正常、日志无异常。现安装时传 `CF_Token` 即用 `dns_cf` 签发（acme.sh 保存 Token 供续期）；新增 `xh cert [show\|dnscf]` 查看 / 切换续期方式（切换前先用 CF API 验证 Token 能访问该 Zone，Token 经 stdin 传给 curl、不进进程参数）；`xh diag` 新增「standalone + CDN 已走代理」检查。本机用 LE staging 对真实配置副本完整跑通 `--renew`（TXT 写入、双域验证、TXT 清理）。同机 sbbox 在 v2.7.33 同步加入 DNS-01 签发与续期钩子自动挂载 |
 | **tcp-brutal 2.0.1 适配** | v4.9.46 | 上游 tcp-brutal 2.0.1 已自带新内核 `tso_segs` 钩子适配（`BRUTAL_HAVE_TSO_SEGS`，按目标内核头文件判别），`patch_tcp_brutal_tso_segs` 遇到上游已适配的源码一律跳过。该补丁把新钩子接到恒返回 2 的 `min_tso_segs` 上，而 `tso_segs` 的返回值是「一次发送的段数」，在 7.1+ 内核会把 TSO 限成每次 2 段；上游实现返回按速率估算的段数。原厂 7.0 内核走 `min_tso_segs` 路径，2.0.0 → 2.0.1 运行时行为不变（本机实测 Reality-Vision 160ms/1%、300↓/50↑ 下行 121 → 129 Mbps，范围重叠）。同机 sbbox 在 v2.7.34 同步加入 |
+| **nginx / tcp-brutal 新版本提醒与校验更新** | v4.9.47 | 每周 `xh update --auto` 顺带**只检查** nginx mainline 与 tcp-brutal 新版本：写入 `/etc/xhttp-cdn/updates-available`，root 登录时与 `xh status` 显示，**不自动安装**；日志 `journalctl -t xh-autoupdate`，已有 cron 行无需改动。手动更新：`xh nginx update`——下载源码与 `.asc`，从 nginx.org 导入发布密钥后校验签名，且签名者主指纹必须在代码内固定的 4 个 nginx 开发者指纹中（防下载源或密钥文件被替换），再按本机 `nginx -V` 的原编译参数编译、用新二进制 `-t` 测试现有配置、替换并复核 8003 端口，失败回滚；`xh brutal update [--now]`——源码包 sha256 必须同时等于发布者 `hashes.txt` 与 GitHub 独立计算的资产 digest，只编译进 DKMS（下次开机生效），`--now` / `xh brutal reload` 立即重载（Xray 停止数秒）。实测：篡改下载、缺校验数据、签名者不在固定列表均被拒绝；完整走一遍 nginx 更新（沙箱路径）28 秒，新旧编译参数一致。同机 sbbox 在 v2.7.35 同步加入外置 Hysteria2 与 tcp-brutal 的提醒与校验更新 |
 
 ---
 
