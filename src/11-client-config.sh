@@ -287,8 +287,19 @@ else
 fi
 
 # Hysteria2-H3（v4.9.26）：UDP 443、无混淆，其余与 Hysteria2-Obfs-Direct 相同。
+# v4.9.49：附带 fm（v2rayN 的 finalmask 参数）打开 QUIC 保活。Xray-core 作 Hysteria2 客户端时
+# keepAlivePeriod 默认 0（源码里 10s 的默认值被注释掉），服务端 hub 也不下发保活，闲置 30s 即断，
+# 下一次请求重握手多 2 个 RTT；160ms 实测闲置 65s 后 3.2R → 1.1R。v2rayN 见到 fm 会用它整体替换
+# 自己按 upmbps / downmbps 生成的 finalmask，所以这里原样复刻那部分（brutal + 声明带宽，缺省为 bbr）。
+# 只加在无混淆、无端口跳跃的 H3 节点上：带 salamander 的节点若也整体替换，会丢掉混淆掩码。
+# sing-box / mihomo / 官方客户端忽略该参数；小火箭订阅在 12-subscription 里剔除。
+if [[ -n "${HY2_UP_MBPS}${HY2_DOWN_MBPS}" ]]; then
+  HY2_H3_FM="{\"quicParams\":{\"congestion\":\"brutal\"${HY2_UP_MBPS:+,\"brutalUp\":\"${HY2_UP_MBPS}mbps\"}${HY2_DOWN_MBPS:+,\"brutalDown\":\"${HY2_DOWN_MBPS}mbps\"},\"keepAlivePeriod\":10}}"
+else
+  HY2_H3_FM='{"quicParams":{"congestion":"bbr","keepAlivePeriod":10}}'
+fi
 if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-H3-Direct${NODE_SUFFIX}"
+  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}&fm=$(rawurlencode "$HY2_H3_FM")#Hysteria2-H3-Direct${NODE_SUFFIX}"
 else
   HY2_H3_NODE_LINE=""
 fi

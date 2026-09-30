@@ -48,6 +48,8 @@ def hy2(u, qs):
         if up_: qp["brutalUp"] = f"{up_} mbps"
         if dn: qp["brutalDown"] = f"{dn} mbps"
         fm["quicParams"] = qp
+    # 与 v2rayN 一致：链接带 fm（finalmask JSON）时整体替换上面按 obfs / upmbps 生成的 finalmask
+    if q1(qs, "fm"): fm = json.loads(q1(qs, "fm"))
     if fm: ss["finalmask"] = fm
     ob["streamSettings"] = ss
     return ob
