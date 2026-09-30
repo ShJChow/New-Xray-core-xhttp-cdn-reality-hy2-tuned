@@ -120,12 +120,27 @@ if [[ -n "$def_route" ]]; then
   ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
 fi
 
-# 2. 出口网卡发送队列长度；MTU 低于 1480 时抬到 1480
+# 2. 出口网卡发送队列长度；MTU 低于 1480 时抬到 1480、高于 1500 时降到 1500
 if [[ -n "$def_dev" ]]; then
   ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
   cur_mtu=$(cat "/sys/class/net/$def_dev/mtu" 2>/dev/null || echo 1500)
   if [[ "$cur_mtu" -lt 1480 && "$cur_mtu" -gt 0 ]]; then
     ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
+  fi
+  # v4.9.51：MTU 高于公网路径的 1500（如部分云厂商默认 9000 巨帧）会发出超大 TCP 段，
+  # 在公网出口被静默丢弃（PMTU 黑洞）：TCP 握手成功，但 TLS 证书链等大包到不了，
+  # Reality / CDN 回源等 TCP 节点超时或 RST，QUIC 节点（单包 <1280）不受影响。
+  # 降到 1500，并补一条 MSS 钳制兜底（已存在则不重复加；只在真的降过 MTU 时才动防火墙）。
+  if [[ "$cur_mtu" -gt 1500 ]]; then
+    if ip link set dev "$def_dev" mtu 1500 2>/dev/null; then
+      echo "网卡 $def_dev MTU $cur_mtu → 1500（避免 PMTU 黑洞）"
+      for ipt in iptables ip6tables; do
+        command -v "$ipt" >/dev/null 2>&1 || continue
+        "$ipt" -t mangle -C POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+          "$ipt" -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null
+      done
+      command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1
+    fi
   fi
 fi
 
