@@ -259,8 +259,8 @@ fi
 # 不需要任何服务端改动：ALPN 是客户端与 Cloudflare 边缘之间的协商，回源侧恒为 h2/TCP。
 # 之所以必须另开一条而不能给节点 1 加个 h3：mihomo 仅在 alpn **恰好等于** h3 时才走
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
-# 默认关闭（FEATURE_CDN_H3=true 时启用），避免 QUIC 经 CDN 在部分网络环境下的 QoS 丢包。
-if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
+# 默认开启（FEATURE_CDN_H3=false 可关闭）。
+if [[ "${FEATURE_CDN_H3:-true}" == true ]]; then
   H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 else
   H3_CDN_NODE_LINE=""
@@ -318,7 +318,7 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: h2-cdn(${FEATURE_CDN_H2:-true}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 [备用默认关闭: Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false}), h3-cdn(${FEATURE_CDN_H3:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
+info "节点集: h2-cdn(${FEATURE_CDN_H2:-false}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Reality x2 [备用默认关闭: Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false}), CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl

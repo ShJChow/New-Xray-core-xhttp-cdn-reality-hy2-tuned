@@ -1524,7 +1524,7 @@ cmd_cdnh3() {
     show|status)
       echo ""
       echo -e "${CYAN}=== CDN QUIC(h3) 备用节点状态 ===${NC}"
-      local cur_h3="${FEATURE_CDN_H3:-false}"
+      local cur_h3="${FEATURE_CDN_H3:-true}"
       if [[ "$cur_h3" == "true" ]]; then
         echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
       else

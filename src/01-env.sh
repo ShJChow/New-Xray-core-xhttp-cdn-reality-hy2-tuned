@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.51"
+PROJECT_VERSION="4.9.52"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -98,12 +98,12 @@ FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 默认开启（作为 5 大核心主力节点之一，提供 UDP 封锁时的 TCP CDN 兜底逃生通道）。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
+# 默认关闭（改为默认安装 CDN-H3），需要 TCP CDN 兜底时可通过 FEATURE_CDN_H2=true 开启。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
-# 默认关闭（保持节点精简，以稳健的 CDN-H2 为主，避免 QUIC 经 CDN 在部分网络的 QoS 丢包），需要时可通过 FEATURE_CDN_H3=true 开启。
-FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
+# 默认开启（作为默认 CDN 节点，走 UDP 443 QUIC），如遇 QoS 丢包可通过 FEATURE_CDN_H3=false 关闭。
+FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
 
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。

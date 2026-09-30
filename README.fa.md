@@ -132,6 +132,7 @@ xh minversion [on|off] # مدیریت حداقل نسخهٔ مجاز کلاین�
 xh ech [show|on|off]   # کلید Cloudflare CDN ECH و همگام‌سازی اشتراک
 xh ecn [show|on|off]   # وضعیت و تنظیم TCP ECN
 xh cdnh2 [show|on|off] # فعال‌سازی نود پشتیبان CDN TCP (h2)
+xh cdnh3 [show|on|off] # نود پیش‌فرض CDN QUIC (h3)
 xh brutal              # وضعیت و تنظیم پهنای باند TCP Brutal
 xh tuning [win|mac|sb] # نمایش دستورات بهینه‌سازی کلاینت
 xh conflict            # بررسی و رفع خودکار تداخل پارامترهای sysctl
@@ -184,13 +185,13 @@ flowchart TD
 
 | # | نام نود (v4.9.43) | پروتکل انتقال | توپولوژی مسیریابی | ویژگی‌های کلیدی |
 | :--- | :--- | :--- | :--- | :--- |
-| **۱** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | از مسیر CDN TCP 443 | **مسیر پایدار TCP**، راه خروج اضطراری هنگام مسدودسازی UDP |
+| **۱** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | از مسیر CDN UDP 443 | **نود پیش‌فرض CDN**، QUIC از طریق Cloudflare |
 | **۲** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | مستقیم UDP 8443 | پروتکل QUIC مستقیم، `mode=stream-up` |
 | **۳** | `Hysteria2-H3-Direct` | Hysteria 2 | مستقیم UDP 443 | ساختار استاندارد HTTP/3، بالاترین سرعت دانلود |
 | **۴** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | مستقیم TCP 443 | **فناوری xtls-rprx-vision**، بالاترین سرعت تک‌جریان |
 | **۵** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | مستقیم TCP 443 | استتار Reality با مبهم‌سازی پرکردن داده |
 
-> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H3` (`FEATURE_CDN_H3`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> غیرفعال به صورت پیش‌فرض، قابل فعال‌سازی: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
 
 ---
 
@@ -233,6 +234,7 @@ flowchart TD
 | **رفع قطع شدن Hysteria2 در حالت بیکاری در کلاینت Xray-core** | v4.9.49 | لینک `Hysteria2-H3-Direct` اکنون پارامتر `fm` (JSON فیلد finalmask که v2rayN / v2rayNG می‌شناسند) را با `keepAlivePeriod: 10` دارد. در Xray v26.3.27 مقدار پیش‌فرض keep-alive در کلاینت کامنت شده و سرور هم آن را ارسال نمی‌کند، پس تونل پس از ۳۰ ثانیه بیکاری قطع می‌شد و درخواست بعدی ۲ RTT بیشتر طول می‌کشید. اندازه‌گیری در RTT ۱۶۰ms: پس از ۶۵ ثانیه بیکاری از ۳٫۱ به ۱٫۰ RTT و پس از ۲۰۰ ثانیه از ۳٫۲ به ۱٫۰ RTT؛ اثری روی توان عملیاتی ندارد. `fm` بخش congestion (brutal با پهنای باند اعلام‌شده) را نیز تکرار می‌کند چون v2rayN آن را به‌طور کامل جایگزین می‌کند؛ از اشتراک Shadowrocket حذف می‌شود و روی نود دارای salamander اعمال نمی‌شود. |
 | **keep-alive برای نود مبهم‌سازی‌شده · اصلاح ابزار تست برای اشتراک اتصال Hy2 در Xray** | v4.9.50 | لینک `Hysteria2-Obfs-Direct` (پیش‌فرض خاموش) نیز `fm` دارد و علاوه بر `keepAlivePeriod: 10`، ماسک salamander (و در صورت port hopping، `udpHop`) را تکرار می‌کند، چون v2rayN / v2rayNG آن را به‌طور کامل جایگزین می‌کنند. اندازه‌گیری: پس از ۶۵ / ۲۰۰ ثانیه بیکاری از ۳٫۱ به ۱٫۰ RTT؛ کنترل‌های منفی (بدون ماسک، رمز اشتباه، بدون مبهم‌سازی) همگی وصل نمی‌شوند. کلاینت hysteria در Xray اتصال‌ها را بر اساس IP:پورت مقصد به‌صورت سراسری کش می‌کند؛ ابزارهای تست اکنون هر نسخه را در فرایند جداگانه اجرا می‌کنند و تست توان v4.9.49 دوباره انجام و اصلاح شد (بدون اثر). |
 | **سقف MTU کارت شبکه روی ۱۵۰۰ (محافظ در برابر PMTU black hole)** | v4.9.51 | برخی ارائه‌دهندگان ابری MTU را روی ۹۰۰۰ (jumbo frame) می‌گذارند اما مسیر عمومی ۱۵۰۰ است؛ قطعه‌های TCP بزرگ‌تر (مثل زنجیرهٔ گواهی ۳٫۷ کیلوبایتی TLS) بی‌صدا دور ریخته می‌شوند: دست‌دهی TCP موفق است ولی TLS به timeout / RST می‌خورد و نودهای TCP قطع می‌شوند، در حالی که نودهای QUIC سالم‌اند. اسکریپت راه‌اندازی `xray-xhttp-nic-tune` اکنون MTU بالاتر از ۱۵۰۰ را به ۱۵۰۰ می‌رساند و یک قاعدهٔ `TCPMSS --clamp-mss-to-pmtu` (بدون تکرار) اضافه می‌کند؛ فقط وقتی MTU واقعاً کاهش یافته باشد. روی این ماشین (۱۴۸۰) بدون تغییر. sbbox همراه در v2.7.38 همین را دارد. |
+| **تغییر نود پیش‌فرض CDN به CDN-H3** | v4.9.52 | نود اول نصب پیش‌فرض اکنون `VLESS-XHTTP-CDN-H3` (UDP 443 / QUIC از طریق CDN) است، نه `VLESS-XHTTP-CDN-H2`: مقدار پیش‌فرض `FEATURE_CDN_H3` برابر `true` و `FEATURE_CDN_H2` برابر `false` شد و اسکریپت نصب، تنظیمات کلاینت و `xh cdnh3` همگام شدند. در صورت محدود یا مسدود بودن UDP 443، نود پشتیبان TCP(h2) را با `xh cdnh2 on` یا `FEATURE_CDN_H2=true` فعال کنید. |
 
 ---
 

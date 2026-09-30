@@ -193,6 +193,7 @@ xh minversion [on|off|<ver>] # Reality 最低版本控制（默认 1.8.0 兼容 
 xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
 xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
 xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
+xh cdnh3 [show|on|off] # CDN QUIC(h3) 默认节点开关与订阅同步
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
@@ -228,13 +229,13 @@ flowchart TD
 
 | # | 节点名称（v4.9.43） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | **TCP 稳健回源**，UDP 封锁时的 CDN 逃生通道 |
+| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | **默认 CDN 节点**，QUIC 经 Cloudflare 回源 |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8443 | 直连 QUIC，`mode=stream-up` |
 | **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 
-> 默认关闭、按需开启：`VLESS-Reality-Up-CDN-Down`（`FEATURE_REALITY_UP_CDN_DOWN`）、`VLESS-XHTTP-CDN-H3`（`FEATURE_CDN_H3`）、`VLESS-CDN-Up-Reality-Down`（`FEATURE_CDN_UP_REALITY_DOWN`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
+> 默认关闭、按需开启：`VLESS-Reality-Up-CDN-Down`（`FEATURE_REALITY_UP_CDN_DOWN`）、`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`，TCP 兜底，UDP 被限速/封锁时开启）、`VLESS-CDN-Up-Reality-Down`（`FEATURE_CDN_UP_REALITY_DOWN`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
 
 ---
 
@@ -277,6 +278,7 @@ flowchart TD
 | **Xray-core 客户端 Hysteria2 闲置断线修复** | v4.9.49 | `Hysteria2-H3-Direct` 链接新增 `fm` 参数（v2rayN / v2rayNG 的 finalmask JSON），为 Xray-core 客户端打开 QUIC 保活 `keepAlivePeriod: 10`。**根因**（v26.3.27 源码）：客户端 `transport/internet/hysteria/dialer.go` 里 10s 的默认保活被注释掉，`KeepAlivePeriod` 为 0；服务端 `hub.go` 的 QUIC 配置根本不传 `KeepAlivePeriod`（v4.9.48 试过在入站加保活，无效即因于此）；空闲超时按两端较小值取 30s。结果是 v2rayN 选 Xray 内核跑 Hy2 时闲置 30s 隧道即断，下一次请求重做 QUIC 握手 + 认证，多 2 个 RTT。**实测**（`tools/xray_handshake_bench.py`，160ms RTT）：闲置 65s 后首包 3.1R → 1.0R，闲置 200s 3.2R → 1.0R，与 sing-box 客户端一致；限速吞吐（160ms / 1% 丢包、300↓/50↑，两个变体分进程交替各 2 次 × 3 样本，v4.9.50 重测）下行中位 127 / 132 对 127 / 130、上行均为 41，无影响。**兼容**：v2rayN（7.24.9 源码）与 v2rayNG（2.2.6）见到 `fm` 会用它**整体替换**自己按 `upmbps` / `downmbps` 生成的 finalmask，所以 `fm` 原样复刻了那部分（`congestion: brutal` + 声明带宽，未声明时为 `bbr`）；JSON 无效时二者保留原配置、不会断。v2rayN 的 sing-box 内核、mihomo、Hysteria 官方客户端不读该参数；小火箭订阅在生成时剔除 `fm`（`shadowrocket.txt` 与改动前逐字节相同），Mihomo 订阅不变。只加在无混淆、无端口跳跃的 H3 节点上：带 salamander 的 `Hysteria2-Obfs-Direct`（默认关闭）若也整体替换会丢掉混淆掩码。`tools/xlinks.py` 同步按 v2rayN 的方式解析 `fm`。已部署节点执行 `xh resub` 前需先把 `fm` 加进 `client-config.txt` 的 Hy2-H3 行（或重跑安装脚本），客户端更新订阅后生效 |
 | **混淆节点同样打开保活 · 测速工具修正 Xray Hy2 连接共享** | v4.9.50 | **混淆节点**：`Hysteria2-Obfs-Direct`（默认关闭）的链接也附带 `fm`。v2rayN / v2rayNG 见到 `fm` 会整体替换自己生成的 finalmask，所以 `fm` 里除 `quicParams`（brutal + 声明带宽 + `keepAlivePeriod: 10`）外还复刻 `udp: [{type: salamander, settings: {password}}]`，开端口跳跃时再加 `udpHop: {ports: mport, interval: "30"}`（二者未设置时的默认间隔，两客户端源码一致）。生成逻辑抽成 `hy2_client_fm_param`，H3 节点输出与 v4.9.49 逐字节相同；密码含 `"` 或 `\` 时不带 `fm`（退回旧行为）。实测（临时混淆服务端，160ms RTT）：闲置 65s / 200s 后首包 3.1R → 1.0R；负对照「`fm` 漏掉混淆掩码」、「混淆密码错误」、「完全不混淆」全部连不上。**测速工具**：Xray 的 hysteria 客户端按「目标 IP:端口」全局缓存连接（v26.3.27 `dialer.go` 的 `manger.m[addr]`），同一进程里指向同一服务端的多个 Hy2 出站共用第一个出站的连接与配置——v4.9.49 发版前那组同进程吞吐 A/B 因此无效（本版已按分进程重测并订正上一行），同进程的「错误示范」也会被测成能连通。`tools/xray_handshake_bench.py` 改为每个 Xray 变体单独一个进程，并新增 `uri` 变体键（直接给一条链接）；`tools/xray_rtt_bench.py` 遇到同地址的多个 Hy2 变体直接拒绝运行；握手工具的清理由宽泛的 `pkill -f` 改为只匹配本次临时目录（旧写法会误杀命令行里含同名字样的调用方 shell）；`tools/xlinks.py` 新增单条解析 `parse_link` |
 | **网卡 MTU 高于 1500 时自动降到 1500（PMTU 黑洞兜底）** | v4.9.51 | 部分云厂商网卡默认 MTU 9000（巨帧），公网路径却只有 1500：服务端发出超过 1500 字节的 TCP 段（如 3.7KB 的 TLS 证书链）在公网出口被静默丢弃，表现为 TCP 握手成功、TLS 阶段超时或 RST，Reality / CDN 回源等 TCP 节点全断，而 QUIC 节点（单包 <1280）完全正常。开机网卡调优脚本 `xray-xhttp-nic-tune` 现在会在 MTU 大于 1500 时降到 1500，并补一条 `TCPMSS --clamp-mss-to-pmtu`（mangle POSTROUTING，v4/v6，已存在则不重复，落盘 `netfilter-persistent save`）；只在真的降过 MTU 时才动防火墙。本机 `enp0s6` 为 1480，不触发，行为不变。验证：netns 内 veth MTU 9000 → 1500，规则一条，二次执行不重复；MTU 1400 不被改动。同机 sbbox 在 v2.7.38 同步加入。 |
+| **默认 CDN 节点改为 CDN-H3** | v4.9.52 | 默认安装的第一个节点由 `VLESS-XHTTP-CDN-H2` 改为 `VLESS-XHTTP-CDN-H3`（经 CDN 走 UDP 443 / QUIC）：`FEATURE_CDN_H3` 默认 `true`、`FEATURE_CDN_H2` 默认 `false`，安装脚本、客户端配置、节点环境文件与 `xh cdnh3` 的兜底默认值同步；README 节点表与命令列表随之更新。UDP 443 被限速或封锁时，可用 `xh cdnh2 on` 或 `FEATURE_CDN_H2=true` 开启 TCP(h2) 兜底节点 |
 
 ---
 
