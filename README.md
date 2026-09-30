@@ -129,7 +129,7 @@ bash ~/install.sh
 > [!TIP]
 > **现代参数传参建议**：推荐优先使用下方 **「方案 A-1 现代位置参数单行版」**（形如 `sudo bash <(curl -fsSL ...) key=val`）。参数直接作为 CLI 位置参数传入脚本内部解析为环境变量，无需提前 `sudo -i`，100% 免疫终端换行/软回车断行、Windows CRLF、尾部空格及 `sudo: AUTO=1: command not found` 报错。且脚本内部已内置最佳优化生产默认值，只需填写必选域名。
 
-#### 方案 A-1：现代位置参数单行版（强烈推荐：100% 免疫终端换行与转义报错）
+#### 方案 A：现代位置参数单行版（强烈推荐：100% 免疫终端换行与转义报错）
 ```bash
 sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com" NODE_TAG="oracle-vps"
 ```
@@ -137,35 +137,8 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 >
 > **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_HY2=true` 等优化配置，绝大多数场景无需重复传入。
 
-#### 方案 A-2：Heredoc 结构化批处理版（多环境变量批量定义）
-```bash
-sudo -i
 
-bash << 'EOF'
-export AUTO=1
-export REALITY_DOMAIN="reality.example.com"
-export CDN_DOMAIN="cdn.example.com"
-export NODE_TAG="oracle-vps"
-export CDN_FALLBACK_ORIGIN="https://www.harvard.edu"
-bash -c "$(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh)"
-EOF
-```
-
-#### 方案 A-3：标准多行参数模板
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
-  AUTO=1 \
-  REALITY_DOMAIN="reality.example.com" \
-  CDN_DOMAIN="cdn.example.com" \
-  NODE_TAG="oracle-vps"
-```
-
-#### 方案 B：极简极速模板（仅配置必填域名）
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) AUTO=1 REALITY_DOMAIN="reality.example.com" CDN_DOMAIN="cdn.example.com"
-```
-
-#### 方案 C：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
+#### 方案 B：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
 ```bash
 sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
   AUTO=1 \
@@ -234,26 +207,7 @@ xh start | stop | restart # 启停与重启服务
 
 ---
 
-## 四、全平台千兆客户端调优指南（慎用）
-
-针对千兆宽带跨境高 BDP 链路，可按需对客户端系统进行网络调优：
-
-- **Windows 10 / 11（管理员 PowerShell）**：
-  ```powershell
-  irm https://reality.example.com/sub/<你的Token>/win.ps1 | iex  # 或在服务端运行 xh tuning win
-  ```
-- **macOS（终端扩容 Socket 接收窗口至 32MB）**：
-  ```bash
-  sudo sysctl -w kern.ipc.maxsockbuf=33554432 net.inet.tcp.recvspace=4194304 net.inet.tcp.autorcvbuf=1 net.inet.tcp.autorcvbufmax=33554432 net.inet.tcp.fastopen=3
-  ```
-- **Linux 客户端**：
-  ```bash
-  sudo sysctl -w net.core.rmem_max=67108864 net.ipv4.tcp_rmem="4096 262144 67108864" net.ipv4.tcp_fastopen=3
-  ```
-
----
-
-## 五、节点拓扑与双轨架构
+## 四、节点拓扑与双轨架构
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
@@ -288,7 +242,7 @@ flowchart TD
 
 ---
 
-## 六、常见问题与排错
+## 五、常见问题与排错
 
 | 故障现象 | 核心排查原因 | 快速解决指引 |
 | :--- | :--- | :--- |
@@ -299,7 +253,7 @@ flowchart TD
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v4.9.47)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.47)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -326,7 +280,7 @@ flowchart TD
 
 ---
 
-## 八、免责声明
+## 七、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
