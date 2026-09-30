@@ -233,7 +233,7 @@ apply_system_tuning() {
 
   local SOCK_MEM_DEF UDP_MEM_MIN
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=134217728; TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="large";  SOCK_MEM_MAX=67108864;  TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=2097152; UDP_MEM_MIN=131072
   elif [[ "$MEM_MB" -ge 4096 ]]; then
     TUNE_TIER="medium"; SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
@@ -321,7 +321,12 @@ apply_system_tuning() {
   try_sysctl net.ipv4.ip_local_port_range "1024 65535"
   try_sysctl net.ipv4.ip_local_reserved_ports "8001,8003,8443,8445,8446,10489,10800-10809,11801-11806,18793,23106,27295,28443"
 
-  # conntrack 仅在模块已加载时调整；未加载时写入会失败并留下无用告警
+  # conntrack 仅在模块已加载时调整；未加载时写入会失败并留下无用告警。
+  # 开机时 systemd-sysctl 早于 iptables / Docker 加载 nf_conntrack，键还不存在就被静默跳过，
+  # 连接表上限退回内核按内存算的默认值。登记进 modules-load.d（systemd-sysctl 排在它之后）。
+  if [[ "$CONNTRACK_MAX" -gt 0 ]] && modprobe nf_conntrack 2>/dev/null; then
+    echo "nf_conntrack" > /etc/modules-load.d/xray-xhttp-conntrack.conf 2>/dev/null || true
+  fi
   if [[ "$CONNTRACK_MAX" -gt 0 ]] && [[ -r /proc/sys/net/netfilter/nf_conntrack_max ]]; then
     try_sysctl net.netfilter.nf_conntrack_max "$CONNTRACK_MAX"
     try_sysctl net.netfilter.nf_conntrack_tcp_timeout_established 3600
@@ -361,6 +366,8 @@ apply_system_tuning() {
   # 代理进程内存里有私钥、UUID、解密后的流量，默认值 2（suidsafe）仍会 dump 到 core_pattern 指定处；
   # 0 则一律不 dump。配合 limits.conf 的 `* hard core 0` 与 core_pattern = core。
   try_sysctl fs.suid_dumpable 0
+  # core_pattern = core：不交给 apport / systemd-coredump 这类会把 core 另存到系统目录的处理器（此前只在注释里提到、靠手工写入）。
+  try_sysctl kernel.core_pattern core
   # 不发送 ICMP 重定向（本机不是路由器；装了 Docker 时 ip_forward=1，会对「同口进同口出」的转发包发重定向）。
   # 发送侧按「all 与网卡任一为 1 即生效」计算，只写 all/default 不够：开机前就已存在的出口网卡
   # 不受 default 影响，线上 enp0s6 即为 1，实测（netns + 网桥负对照）all=0、网卡=1 时仍发出重定向，网卡=0 后为 0。
@@ -396,6 +403,13 @@ apply_system_tuning() {
   # dirty_ratio / dirty_background_ratio 作用在脏页回写，转发机器不落盘，故意不调。
   if [[ "$MEM_MB" -ge 4096 ]]; then try_sysctl vm.swappiness 10; else try_sysctl vm.swappiness 30; fi
   try_sysctl vm.vfs_cache_pressure 50
+  # 高速率收包时 skb 在软中断里做原子分配，不能等回收；给保留页留余量，防突发下 page allocation failure 丢包。
+  case "$TUNE_TIER" in
+    large*) try_sysctl vm.min_free_kbytes 65536 ;;
+    medium) try_sysctl vm.min_free_kbytes 32768 ;;
+  esac
+  # 自动分组按会话均分 CPU，是给桌面交互用的；服务器上关掉，代理进程按线程公平调度。
+  try_sysctl kernel.sched_autogroup_enabled 0
 
   # ---------- 文件句柄 ----------
   try_sysctl fs.file-max 1048576
@@ -656,8 +670,8 @@ show_linux_tuning() {
   echo -e "${CYAN}   Linux 客户端千兆 TCP 缓冲区与 BDP 调优指南         ${NC}"
   echo -e "${CYAN}======================================================${NC}"
   cat <<'EOF'
-sudo sysctl -w net.core.rmem_max=134217728
-sudo sysctl -w net.core.wmem_max=134217728
+sudo sysctl -w net.core.rmem_max=67108864
+sudo sysctl -w net.core.wmem_max=67108864
 sudo sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864"
 sudo sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864"
 sudo sysctl -w net.ipv4.tcp_limit_output_bytes=4194304

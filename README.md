@@ -20,14 +20,10 @@
   - [1. 交互式一键部署](#1-交互式一键部署)
   - [2. 零交互环境变量一键部署](#2-零交互环境变量一键部署)
 - [三、常驻管理命令 `xh`](#三常驻管理命令-xh)
-- [四、全平台千兆客户端调优指南](#四全平台千兆客户端调优指南)
-  - [Windows 10 / 11](#1-windows-10--11-管理员-powershell)
-  - [macOS](#2-macos)
-  - [Linux](#3-linux-客户端)
-- [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
-- [六、常见问题与排错](#六常见问题与排错)
-- [七、版本迭代与核心调优演进记录 (v4.8 - v4.9.34)](#七版本迭代与核心调优演进记录-v48---v4934)
-- [八、免责声明](#八免责声明)
+- [四、节点拓扑与双轨架构](#四节点拓扑与双轨架构)
+- [五、常见问题与排错](#五常见问题与排错)
+- [六、版本迭代与核心调优演进记录 (v4.8 - v4.9.48)](#六版本迭代与核心调优演进记录-v48---v4948)
+- [七、免责声明](#七免责声明)
 
 ---
 
@@ -253,7 +249,7 @@ flowchart TD
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.47)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.48)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -277,6 +273,7 @@ flowchart TD
 | **证书续期改走 DNS-01** | v4.9.45 | 修复 CDN 走 Cloudflare 代理后证书**自动续期必败**：安装器只用 standalone（HTTP-01），首次签发时若 CDN 还是灰云能成功，之后 HTTP-01 验证会被 CF「Always Use HTTPS」301 到 https、回源 443（Reality / 伪装站），续期前钩子还会停掉 nginx——续期日失败、证书到期当天 CDN 526、h3-direct / hy2 握手失败，平时一切正常、日志无异常。现安装时传 `CF_Token` 即用 `dns_cf` 签发（acme.sh 保存 Token 供续期）；新增 `xh cert [show\|dnscf]` 查看 / 切换续期方式（切换前先用 CF API 验证 Token 能访问该 Zone，Token 经 stdin 传给 curl、不进进程参数）；`xh diag` 新增「standalone + CDN 已走代理」检查。本机用 LE staging 对真实配置副本完整跑通 `--renew`（TXT 写入、双域验证、TXT 清理）。同机 sbbox 在 v2.7.33 同步加入 DNS-01 签发与续期钩子自动挂载 |
 | **tcp-brutal 2.0.1 适配** | v4.9.46 | 上游 tcp-brutal 2.0.1 已自带新内核 `tso_segs` 钩子适配（`BRUTAL_HAVE_TSO_SEGS`，按目标内核头文件判别），`patch_tcp_brutal_tso_segs` 遇到上游已适配的源码一律跳过。该补丁把新钩子接到恒返回 2 的 `min_tso_segs` 上，而 `tso_segs` 的返回值是「一次发送的段数」，在 7.1+ 内核会把 TSO 限成每次 2 段；上游实现返回按速率估算的段数。原厂 7.0 内核走 `min_tso_segs` 路径，2.0.0 → 2.0.1 运行时行为不变（本机实测 Reality-Vision 160ms/1%、300↓/50↑ 下行 121 → 129 Mbps，范围重叠）。同机 sbbox 在 v2.7.34 同步加入 |
 | **nginx / tcp-brutal 新版本提醒与校验更新** | v4.9.47 | 每周 `xh update --auto` 顺带**只检查** nginx mainline 与 tcp-brutal 新版本：写入 `/etc/xhttp-cdn/updates-available`，root 登录时与 `xh status` 显示，**不自动安装**；日志 `journalctl -t xh-autoupdate`，已有 cron 行无需改动。手动更新：`xh nginx update`——下载源码与 `.asc`，从 nginx.org 导入发布密钥后校验签名，且签名者主指纹必须在代码内固定的 4 个 nginx 开发者指纹中（防下载源或密钥文件被替换），再按本机 `nginx -V` 的原编译参数编译、用新二进制 `-t` 测试现有配置、替换并复核 8003 端口，失败回滚；`xh brutal update [--now]`——源码包 sha256 必须同时等于发布者 `hashes.txt` 与 GitHub 独立计算的资产 digest，只编译进 DKMS（下次开机生效），`--now` / `xh brutal reload` 立即重载（Xray 停止数秒）。实测：篡改下载、缺校验数据、签名者不在固定列表均被拒绝；完整走一遍 nginx 更新（沙箱路径）28 秒，新旧编译参数一致。同机 sbbox 在 v2.7.35 同步加入外置 Hysteria2 与 tcp-brutal 的提醒与校验更新 |
+| **服务端 DNS 按 CDN 边缘远近重排 · 吸收第三方调优中的有效项** | v4.9.48 | **DNS**：Xray 内置 DNS 首选改为 `9.9.9.10`（Quad9 不拦截版），`1.1.1.1` 次之。解析耗时只在每个域名首次查询时付一次，返回的 CDN 边缘远近却决定之后每条连接的延迟。本机 32 个常用域名 × 各 3 次，比最优边缘慢 3ms 以上的：8.8.8.8 有 10 个、1.1.1.1 有 5 个、9.9.9.10 只有 1 个（Apple / iCloud / Microsoft 等 Akamai 系差 10~50ms；8.8.8.8 带 ECS 反而选得远）；未缓存解析 9.9.9.10 与 1.1.1.1 相当（2~9ms）。**系统调优**：`net.core.rmem_max / wmem_max` 由 128MB 收敛为 64MB（与 `tcp_rmem / wmem` 上限一致）；新增 `vm.min_free_kbytes`（large 档 64MB / medium 档 32MB，给高速收包时软中断里的原子分配留余量）与 `kernel.sched_autogroup_enabled = 0`；`nf_conntrack` 登记进 `/etc/modules-load.d/xray-xhttp-conntrack.conf`——开机时 systemd-sysctl 早于 iptables / Docker 加载该模块，`nf_conntrack_max` 会被静默跳过（`tuning off` 一并删除）；`kernel.core_pattern = core` 改由调优代码写入（此前只在注释里提到、靠手工补写，重跑 `tuning on` 就会丢）。这几项吸收自第三方一键脚本（vps-tcp-tune）里与本项目不冲突的部分；其余不采纳：`udp_rmem_min 8192`、`somaxconn 4096`、`notsent_lowat 16384` 与已有取值冲突，开机单根 `fq` 会覆盖 `mq` + 每队列 fq，系统 DNS 走 DoT 实测未缓存解析无差异（9~25ms），THP never / `overcommit_memory=1` / dirty 比例对转发机无收益。**握手测量**：新增 `tools/xray_handshake_bench.py`（netns 纯 RTT，逐节点测冷启动 / 热连接 / 闲置后首包并折成 RTT 个数，支持 Xray / sing-box / mihomo 客户端）。160ms 实测：Hy2 / XHTTP / AnyTLS / TUIC / naive 热连接均为 1.0R，已是下限；Vision 每条连接 3R（不能多路复用；客户端 TFO 实测已协商但端到端无收益）；XHTTP 系冷启动多 1R，是 VLESS Encryption 首次没有票据、只能走 1-RTT，属协议固有。**客户端提示**：Xray-core 作为 Hysteria2 客户端时默认不发 QUIC 保活，闲置 65s 后隧道即断，下一次请求多 2R（约 330ms）；sing-box / mihomo 客户端不受影响。服务端 `finalmask.quicParams.keepAlivePeriod` 实测无效，未采纳；v2rayN 请让 Hysteria2 保持默认的 sing-box 内核。复测：`python3 tools/xray_handshake_bench.py 160 3 65,200,700`。同机 sbbox 在 v2.7.37 同步加入 64MB 与三项系统调优，并把 sing-box 与外置 Hysteria2 的出站 DNS 同样改为 9.9.9.10 |
 
 ---
 

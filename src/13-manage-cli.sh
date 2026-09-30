@@ -884,7 +884,7 @@ cmd_tuning() {
       apply_system_tuning
       ;;
     off)
-      rm -f "$SYSCTL_CONF" "$LIMITS_CONF"
+      rm -f "$SYSCTL_CONF" "$LIMITS_CONF" /etc/modules-load.d/xray-xhttp-conntrack.conf
       # v4.9.44：网卡运行时参数的开机重设（xray-xhttp-nic.service）一并移除；
       # 当前的 fq / initcwnd 保持到下次重启，与 sysctl 的回滚方式一致。
       remove_nic_tune
