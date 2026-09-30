@@ -55,16 +55,21 @@ def hy2(u, qs):
     return ob
 
 
+def parse_link(l):
+    """单条订阅链接 → Xray 出站；不是 vless / hysteria2 时返回 None"""
+    scheme = l.split("://")[0].lower()
+    if scheme not in XRAY_PROTOS: return None
+    u = up.urlsplit(l); qs = up.parse_qs(u.query)
+    return vless(u, qs) if scheme == "vless" else hy2(u, qs)
+
 def load_nodes(files):
     out = {}
     for f in files:
         try: lines = [l.strip() for l in open(f) if l.strip()]
         except OSError: continue
         for l in lines:
-            scheme = l.split("://")[0].lower()
-            if scheme not in XRAY_PROTOS: continue
-            name = up.unquote(l.split("#")[-1]); u = up.urlsplit(l); qs = up.parse_qs(u.query)
-            out.setdefault(name, vless(u, qs) if scheme == "vless" else hy2(u, qs))
+            ob = parse_link(l)
+            if ob is not None: out.setdefault(up.unquote(l.split("#")[-1]), ob)
     return out
 
 def load_raw(files):

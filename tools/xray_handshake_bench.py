@@ -3,7 +3,7 @@
 冷 = 客户端刚启动后的第一枪；热 = 隧道已建后新开代理连接；闲置 = 空闲 N 秒后的第一枪。结果同时折算成 RTT 个数。
 用法: xray_handshake_bench.py <rtt_ms> <rounds> [idle秒,idle秒]
 环境: ONLY=名1,名2  WARM=热连接次数  URL=目标  SB_BIN  VAR=json 覆盖变体
-      变体键：link（Xray 订阅节点名，可带 patch）/ core=sing-box / sbtag（sbbox 客户端出站）/ mihomo+src（mihomo 节点名与 yaml）
+      变体键：link（Xray 订阅节点名，可带 patch）/ uri（直接给一条 vless / hysteria2 链接）/ core=sing-box / sbtag（sbbox 客户端出站）/ mihomo+src（mihomo 节点名与 yaml）
 含凭据的客户端配置写在 0700 临时目录（或 BENCH_TMP），结束时 shred 删除。
 """
 import json, subprocess, sys, time, statistics, copy, os, tempfile, atexit, glob
@@ -100,7 +100,7 @@ def build():
             sin.append({"type": "socks", "tag": f"i{i}", "listen": "127.0.0.1", "listen_port": port})
             sr.append({"inbound": [f"i{i}"], "outbound": f"o{i}"})
         else:
-            ob = copy.deepcopy(LINKS[v["link"]])
+            ob = copy.deepcopy(xlinks.parse_link(v["uri"]) if v.get("uri") else LINKS[v["link"]])
             if ob["protocol"] == "vless":
                 vn = ob["settings"]["vnext"][0]
                 if not (CDN and vn["address"] == CDN): vn["address"] = H
@@ -119,8 +119,11 @@ def build():
                        open(p, "w"), allow_unicode=True)
         t = sh(f"mihomo -d {S}/mihome -t -f {p}");  assert t.returncode == 0, t.stdout[-400:]
         cfgs.append(f"mihomo -d {S}/mihome -f {p}")
-    if xout:
-        p = f"{S}/hs_x.json"; json.dump({"log": {"loglevel": "warning"}, "inbounds": xin, "outbounds": xout, "routing": {"rules": xr}}, open(p, "w"))
+    # 每个 Xray 变体单独一个进程：Xray 的 hysteria 客户端按「目标 IP:端口」全局缓存连接
+    # （v26.3.27 dialer.go 的 manger.m[addr]），同一进程里指向同一服务端的出站会共用第一个出站
+    # 建好的连接及其配置（保活、混淆、拥塞控制），变体之间的差异会被抹掉、冷启动也测成 1R。
+    for j, (xi, xo, xrule) in enumerate(zip(xin, xout, xr)):
+        p = f"{S}/hs_x{j}.json"; json.dump({"log": {"loglevel": "warning"}, "inbounds": [xi], "outbounds": [xo], "routing": {"rules": [xrule]}}, open(p, "w"))
         t = sh(f"xray run -test -c {p}");  assert t.returncode == 0, t.stdout[-400:]
         cfgs.append(f"xray run -c {p}")
     if sout:
@@ -137,7 +140,7 @@ def stop(ps):
     for p in ps:
         try: p.wait(5)
         except Exception: p.kill()
-    sh("pkill -f 'hs_x.json|hs_sb.json|hs_mi.yaml'"); time.sleep(0.5)
+    sh(f"pkill -f '{S}/hs_'"); time.sleep(0.5)
 
 def req(i):
     o = sh(f"ip netns exec {NS} curl -s -o /dev/null --max-time 10 -w '%{{http_code}} %{{time_total}}' --socks5-hostname 127.0.0.1:{13300+i} {URL}").stdout.split()
@@ -159,7 +162,7 @@ try:
         for i, v in enumerate(V): res[v["name"]][f"idle{s}"].append(req(i))
     if IDLES: stop(ps)
 finally:
-    sh("pkill -f 'hs_x.json|hs_sb.json|hs_mi.yaml'"); ns_down()
+    sh(f"pkill -f '{S}/hs_'"); ns_down()
 
 def fmt(a):
     ok = [x for x in a if x is not None]; bad = len(a) - len(ok)

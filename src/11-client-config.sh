@@ -273,12 +273,37 @@ else
   H2_DIRECT_NODE_LINE=""
 fi
 
+# v4.9.49 / v4.9.50：Hysteria2 链接附带 fm（v2rayN / v2rayNG 的 finalmask JSON 参数）打开 QUIC 保活。
+# Xray-core 作 Hysteria2 客户端时 keepAlivePeriod 默认 0（v26.3.27 客户端 dialer.go 里 10s 的默认值被注释掉），
+# 服务端 hub.go 的 quic.Config 也不传 KeepAlivePeriod，闲置 30s 即断，下一次请求重握手多 2 个 RTT。
+# v2rayN（7.24.9）/ v2rayNG（2.2.6）见到 fm 会**整体替换**自己生成的 finalmask，所以这里逐项复刻它们原本的产物：
+#   quicParams.congestion：声明了 upmbps / downmbps → brutal + brutalUp/Down，否则 bbr
+#   quicParams.udpHop    ：链接带 mport 时 { ports: mport（: 换成 -）, interval: "30" }（两者未设置时的默认间隔）
+#   udp[]                ：带混淆时 [{ type: salamander, settings: { password } }]
+# 再加 keepAlivePeriod: 10（Hysteria 官方客户端与 Xray 被注释掉的默认值）。
+# sing-box / mihomo / 官方客户端忽略该参数；小火箭订阅在 12-subscription 里剔除。
+# 用法：hy2_client_fm_param <salamander 密码|空> <mport|空>，输出 "&fm=<编码后 JSON>"。
+# 密码含 " 或 \ 时无法安全拼进 JSON，宁可不带 fm（退回旧行为），也不生成会让节点失效的配置。
+hy2_client_fm_param() {
+  local obfs="$1" mport="$2" qp udp=""
+  case "$obfs$mport" in *[\"\\]*) return 0 ;; esac
+  if [[ -n "${HY2_UP_MBPS}${HY2_DOWN_MBPS}" ]]; then
+    qp="\"congestion\":\"brutal\"${HY2_UP_MBPS:+,\"brutalUp\":\"${HY2_UP_MBPS}mbps\"}${HY2_DOWN_MBPS:+,\"brutalDown\":\"${HY2_DOWN_MBPS}mbps\"}"
+  else
+    qp='"congestion":"bbr"'
+  fi
+  [[ -n "$mport" ]] && qp+=",\"udpHop\":{\"ports\":\"${mport//:/-}\",\"interval\":\"30\"}"
+  qp+=',"keepAlivePeriod":10'
+  [[ -n "$obfs" ]] && udp=",\"udp\":[{\"type\":\"salamander\",\"settings\":{\"password\":\"${obfs}\"}}]"
+  printf '&fm=%s' "$(rawurlencode "{\"quicParams\":{${qp}}${udp}}")"
+}
+
 if [[ "$FEATURE_HY2" == true && "${FEATURE_HY2_OBFS:-false}" == true ]]; then
   if [[ "${FEATURE_PORT_HOPPING:-false}" == true ]]; then
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "$OBFS_PASSWORD" "${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
     MIHOMO_HY2_PORTS_LINE=$(printf '\n    ports: %s,%s' "${HY2_PORT}" "${PORT_HOP_RANGE:-40000-50000}")
   else
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "$OBFS_PASSWORD" "")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
     MIHOMO_HY2_PORTS_LINE=""
   fi
 else
@@ -287,19 +312,8 @@ else
 fi
 
 # Hysteria2-H3（v4.9.26）：UDP 443、无混淆，其余与 Hysteria2-Obfs-Direct 相同。
-# v4.9.49：附带 fm（v2rayN 的 finalmask 参数）打开 QUIC 保活。Xray-core 作 Hysteria2 客户端时
-# keepAlivePeriod 默认 0（源码里 10s 的默认值被注释掉），服务端 hub 也不下发保活，闲置 30s 即断，
-# 下一次请求重握手多 2 个 RTT；160ms 实测闲置 65s 后 3.2R → 1.1R。v2rayN 见到 fm 会用它整体替换
-# 自己按 upmbps / downmbps 生成的 finalmask，所以这里原样复刻那部分（brutal + 声明带宽，缺省为 bbr）。
-# 只加在无混淆、无端口跳跃的 H3 节点上：带 salamander 的节点若也整体替换，会丢掉混淆掩码。
-# sing-box / mihomo / 官方客户端忽略该参数；小火箭订阅在 12-subscription 里剔除。
-if [[ -n "${HY2_UP_MBPS}${HY2_DOWN_MBPS}" ]]; then
-  HY2_H3_FM="{\"quicParams\":{\"congestion\":\"brutal\"${HY2_UP_MBPS:+,\"brutalUp\":\"${HY2_UP_MBPS}mbps\"}${HY2_DOWN_MBPS:+,\"brutalDown\":\"${HY2_DOWN_MBPS}mbps\"},\"keepAlivePeriod\":10}}"
-else
-  HY2_H3_FM='{"quicParams":{"congestion":"bbr","keepAlivePeriod":10}}'
-fi
 if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}&fm=$(rawurlencode "$HY2_H3_FM")#Hysteria2-H3-Direct${NODE_SUFFIX}"
+  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "" "")#Hysteria2-H3-Direct${NODE_SUFFIX}"
 else
   HY2_H3_NODE_LINE=""
 fi

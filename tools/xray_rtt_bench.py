@@ -128,6 +128,11 @@ try:
         ob["tag"] = f"o{i}"; outs.append(ob)
         ins.append({"listen": "127.0.0.1", "port": 13100 + i, "protocol": "socks", "settings": {"udp": True}, "tag": f"i{i}"})
         rules.append({"type": "field", "inboundTag": [f"i{i}"], "outboundTag": f"o{i}"})
+    # Xray 的 hysteria 客户端按「目标 IP:端口」全局缓存连接（v26.3.27 dialer.go 的 manger.m[addr]）：
+    # 同一进程里多个 hysteria 出站指向同一服务端时，全部共用第一个出站的连接与配置，A/B 结果无效。
+    hy_dst = [(o["settings"]["address"], o["settings"]["port"]) for o in outs if o["protocol"] == "hysteria"]
+    if len(hy_dst) != len(set(hy_dst)):
+        print("同一服务端地址有多个 hysteria 变体：Xray 会让它们共用一条连接，结果无效。请每个变体单独跑一次。"); sys.exit(1)
     cfg = f"{S}/xb_client.json"
     json.dump({"log": {"loglevel": "warning"}, "inbounds": ins, "outbounds": outs, "routing": {"rules": rules}}, open(cfg, "w"), indent=1)
     if outs:
