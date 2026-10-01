@@ -745,7 +745,7 @@ cmd_block() {
   esac
   [[ "$act" == on || "$act" == off ]] || { echo "用法: ${MANAGE_CMD} block ${what} on|off"; return 1; }
   [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
-  local tmp="${XRAY_CONF}.block.tmp" bak="${XRAY_CONF}.block.bak"
+  local tmp="${XRAY_CONF%.json}.block-tmp.json" bak="${XRAY_CONF}.block.bak"   # 临时文件必须以 .json 结尾，Xray 靠扩展名识别格式
   python3 - "$XRAY_CONF" "$tmp" "$what" "$act" <<'BLOCKPY' || fail "改写配置失败，未做任何修改"
 import re, sys
 src, dst, what, act = sys.argv[1:5]
@@ -765,7 +765,7 @@ if act == 'on':
         sys.stderr.write('没找到插入锚点（配置不是由本脚本生成？）\n'); sys.exit(1)
 open(dst, 'w', encoding='utf-8').write(s)
 BLOCKPY
-  if ! "$XRAY_BIN" -test -config "$tmp" >/dev/null 2>&1; then
+  if ! "$XRAY_BIN" -test -format json -config "$tmp" >/dev/null 2>&1; then
     rm -f "$tmp"; fail "Xray 配置校验失败（geodata 缺少对应规则？），已放弃，未做任何修改"
   fi
   cp -a "$XRAY_CONF" "$bak"
