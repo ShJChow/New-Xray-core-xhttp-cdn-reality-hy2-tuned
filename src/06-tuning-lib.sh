@@ -599,12 +599,15 @@ netsh int tcp set global fastopenfallback=enabled
 # 5. 允许 TCP 时间戳（防回绕序号 PAWS 与准确 RTT 采样）
 netsh int tcp set global timestamps=allowed
 
-# 6. 设置拥塞控制算法为 BBR2 / CUBIC
-try {
-    netsh int tcp set supplemental template=internet congestionprovider=bbr2
-} catch {
-    netsh int tcp set supplemental template=internet congestionprovider=cubic
+# 6. 设置拥塞控制算法为 BBR2 / CUBIC（仅 Windows 11 22H2 及以上支持 bbr2；
+#    netsh 失败不会抛异常，try/catch 捕获不到，必须检查 $LASTEXITCODE 才能回退到 CUBIC）
+foreach ($t in 'internet','internetcustom','datacenter','datacentercustom','compat') {
+    netsh int tcp set supplemental template=$t congestionprovider=bbr2 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        netsh int tcp set supplemental template=$t congestionprovider=cubic | Out-Null
+    }
 }
+# 若个别软件在开启 BBR2 后无法联网，改回: netsh int tcp set supplemental template=internet congestionprovider=cubic
 
 # 7. 解除 Windows 系统级多媒体网络节流限制（NetworkThrottlingIndex = 0xffffffff）
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Type DWord -Value 0xffffffff
@@ -633,14 +636,13 @@ show_mac_tuning() {
 sudo sysctl -w kern.ipc.maxsockbuf=33554432
 sudo sysctl -w net.inet.tcp.recvspace=4194304
 sudo sysctl -w net.inet.tcp.sendspace=4194304
-sudo sysctl -w net.inet.tcp.autorcvbuf=1
+sudo sysctl -w net.inet.tcp.doautorcvbuf=1
 sudo sysctl -w net.inet.tcp.autorcvbufmax=33554432
-sudo sysctl -w net.inet.tcp.autosndbuf=1
+sudo sysctl -w net.inet.tcp.doautosndbuf=1
 sudo sysctl -w net.inet.tcp.autosndbufmax=33554432
 sudo sysctl -w net.inet.tcp.fastopen=3
 sudo sysctl -w net.inet.tcp.rfc1323=1
 sudo sysctl -w net.inet.tcp.win_scale_factor=8
-sudo sysctl -w net.inet.tcp.mptcp.enable=1
 EOF
   echo ""
   echo -e "${GREEN}[2] 开机自动守护 (LaunchDaemon):${NC}"
@@ -659,14 +661,13 @@ sudo tee /Library/LaunchDaemons/com.user.sysctl.plist << 'PLISTEOF'
         <string>kern.ipc.maxsockbuf=33554432</string>
         <string>net.inet.tcp.recvspace=4194304</string>
         <string>net.inet.tcp.sendspace=4194304</string>
-        <string>net.inet.tcp.autorcvbuf=1</string>
+        <string>net.inet.tcp.doautorcvbuf=1</string>
         <string>net.inet.tcp.autorcvbufmax=33554432</string>
-        <string>net.inet.tcp.autosndbuf=1</string>
+        <string>net.inet.tcp.doautosndbuf=1</string>
         <string>net.inet.tcp.autosndbufmax=33554432</string>
         <string>net.inet.tcp.fastopen=3</string>
         <string>net.inet.tcp.rfc1323=1</string>
         <string>net.inet.tcp.win_scale_factor=8</string>
-        <string>net.inet.tcp.mptcp.enable=1</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
