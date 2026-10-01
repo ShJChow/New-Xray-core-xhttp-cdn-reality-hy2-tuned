@@ -42,7 +42,7 @@
                     "geosite:category-pt"
                 ],
                 "outboundTag": "block"
-            }
+            }${XRAY_BLOCK_ADS_RULE}
         ]
     },
     "inbounds": [
@@ -153,7 +153,7 @@
                 // 内网/云元数据地址的域名。routing 里的 ip 规则在
                 // domainStrategy=AsIs 时拿不到解析结果，两者互补，缺一不可。
                 "finalRules": [
-                    { "action": "block", "ip": ["geoip:private"] }
+                    { "action": "block", "ip": ["geoip:private"] }${XRAY_BLOCK_CN_RULE}
                 ]
             },
             "streamSettings": {

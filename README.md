@@ -194,6 +194,7 @@ xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
 xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
 xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
 xh cdnh3 [show|on|off] # CDN QUIC(h3) 默认节点开关与订阅同步
+xh block [show|cn on|off|ads on|off] # 出站屏蔽回国 IP / 广告域名（默认关闭）
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
 xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
 xh conflict            # sysctl 内核参数冲突检测与一键自愈
@@ -279,6 +280,7 @@ flowchart TD
 | **混淆节点同样打开保活 · 测速工具修正 Xray Hy2 连接共享** | v4.9.50 | **混淆节点**：`Hysteria2-Obfs-Direct`（默认关闭）的链接也附带 `fm`。v2rayN / v2rayNG 见到 `fm` 会整体替换自己生成的 finalmask，所以 `fm` 里除 `quicParams`（brutal + 声明带宽 + `keepAlivePeriod: 10`）外还复刻 `udp: [{type: salamander, settings: {password}}]`，开端口跳跃时再加 `udpHop: {ports: mport, interval: "30"}`（二者未设置时的默认间隔，两客户端源码一致）。生成逻辑抽成 `hy2_client_fm_param`，H3 节点输出与 v4.9.49 逐字节相同；密码含 `"` 或 `\` 时不带 `fm`（退回旧行为）。实测（临时混淆服务端，160ms RTT）：闲置 65s / 200s 后首包 3.1R → 1.0R；负对照「`fm` 漏掉混淆掩码」、「混淆密码错误」、「完全不混淆」全部连不上。**测速工具**：Xray 的 hysteria 客户端按「目标 IP:端口」全局缓存连接（v26.3.27 `dialer.go` 的 `manger.m[addr]`），同一进程里指向同一服务端的多个 Hy2 出站共用第一个出站的连接与配置——v4.9.49 发版前那组同进程吞吐 A/B 因此无效（本版已按分进程重测并订正上一行），同进程的「错误示范」也会被测成能连通。`tools/xray_handshake_bench.py` 改为每个 Xray 变体单独一个进程，并新增 `uri` 变体键（直接给一条链接）；`tools/xray_rtt_bench.py` 遇到同地址的多个 Hy2 变体直接拒绝运行；握手工具的清理由宽泛的 `pkill -f` 改为只匹配本次临时目录（旧写法会误杀命令行里含同名字样的调用方 shell）；`tools/xlinks.py` 新增单条解析 `parse_link` |
 | **网卡 MTU 高于 1500 时自动降到 1500（PMTU 黑洞兜底）** | v4.9.51 | 部分云厂商网卡默认 MTU 9000（巨帧），公网路径却只有 1500：服务端发出超过 1500 字节的 TCP 段（如 3.7KB 的 TLS 证书链）在公网出口被静默丢弃，表现为 TCP 握手成功、TLS 阶段超时或 RST，Reality / CDN 回源等 TCP 节点全断，而 QUIC 节点（单包 <1280）完全正常。开机网卡调优脚本 `xray-xhttp-nic-tune` 现在会在 MTU 大于 1500 时降到 1500，并补一条 `TCPMSS --clamp-mss-to-pmtu`（mangle POSTROUTING，v4/v6，已存在则不重复，落盘 `netfilter-persistent save`）；只在真的降过 MTU 时才动防火墙。本机 `enp0s6` 为 1480，不触发，行为不变。验证：netns 内 veth MTU 9000 → 1500，规则一条，二次执行不重复；MTU 1400 不被改动。同机 sbbox 在 v2.7.38 同步加入。 |
 | **默认 CDN 节点改为 CDN-H3** | v4.9.52 | 默认安装的第一个节点由 `VLESS-XHTTP-CDN-H2` 改为 `VLESS-XHTTP-CDN-H3`（经 CDN 走 UDP 443 / QUIC）：`FEATURE_CDN_H3` 默认 `true`、`FEATURE_CDN_H2` 默认 `false`，安装脚本、客户端配置、节点环境文件与 `xh cdnh3` 的兜底默认值同步；README 节点表与命令列表随之更新。UDP 443 被限速或封锁时，可用 `xh cdnh2 on` 或 `FEATURE_CDN_H2=true` 开启 TCP(h2) 兜底节点 |
+| **出站分流开关（`xh block`）** | v4.9.53 | 参考 zxcvos/Xray-script 的可选规则，新增默认**关闭**的 `xh block cn on\|off`（出站屏蔽回国 IP：freedom 出站 `finalRules` 在域名解析成 IP 之后再判 `geoip:cn`）与 `xh block ads on\|off`（路由规则屏蔽 `geosite:category-ads-all`）；规则各占一行并带 `xh-block-*` 标记，开关只增删该行，先 `xray -test` 校验、失败或重启失败自动回滚；状态写入 `node.env`（`FEATURE_BLOCK_CN` / `FEATURE_BLOCK_ADS`），重装时保持；管理菜单新增第 18 项（卸载顺延为 19），`xh tuning` 提示补充 win / mac / linux / sb。回国 IP 屏蔽会让依赖本代理访问国内站点的客户端断流，仅在落地机不需要回国流量时开启 |
 
 ---
 

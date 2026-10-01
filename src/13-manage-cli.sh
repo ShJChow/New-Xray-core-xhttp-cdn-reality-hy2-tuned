@@ -714,6 +714,71 @@ cmd_log() {
   esac
 }
 
+# 出站分流开关：屏蔽回国 IP / 广告域名（默认关闭）。参考 zxcvos/Xray-script 的 cn-ip / ad-domain 规则。
+#   cn  → freedom 出站的 finalRules（域名解析成 IP 之后再判），geoip:cn 直接 block
+#   ads → routing 规则 domain geosite:category-ads-all → block
+# 每条规则占单独一行并带 xh-block-* 标记，开关只增删该行；先 xray -test 校验，失败自动回滚。
+cmd_block() {
+  local what="${1:-show}" act="${2:-}" key marker
+  case "$what" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== 出站分流开关 ===${NC}"
+      local k name
+      for k in cn ads; do
+        [[ "$k" == cn ]] && name="屏蔽回国 IP (geoip:cn)" || name="屏蔽广告域名 (geosite:category-ads-all)"
+        if grep -q "xh-block-${k}" "$XRAY_CONF" 2>/dev/null; then
+          echo -e "  ${name}：${GREEN}已开启${NC}"
+        else
+          echo -e "  ${name}：${YELLOW}未开启${NC}"
+        fi
+      done
+      echo ""
+      echo "用法：${MANAGE_CMD} block cn|ads on|off"
+      echo "说明：回国 IP 屏蔽会让依赖本代理访问国内站点的客户端断流，仅在落地机不需要回国流量时开启。"
+      echo ""
+      return 0
+      ;;
+    cn)  key="FEATURE_BLOCK_CN";  marker="xh-block-cn" ;;
+    ads) key="FEATURE_BLOCK_ADS"; marker="xh-block-ads" ;;
+    *)   echo "用法: ${MANAGE_CMD} block [show|cn on|off|ads on|off]"; return 1 ;;
+  esac
+  [[ "$act" == on || "$act" == off ]] || { echo "用法: ${MANAGE_CMD} block ${what} on|off"; return 1; }
+  [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
+  local tmp="${XRAY_CONF}.block.tmp" bak="${XRAY_CONF}.block.bak"
+  python3 - "$XRAY_CONF" "$tmp" "$what" "$act" <<'BLOCKPY' || fail "改写配置失败，未做任何修改"
+import re, sys
+src, dst, what, act = sys.argv[1:5]
+s = open(src, encoding='utf-8').read()
+marker = 'xh-block-' + what
+lines = [l for l in s.split('\n') if marker not in l]          # 先清掉旧行，开 / 关都幂等
+s = '\n'.join(lines)
+if act == 'on':
+    if what == 'ads':
+        pat = re.compile(r'("geosite:category-pt"\s*\]\s*,\s*"outboundTag"\s*:\s*"block"\s*\})')
+        new = '\n            , { "type": "field", "domain": ["geosite:category-ads-all"], "outboundTag": "block" } // xh-block-ads'
+    else:
+        pat = re.compile(r'(\{ "action": "block", "ip": \["geoip:private"\] \})')
+        new = '\n                    , { "action": "block", "ip": ["geoip:cn"] } // xh-block-cn'
+    s, n = pat.subn(lambda m: m.group(1) + new, s, count=1)
+    if n != 1:
+        sys.stderr.write('没找到插入锚点（配置不是由本脚本生成？）\n'); sys.exit(1)
+open(dst, 'w', encoding='utf-8').write(s)
+BLOCKPY
+  if ! "$XRAY_BIN" -test -config "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"; fail "Xray 配置校验失败（geodata 缺少对应规则？），已放弃，未做任何修改"
+  fi
+  cp -a "$XRAY_CONF" "$bak"
+  mv -f "$tmp" "$XRAY_CONF"; chmod 600 "$XRAY_CONF" 2>/dev/null || true
+  if svc restart xray; then
+    update_node_env "$key" "$([[ "$act" == on ]] && echo true || echo false)"
+    info "出站分流 ${what} 已$([[ "$act" == on ]] && echo 开启 || echo 关闭)，xray 已重启"
+  else
+    cp -a "$bak" "$XRAY_CONF"; svc restart xray >/dev/null 2>&1 || true
+    fail "xray 重启失败，已回滚到修改前的配置"
+  fi
+}
+
 cmd_restart() {
   for s in xray nginx; do
     svc restart "$s" && info "${s} 已重启" || warn "${s} 重启失败"
@@ -1982,7 +2047,8 @@ cmd_menu() {
     echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
     echo " 16) CDN TCP(h2) 节点开关 (show / on / off)"
     echo " 17) CDN QUIC(h3) 备用节点开关 (show / on / off)"
-    echo " 18) 卸载"
+    echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
+    echo " 19) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -1992,7 +2058,7 @@ cmd_menu() {
       4) cmd_restart ;;
       5) cmd_log xray ;;
       6) read -rp "  直接回车更新最新版，或输入指定版本 (如 26.7.28): " a; cmd_update "${a}" ;;
-      7) read -rp "  show / on / off / client: " a; cmd_tuning "${a:-show}" ;;
+      7) read -rp "  show / on / off / client / win / mac / linux / sb: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  show / on / off / speed: " a; cmd_brutal "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
       10) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
@@ -2003,7 +2069,8 @@ cmd_menu() {
       15) read -rp "  show / on / off: " a; cmd_ecn "${a:-show}" ;;
       16) read -rp "  show / on / off: " a; cmd_cdnh2 "${a:-show}" ;;
       17) read -rp "  show / on / off: " a; cmd_cdnh3 "${a:-show}" ;;
-      18) cmd_uninstall; break ;;
+      18) read -rp "  show / cn on|off / ads on|off: " a; cmd_block ${a:-show} ;;
+      19) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2030,6 +2097,7 @@ xray-xhttp 管理命令
   xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
+  xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del|update|reload]  TCP Brutal 拥塞控制 / 速率调节 / 模块更新
   xh keepalive [on|off|show]
@@ -2052,6 +2120,7 @@ case "${1:-menu}" in
   start)      cmd_start ;;
   stop)       cmd_stop ;;
   restart)    cmd_restart ;;
+  block)      shift; cmd_block "$@" ;;
   update)
     shift
     if [[ " $* " == *" --auto "* ]]; then

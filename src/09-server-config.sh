@@ -435,6 +435,16 @@ install -d -m 700 /etc/xhttp-cdn
 } > /etc/xhttp-cdn/fallback.env
 chmod 600 /etc/xhttp-cdn/fallback.env
 
+# 出站分流（可选，默认关闭）：每条规则单独一行并带 xh-block-* 标记，xh block 据此增删
+XRAY_BLOCK_ADS_RULE=""
+XRAY_BLOCK_CN_RULE=""
+if [[ "${FEATURE_BLOCK_ADS:-false}" == true ]]; then
+  XRAY_BLOCK_ADS_RULE=$'\n            , { "type": "field", "domain": ["geosite:category-ads-all"], "outboundTag": "block" } // xh-block-ads'
+fi
+if [[ "${FEATURE_BLOCK_CN:-false}" == true ]]; then
+  XRAY_BLOCK_CN_RULE=$'\n                    , { "action": "block", "ip": ["geoip:cn"] } // xh-block-cn'
+fi
+
 info "写入 /usr/local/etc/xray/config.json ..."
 cat > /usr/local/etc/xray/config.json << XRAYEOF
 @@include templates/xray-config.json.tmpl
@@ -481,6 +491,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_XHTTP_VLESSENC=%q\n' "${FEATURE_XHTTP_VLESSENC:-true}"
   printf 'FEATURE_CDN_H2=%q\n'    "${FEATURE_CDN_H2:-false}"
   printf 'FEATURE_CDN_H3=%q\n'    "${FEATURE_CDN_H3:-true}"
+  printf 'FEATURE_BLOCK_CN=%q\n'  "${FEATURE_BLOCK_CN:-false}"
+  printf 'FEATURE_BLOCK_ADS=%q\n' "${FEATURE_BLOCK_ADS:-false}"
   printf 'FEATURE_REALITY_UP_CDN_DOWN=%q\n' "${FEATURE_REALITY_UP_CDN_DOWN:-false}"
   printf 'FEATURE_UP_CDN_DOWN_MIHOMO=%q\n'  "${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN:-false}}"
   printf 'FEATURE_CDN_UP_REALITY_DOWN=%q\n' "${FEATURE_CDN_UP_REALITY_DOWN:-false}"
