@@ -298,7 +298,7 @@ cmd_resub() {
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
     base64 "${subdir}/shadowrocket-raw.txt" | tr -d '\n' > "${subdir}/shadowrocket.txt"
   fi
-  grep -vE -- '-CDN-|-cdn-' "${home}/client-config.txt" > "${subdir}/v2rayn-tun-raw.txt" || true
+  awk '!/-CDN-|-cdn-/ || /#VLESS-XHTTP-CDN-H3/' "${home}/client-config.txt" > "${subdir}/v2rayn-tun-raw.txt" || true
   if [[ -s "${subdir}/v2rayn-tun-raw.txt" ]]; then
     base64 "${subdir}/v2rayn-tun-raw.txt" | tr -d '\n' > "${subdir}/v2rayn-tun.txt"
   fi
