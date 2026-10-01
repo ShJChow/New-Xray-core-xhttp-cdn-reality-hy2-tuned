@@ -283,6 +283,7 @@ flowchart TD
 | **默认 CDN 节点改为 CDN-H3** | v4.9.52 | 默认安装的第一个节点由 `VLESS-XHTTP-CDN-H2` 改为 `VLESS-XHTTP-CDN-H3`（经 CDN 走 UDP 443 / QUIC）：`FEATURE_CDN_H3` 默认 `true`、`FEATURE_CDN_H2` 默认 `false`，安装脚本、客户端配置、节点环境文件与 `xh cdnh3` 的兜底默认值同步；README 节点表与命令列表随之更新。UDP 443 被限速或封锁时，可用 `xh cdnh2 on` 或 `FEATURE_CDN_H2=true` 开启 TCP(h2) 兜底节点 |
 | **出站分流开关（`xh block`）** | v4.9.53 | 参考 zxcvos/Xray-script 的可选规则，新增默认**关闭**的 `xh block cn on\|off`（出站屏蔽回国 IP：freedom 出站 `finalRules` 在域名解析成 IP 之后再判 `geoip:cn`）与 `xh block ads on\|off`（路由规则屏蔽 `geosite:category-ads-all`）；规则各占一行并带 `xh-block-*` 标记，开关只增删该行，先 `xray -test` 校验、失败或重启失败自动回滚；状态写入 `node.env`（`FEATURE_BLOCK_CN` / `FEATURE_BLOCK_ADS`），重装时保持；管理菜单新增第 18 项（卸载顺延为 19），`xh tuning` 提示补充 win / mac / linux / sb。回国 IP 屏蔽会让依赖本代理访问国内站点的客户端断流，仅在落地机不需要回国流量时开启 |
 | **Reality 时间差校验与 spiderX（`xh timediff`）** | v4.9.54 | 参照 XTLS/REALITY README：新增默认**关闭**的 `xh timediff on [毫秒]\|off`（Reality `maxTimeDiff`，默认 60000，防重放；客户端系统时间偏差超过该值会连不上，需开启自动校时），先 `xray -test` 校验、失败回滚，`REALITY_MAX_TIME_DIFF` 写入 `node.env` 重装保持；客户端 Reality 链接默认附带 `spx`（由 UUID 派生，各部署不同，`FEATURE_REALITY_SPX=false` 可关闭）；管理菜单新增第 19 项（卸载顺延为 20） |
+| **Xray 入站与出站去掉 tcpMptcp（只留 TFO）** | v4.9.55 | 对 Xray Reality 入站做了与 sbbox 相同的对比测速（服务端 4 种 tfo / mptcp 组合 × 客户端 3 种，延迟 2ms 与 160ms、每向 0.5% 丢包，经代理请求 `http://www.apple.com`）：Xray 上各组合都**没有出现超时**，TFO 也没有可测的延迟收益；吞吐在噪声范围内，近距离下客户端开 MPTCP 偏慢（上行约 1.5 vs 1.9–2.0 Gbps）。Go 1.24+ 监听默认就启用 MPTCP，显式开启没有意义。因此 Reality / XHTTP / XHTTP+TLS 入站与 freedom 出站去掉 `tcpMptcp`，mihomo 的 Reality 节点去掉 `mptcp: true`，与 sbbox 的「只开 TFO」保持一致（freedom 出站的改动未单独测速）。已安装机器需重新生成配置后生效 |
 
 ---
 
