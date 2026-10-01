@@ -17,6 +17,62 @@ command -v socat   >/dev/null 2>&1 || pkg_install socat
 command -v wget    >/dev/null 2>&1 || pkg_install wget
 command -v tar     >/dev/null 2>&1 || pkg_install tar
 command -v openssl >/dev/null 2>&1 || pkg_install openssl
+command -v python3 >/dev/null 2>&1 || pkg_install python3 || warn "python3 安装失败，部分 xh 管理命令将不可用"
+
+# ---------- 平台识别（v4.9.56）：ARM / AMD(x86_64) 与云厂商、内存档位自动选默认 ----------
+# 云厂商：读 DMI（无需联网、无需凭据）；识别不了就是 other。
+platform_cloud() {
+  local asset sysv prod
+  asset=$(cat /sys/class/dmi/id/chassis_asset_tag 2>/dev/null || true)
+  sysv=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)
+  prod=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
+  case "$asset $sysv $prod" in
+    *OracleCloud*|*"Oracle Cloud"*) echo oracle ;;
+    *Amazon*)                       echo aws ;;
+    *Google*)                       echo gcp ;;
+    *Microsoft*)                    echo azure ;;
+    *Alibaba*)                      echo aliyun ;;
+    *DigitalOcean*)                 echo digitalocean ;;
+    *Vultr*)                        echo vultr ;;
+    *) echo other ;;
+  esac
+}
+
+platform_profile() {
+  local arch model cores mem virt cloud lowmem=0
+  arch=$(uname -m)
+  model=$(awk -F': *' '/^(model name|Model name|Hardware|Processor)/{print $2; exit}' /proc/cpuinfo 2>/dev/null)
+  [[ -n "$model" ]] || model=$(lscpu 2>/dev/null | awk -F': *' '/Model name/{print $2; exit}')
+  [[ -n "$model" ]] || model="未知"
+  cores=$(nproc 2>/dev/null || echo 1)
+  mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+  virt=$(systemd-detect-virt 2>/dev/null || echo 未知)
+  cloud=$(platform_cloud)
+  PLATFORM_CLOUD="$cloud"
+  [[ "$mem" -gt 0 && "$mem" -lt 1536 ]] && lowmem=1
+  PLATFORM_LOWMEM="$lowmem"
+  info "平台识别：${arch} (${model})，${cores} 核 / ${mem} MB 内存，内核 $(uname -r)，虚拟化 ${virt}，云厂商 ${cloud}"
+  # 小内存机（< 1.5GB，如 Oracle 免费 AMD 1GB）：TCP Brutal 要现场编译内核模块，既占内存又拖慢安装，默认不装；
+  # 用户显式传 FEATURE_BRUTAL=true 仍然尊重。
+  if [[ "$lowmem" == 1 && -z "${FEATURE_BRUTAL_EXPLICIT:-}" ]]; then
+    FEATURE_BRUTAL=false
+    info "内存 ${mem} MB < 1536 MB：默认不安装 TCP Brutal（需要时 FEATURE_BRUTAL=true，或之后 xh brutal on）"
+  fi
+  if [[ "$lowmem" == 1 ]] && ! swapon --show --noheadings 2>/dev/null | grep -q .; then
+    warn "内存只有 ${mem} MB 且没有 swap：xray + nginx 同时运行可能被 OOM 杀进程，建议加 1GB swap（fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile）"
+  fi
+}
+
+# 必需命令自检：缺了 python3 会让 xh minversion / ech / block / timediff 等管理命令静默失效。
+check_required_cmds() {
+  local c miss=""
+  for c in curl openssl python3 iptables; do command -v "$c" >/dev/null 2>&1 || miss="$miss $c"; done
+  [[ -z "$miss" ]] || warn "缺少必需命令：${miss} —— 部分 xh 管理命令会失效，请手动安装（apt install -y${miss}）"
+  return 0
+}
+
+platform_profile
+check_required_cmds
 if ! command -v qrencode >/dev/null 2>&1; then
   info "安装二维码工具 qrencode..."
   if [[ "$OS_ID" == "alpine" ]]; then

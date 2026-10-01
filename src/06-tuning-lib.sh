@@ -505,6 +505,10 @@ LIMITSEOF
       # 若服务未安装或目录不存在，仅在存在/可创建时操作
       if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 || [[ -d "$dir" ]]; then
         install -d -m 755 "$dir" 2>/dev/null || continue
+        # 小内存机给 Go 运行时设软上限（物理内存的 60%）：接近上限时更积极 GC，而不是长到被 OOM 杀掉
+        local GOMEM_LINE="" _gm
+        _gm=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+        [[ "$_gm" -gt 0 && "$_gm" -lt 2048 ]] && GOMEM_LINE="Environment=\"GOMEMLIMIT=$((_gm * 60 / 100))MiB\""
         cat > "${dir}/${dropin}" <<DROPINEOF || warn "写入 ${unit} drop-in 失败"
 # xray-xhttp 句柄上限，由 xh tuning on 生成 / xh tuning off 移除。
 # 本项目只写这一个文件，同目录下你自己的 override.conf 不会被改动。
@@ -514,6 +518,7 @@ LimitNPROC=infinity
 Environment="GOGC=200"
 Environment="GOMAXPROCS=${CPU_CORES}"
 Environment="GODEBUG=madvdontneed=1"
+${GOMEM_LINE}
 DROPINEOF
         # 旧版留下的 override.conf：内容与历史生成物逐字一致才删（说明用户没动过），
         # 否则一律保留——那是用户的加固，宁可留下一份内容重复的文件，也不能删掉它。

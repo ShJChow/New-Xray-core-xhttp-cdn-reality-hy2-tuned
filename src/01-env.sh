@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.55"
+PROJECT_VERSION="4.9.56"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -147,6 +147,8 @@ FEATURE_PORT_HOPPING=${FEATURE_PORT_HOPPING:-false}
 
 # FEATURE_BRUTAL：TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制（默认开启）。
 # 当系统内核存在 brutal 模块时，自动为 Xray TCP 入站启用 Brutal 拥塞控制。
+# 记下用户是否显式传了 FEATURE_BRUTAL：平台识别（05-base-env.sh）要在小内存机上改默认，但不能覆盖用户的明确选择。
+FEATURE_BRUTAL_EXPLICIT="${FEATURE_BRUTAL+set}"
 FEATURE_BRUTAL=${FEATURE_BRUTAL:-true}
 BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-auto}
 

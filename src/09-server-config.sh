@@ -105,12 +105,12 @@ elif [[ "$AVAIL" == *bbr* ]]; then
 fi
 
 if [[ -n "$XRAY_TCP_CC" ]]; then
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 else
   warn "BBR / Brutal 均不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
-  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi
 
 # Reality maxTimeDiff（毫秒，XTLS/REALITY README 的可选项，默认不设）：客户端时间偏差超过该值则拒绝握手
