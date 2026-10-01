@@ -779,6 +779,63 @@ BLOCKPY
   fi
 }
 
+# Reality maxTimeDiff（毫秒）：服务端只接受客户端时间戳与本机相差不超过该值的握手，防重放。
+# 参考 XTLS/REALITY README 的可选项。客户端（手机 / 电脑）系统时间偏差超过该值就连不上，需开启自动校时。
+cmd_timediff() {
+  local action="${1:-show}" ms="${2:-60000}"
+  case "$action" in
+    show|status)
+      local cur
+      cur=$(grep -o '"maxTimeDiff"[[:space:]]*:[[:space:]]*[0-9]*' "$XRAY_CONF" 2>/dev/null | head -1 | grep -o '[0-9]*$' || true)
+      echo ""
+      echo -e "${CYAN}=== Reality maxTimeDiff 状态 ===${NC}"
+      if [[ -n "$cur" ]]; then
+        echo -e "  当前状态:       ${GREEN}${cur} ms${NC}"
+      else
+        echo -e "  当前状态:       ${YELLOW}未设置${NC}（不校验客户端时间差）"
+      fi
+      echo -e "  本机时间同步:   $(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo 未知)（yes 表示已校时）"
+      echo ""
+      echo -e "  ${MANAGE_CMD} timediff on [毫秒]   # 开启，默认 60000；客户端时间偏差超过它会连不上"
+      echo -e "  ${MANAGE_CMD} timediff off         # 关闭"
+      echo ""
+      return 0
+      ;;
+    on|set|off) : ;;
+    *) echo "用法: ${MANAGE_CMD} timediff [show|on [毫秒]|off]"; return 1 ;;
+  esac
+  [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
+  if [[ "$action" != off ]]; then
+    [[ "$ms" =~ ^[0-9]+$ && "$ms" -ge 1000 ]] || fail "毫秒数必须是 >= 1000 的整数（建议 60000）"
+  fi
+  local bak="${XRAY_CONF}.bak-timediff"
+  cp -a "$XRAY_CONF" "$bak"
+  python3 - "$XRAY_CONF" "$action" "$ms" <<'TDPY' || { mv -f "$bak" "$XRAY_CONF"; fail "改写配置失败，已恢复原配置"; }
+import re, sys
+cfg, action, ms = sys.argv[1:4]
+t = open(cfg, encoding='utf-8').read()
+t = re.sub(r',\s*"maxTimeDiff"\s*:\s*\d+', '', t)              # 先清掉旧值，开 / 关都幂等
+if action != 'off':
+    m = re.search(r'("shortIds"\s*:\s*\[[^\]]*\])', t)
+    if not m: sys.exit(1)
+    t = t[:m.end()] + ',\n                    "maxTimeDiff": ' + ms + t[m.end():]
+open(cfg, 'w', encoding='utf-8').write(t)
+TDPY
+  if "$XRAY_BIN" run -test -c "$XRAY_CONF" >/dev/null 2>&1; then
+    rm -f "$bak"
+    if svc restart xray; then
+      update_node_env "REALITY_MAX_TIME_DIFF" "$([[ "$action" == off ]] && echo "" || echo "$ms")"
+      info "Reality maxTimeDiff 已$([[ "$action" == off ]] && echo 关闭 || echo "设为 ${ms} ms")，xray 已重启"
+    else
+      warn "xray 重启失败，正在回滚..."; cp -a "$XRAY_CONF" "${XRAY_CONF}.failed"; fail "重启失败；坏配置留在 ${XRAY_CONF}.failed，请手动检查"
+    fi
+  else
+    warn "Xray 配置文件测试失败，正在回滚..."
+    mv -f "$bak" "$XRAY_CONF"
+    fail "配置测试失败，已自动恢复原配置"
+  fi
+}
+
 cmd_restart() {
   for s in xray nginx; do
     svc restart "$s" && info "${s} 已重启" || warn "${s} 重启失败"
@@ -2048,7 +2105,8 @@ cmd_menu() {
     echo " 16) CDN TCP(h2) 节点开关 (show / on / off)"
     echo " 17) CDN QUIC(h3) 备用节点开关 (show / on / off)"
     echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
-    echo " 19) 卸载"
+    echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
+    echo " 20) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -2070,7 +2128,8 @@ cmd_menu() {
       16) read -rp "  show / on / off: " a; cmd_cdnh2 "${a:-show}" ;;
       17) read -rp "  show / on / off: " a; cmd_cdnh3 "${a:-show}" ;;
       18) read -rp "  show / cn on|off / ads on|off: " a; cmd_block ${a:-show} ;;
-      19) cmd_uninstall; break ;;
+      19) read -rp "  show / on [毫秒] / off: " a; cmd_timediff ${a:-show} ;;
+      20) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2098,6 +2157,7 @@ xray-xhttp 管理命令
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
+  xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
   xh brutal [show|on|off|speed|add|del|update|reload]  TCP Brutal 拥塞控制 / 速率调节 / 模块更新
   xh keepalive [on|off|show]
@@ -2121,6 +2181,7 @@ case "${1:-menu}" in
   stop)       cmd_stop ;;
   restart)    cmd_restart ;;
   block)      shift; cmd_block "$@" ;;
+  timediff)   shift; cmd_timediff "$@" ;;
   update)
     shift
     if [[ " $* " == *" --auto "* ]]; then

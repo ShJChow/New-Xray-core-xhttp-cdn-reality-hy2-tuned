@@ -180,8 +180,18 @@ else
   XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
 
+# Reality spiderX（XTLS/REALITY README：客户端的初始爬取路径，建议各部署不同）。
+# 由 UUID 派生，同一份部署每次重新生成都一致、不同部署互不相同；FEATURE_REALITY_SPX=false 关闭。
+# 只是客户端参数（v2rayN / Xray 系客户端识别 spx，mihomo / sing-box 会忽略），服务端无需配置。
+if [[ "${FEATURE_REALITY_SPX:-true}" == true ]]; then
+  REALITY_SPX="/$(printf '%s' "${UUID1}${UUID2}" | sha256sum | cut -c1-12)"
+  REALITY_SPX_Q="&spx=$(rawurlencode "$REALITY_SPX")"
+else
+  REALITY_SPX_Q=""
+fi
+
 if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-false}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-false}" == true ]]; then
-  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
+  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}${REALITY_SPX_Q}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
 else
   REALITY_UP_CDN_DOWN_NODE_LINE=""
 fi

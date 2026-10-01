@@ -111,6 +111,13 @@ FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
 FEATURE_BLOCK_CN=${FEATURE_BLOCK_CN:-false}
 FEATURE_BLOCK_ADS=${FEATURE_BLOCK_ADS:-false}
 
+# REALITY_MAX_TIME_DIFF（毫秒，默认不设）：Reality 只接受客户端时间戳与本机相差不超过该值的握手，防重放。
+# 客户端系统时间偏差超过它就连不上，需开启自动校时；运行期用 xh timediff on [毫秒] / off 切换。
+REALITY_MAX_TIME_DIFF=${REALITY_MAX_TIME_DIFF:-}
+
+# FEATURE_REALITY_SPX（默认开启）：Reality 客户端链接附带 spx（spiderX）参数，值由 UUID 派生。关闭用 FEATURE_REALITY_SPX=false。
+FEATURE_REALITY_SPX=${FEATURE_REALITY_SPX:-true}
+
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}

@@ -113,6 +113,14 @@ else
   REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 fi
 
+# Reality maxTimeDiff（毫秒，XTLS/REALITY README 的可选项，默认不设）：客户端时间偏差超过该值则拒绝握手
+if [[ "${REALITY_MAX_TIME_DIFF:-}" =~ ^[0-9]+$ && "${REALITY_MAX_TIME_DIFF:-0}" -ge 1000 ]]; then
+  REALITY_MAX_TIME_DIFF_JSON=$',\n                    "maxTimeDiff": '"${REALITY_MAX_TIME_DIFF}"
+  info "Reality maxTimeDiff 设为 ${REALITY_MAX_TIME_DIFF} ms"
+else
+  REALITY_MAX_TIME_DIFF_JSON=""
+fi
+
 # Reality minClientVer 控制：
 # 若 REALITY_MIN_CLIENT_VER 设定且不为 none / default / off，注入 minClientVer 配置
 if [[ -n "$REALITY_MIN_CLIENT_VER" && "$REALITY_MIN_CLIENT_VER" != "none" && "$REALITY_MIN_CLIENT_VER" != "default" && "$REALITY_MIN_CLIENT_VER" != "off" ]]; then
@@ -497,6 +505,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_UP_CDN_DOWN_MIHOMO=%q\n'  "${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN:-false}}"
   printf 'FEATURE_CDN_UP_REALITY_DOWN=%q\n' "${FEATURE_CDN_UP_REALITY_DOWN:-false}"
   printf 'REALITY_MIN_CLIENT_VER=%q\n' "${REALITY_MIN_CLIENT_VER:-1.8.0}"
+  printf 'REALITY_MAX_TIME_DIFF=%q\n'  "${REALITY_MAX_TIME_DIFF:-}"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
   if [[ "$FEATURE_XPADDING" == true ]]; then
