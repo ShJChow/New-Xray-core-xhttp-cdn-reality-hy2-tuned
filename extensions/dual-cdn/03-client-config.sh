@@ -17,7 +17,7 @@ if [[ -n "$ECH_PARAM" ]]; then
   ECH_URI_PARAM="&ech=${ECH_PARAM}"
 fi
 
-DOWNLOAD_SETTINGS_JSON="\"downloadSettings\":{\"address\":\"$(json_escape "$CDN_B")\",\"port\":443,\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_B")\",\"allowInsecure\":false,\"alpn\":[\"h2\"],\"fingerprint\":\"chrome\"${ECH_TLS_JSON}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_B")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"auto\"${NESTED_EXTRA_FIELD}}}"
+DOWNLOAD_SETTINGS_JSON="\"downloadSettings\":{\"address\":\"$(json_escape "$CDN_B")\",\"port\":443,\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_B")\",\"allowInsecure\":false,\"alpn\":[\"h2\"],\"fingerprint\":\"chrome\"${ECH_TLS_JSON}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_B")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"stream-up\"${NESTED_EXTRA_FIELD}}}"
 
 if [[ -n "$BASE_EXTRA_JSON" ]]; then
   EXTRA_JSON="${BASE_EXTRA_JSON%\}},${DOWNLOAD_SETTINGS_JSON}}"

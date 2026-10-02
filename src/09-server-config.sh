@@ -206,7 +206,7 @@ if [[ "$FEATURE_H3_DIRECT" == true ]]; then
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
-                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                    "mode": "stream-up"${XRAY_XHTTP_PADDING_JSON}
                 }
             },
             "sniffing": {
@@ -261,7 +261,7 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
-                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                    "mode": "stream-up"${XRAY_XHTTP_PADDING_JSON}
                 }
             },
             "sniffing": {

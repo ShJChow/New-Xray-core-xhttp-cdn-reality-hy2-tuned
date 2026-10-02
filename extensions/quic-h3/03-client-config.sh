@@ -45,7 +45,7 @@ BASE_EXTRA_JSON=""
 build_download_extra() {
   local address="$1" port="$2" alpn="$3" download
 
-  download="\"downloadSettings\":{\"address\":\"$(json_escape "$address")\",\"port\":${port},\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_DOMAIN")\",\"allowInsecure\":false,\"alpn\":[\"${alpn}\"],\"fingerprint\":\"chrome\"${ECH_PARAM:+,\"echConfigList\":\"$(json_escape "$(urldecode "$ECH_PARAM")")\"}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_DOMAIN")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"auto\"${BASE_EXTRA_JSON:+,\"extra\":${BASE_EXTRA_JSON}}}}"
+  download="\"downloadSettings\":{\"address\":\"$(json_escape "$address")\",\"port\":${port},\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_DOMAIN")\",\"allowInsecure\":false,\"alpn\":[\"${alpn}\"],\"fingerprint\":\"chrome\"${ECH_PARAM:+,\"echConfigList\":\"$(json_escape "$(urldecode "$ECH_PARAM")")\"}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_DOMAIN")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"stream-up\"${BASE_EXTRA_JSON:+,\"extra\":${BASE_EXTRA_JSON}}}}"
 
   if [[ -n "$BASE_EXTRA_JSON" ]]; then
     rawurlencode "${BASE_EXTRA_JSON%\}},${download}}"

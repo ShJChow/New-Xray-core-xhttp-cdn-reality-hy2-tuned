@@ -20,7 +20,7 @@ build_reality_download_extra() {
   local download_domain="$2"
   local download_json extra_json
 
-  download_json="\"downloadSettings\":{\"address\":\"$(json_escape "$download_ip")\",\"port\":443,\"network\":\"xhttp\",\"security\":\"reality\",\"realitySettings\":{\"show\":false,\"serverName\":\"$(json_escape "$download_domain")\",\"fingerprint\":\"chrome\",\"shortId\":\"$(json_escape "$SHORT_ID")\",\"publicKey\":\"$(json_escape "$PUBLIC_KEY")\"},\"xhttpSettings\":{\"host\":\"\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"auto\"${NESTED_EXTRA_FIELD}}}"
+  download_json="\"downloadSettings\":{\"address\":\"$(json_escape "$download_ip")\",\"port\":443,\"network\":\"xhttp\",\"security\":\"reality\",\"realitySettings\":{\"show\":false,\"serverName\":\"$(json_escape "$download_domain")\",\"fingerprint\":\"chrome\",\"shortId\":\"$(json_escape "$SHORT_ID")\",\"publicKey\":\"$(json_escape "$PUBLIC_KEY")\"},\"xhttpSettings\":{\"host\":\"\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"stream-up\"${NESTED_EXTRA_FIELD}}}"
 
   if [[ -n "$BASE_EXTRA_JSON" ]]; then
     extra_json="${BASE_EXTRA_JSON%\}},${download_json}}"

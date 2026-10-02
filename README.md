@@ -288,6 +288,7 @@ flowchart TD
 | **Mihomo TUN 按客户端平台自适应** | v4.9.57 | 订阅目录新增 `mihomo-full-windows.yaml` / `-linux.yaml` / `-macos.yaml` / `-android.yaml`，只改各平台确有区别的 TUN 字段：Windows 开 `strict-route`；Linux 开 `strict-route` + `auto-redirect`；macOS / Android 保持基础值（macOS 不支持 strict-route，Android 由系统 VPN 接管路由）。原 `mihomo-full.yaml` 不变；`xh resub` 与安装均会生成 |
 | **全部 XHTTP 节点 mode 统一为 stream-up** | v4.9.58 | 按用户要求，CDN-H2 / CDN-H3 及其余原为 `auto` 的节点（Reality-XHTTP、CDN/Reality 分离节点）的客户端链接与 Mihomo 订阅统一写 `mode=stream-up`（直连节点原本就是）。Cloudflare 开启 gRPC / WebSockets 后实测（单次 20MB 上传，样本很小）：stream-up 可用，下载不受影响，但 6 次上传中 2 次未完整传完（auto 为 0/6），H3 上传偏低且波动大。若某网络上传卡住，把该节点的 `mode=stream-up` 改回 `auto` 即可，服务端无需改动。已安装机器执行 `xh resub` 前需先更新 `client-config.txt` 与 Mihomo 文件 |
 | **默认关闭 nginx 访问日志与 Xray 访问日志** | v4.9.59 | 此前 nginx 的 `access_log` 在 http 层默认开启，会把访客 IP、订阅 token 路径与 UA 写进 `access.log`（仅个别 location 单独 `off`）。现 http 层全局 `access_log off`，nginx `error_log` 由 `notice` 改为 `error`，Xray 写 `"access": "none"` 与 `loglevel: error`。**仅新装生效**；已安装机器需手改 `/etc/nginx/nginx.conf` 与 `/usr/local/etc/xray/config.json`（`nginx -t` / `xray -test` 通过后再重载），且旧的 `access.log` 不会被清理。不涉及任何传输参数。 |
+| **下行腿与服务端 mode 统一为 stream-up** | v4.9.60 | 按用户要求，Reality/CDN 分离节点的 `downloadSettings` 下行腿（含 dual-cdn / dual-ip / quic-h3 扩展）与服务端 xhttpSettings 的 `mode` 由 `auto` 改为 `stream-up`，与上行腿一致，消除两腿混用。**未实测**（沿用 v4.9.58 的取舍，若上传/下载卡住，把对应 `mode` 改回 `auto` 即可）。已安装机器需把 `/usr/local/etc/xray/config.json` 中的 `"mode": "auto"` 手改后 `xray -test` 再重启；扩展脚本里节点链接本身的上行 `mode=auto` 未改。 |
 
 ---
 
