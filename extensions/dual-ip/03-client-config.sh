@@ -34,8 +34,8 @@ build_reality_download_extra() {
 EXTRA_V4_DOWN=$(build_reality_download_extra "$IPV4_ADDRESS" "$REALITY_DOMAIN_V4")
 EXTRA_V6_DOWN=$(build_reality_download_extra "$IPV6_ADDRESS" "$REALITY_DOMAIN_V6")
 
-LINE_V4_UP="vless://${UUID2}@${IPV4_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN_V4}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto&extra=${EXTRA_V6_DOWN}#${NODE_V4_UP_TAG}"
-LINE_V6_UP="vless://${UUID2}@${IPV6_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN_V6}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=auto&extra=${EXTRA_V4_DOWN}#${NODE_V6_UP_TAG}"
+LINE_V4_UP="vless://${UUID2}@${IPV4_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN_V4}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=stream-up&extra=${EXTRA_V6_DOWN}#${NODE_V4_UP_TAG}"
+LINE_V6_UP="vless://${UUID2}@${IPV6_URI}:443?encryption=${VLESSENC_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN_V6}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=xhttp&path=${XHTTP_PATH}&mode=stream-up&extra=${EXTRA_V4_DOWN}#${NODE_V6_UP_TAG}"
 
 sed -i "/#${NODE_V4_UP_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${NODE_V6_UP_TAG}\$/d" "$V2RAYN_FILE"

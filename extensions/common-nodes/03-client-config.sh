@@ -22,7 +22,7 @@ QUIC_TWIN_DESC="对应的 TCP 节点是主脚本的 Vless-xhttp-h2-tcp-direct（
 # 02-server-config.sh），因此 sni/host 必须同为 Reality 域名（灰云直连），
 # 否则 TLS 握手落到别的 server_name 上，节点必然不通。ECH 是 Cloudflare CDN
 # 侧的机制，直连节点不适用，已一并去掉。
-LINE_XHTTP_H3="vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${REALITY_DOMAIN}&path=$(rawurlencode "$XHTTP_PATH")&mode=auto${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_XHTTP_H3_TAG}"
+LINE_XHTTP_H3="vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&host=${REALITY_DOMAIN}&path=$(rawurlencode "$XHTTP_PATH")&mode=stream-up${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_XHTTP_H3_TAG}"
 LINE_HY2="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${BASE_SERVER_URI}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0#${NODE_HY2_TAG}"
 
 # 四条删除**无条件执行**：重复运行时先清掉自己上次写的节点，
@@ -60,7 +60,7 @@ build_common_nodes_block() {
     xhttp-opts:
       host: ${REALITY_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: auto
+      mode: stream-up
 EOF
 
   if [[ -n "$XHTTP_EXTRA" ]]; then
