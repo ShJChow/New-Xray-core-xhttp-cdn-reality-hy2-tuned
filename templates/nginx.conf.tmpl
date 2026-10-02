@@ -10,7 +10,7 @@ worker_cpu_affinity auto;
 # 每条连接同时占用「客户端 + 上游」两个描述符，1:1 会在半数连接处触顶。
 worker_rlimit_nofile 131072;
 
-error_log /usr/local/nginx/logs/error.log notice;
+error_log /usr/local/nginx/logs/error.log error;
 pid /run/nginx.pid;
 
 events {
@@ -66,6 +66,8 @@ http {
     open_file_cache_min_uses 2;
     open_file_cache_errors on;
     server_tokens         off;
+    # 隐私：默认 access_log 会把访客 IP、订阅 token 路径和 UA 写进磁盘；各 location 单独的 off 之外，这里全局关闭
+    access_log            off;
     tcp_nodelay           on;
     tcp_nopush            on;
     client_max_body_size  0;

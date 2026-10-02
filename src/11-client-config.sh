@@ -254,7 +254,7 @@ fi
 # WebSockets 后实测（本机经 Cloudflare 回源，单次 20MB 上传）：stream-up 可用、下载不受影响，但 6 次上传中 2 次
 # 未完整传完（auto 为 0/6），H3 上传偏低且波动大（1.4–20 MB/s）。若在某些网络上传卡住，
 # 把该节点链接里的 mode=stream-up 改回 auto（或 packet-up）即可，服务端无需改动。
-# 实测经 Cloudflare 用 stream-up：CDN-TLS 吞吐直接掉到 0、CDN-H3 连接超时。
+# （更早的一次实测曾见 stream-up 经 Cloudflare 吞吐掉到 0、CDN-H3 超时，当时 Cloudflare 尚未开 gRPC / WebSockets；以上面的新结果为准。）
 # Reality 节点也不用改——它的 auto 本来就会选 stream-up（实测 18ms）。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
   H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H3${NODE_SUFFIX}"
