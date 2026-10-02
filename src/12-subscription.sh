@@ -46,7 +46,7 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//' || true
   # v4.9.29：8001 开了 vlessenc（FEATURE_XHTTP_VLESSENC）时小火箭连不上 CDN 节点，不再附带
   if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
-    echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
+    echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up#VLESS-XHTTP-CDN-H2"
   fi
 } > "$SUB_DIR/shadowrocket-raw.txt"
 if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then

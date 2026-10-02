@@ -191,7 +191,7 @@ else
 fi
 
 if [[ "${FEATURE_REALITY_UP_CDN_DOWN:-false}" == true || "${FEATURE_UP_CDN_DOWN_MIHOMO:-false}" == true ]]; then
-  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}${REALITY_SPX_Q}&type=xhttp&path=${XHTTP_PATH}&mode=auto${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
+  REALITY_UP_CDN_DOWN_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:443?encryption=${XHTTP_ENCRYPTION}&security=reality&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h2&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}${REALITY_SPX_Q}&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_SPLIT_EXTRA_ENC:+&extra=${XPAD_SPLIT_EXTRA_ENC}}#VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}"
 else
   REALITY_UP_CDN_DOWN_NODE_LINE=""
 fi
@@ -206,7 +206,7 @@ fi
 REALITY_DOWNLOAD_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${VPS_IP//:/%3A}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22serverName%22%3A%22${REALITY_DOMAIN}%22%2C%22fingerprint%22%3A%22chrome%22%2C%22publicKey%22%3A%22${PUBLIC_KEY}%22%2C%22shortId%22%3A%22${SHORT_ID}%22%2C%22spiderX%22%3A%22%22%7D%2C%22xhttpSettings%22%3A%7B%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A${XPAD_EXTRA_ENC}%7D%7D"
 XPAD_REV_SPLIT_EXTRA_ENC="${XPAD_CDN_EXTRA_ENC%\%7D}%2C${REALITY_DOWNLOAD_ENC}%7D"
 if [[ "${FEATURE_CDN_UP_REALITY_DOWN:-false}" == true ]]; then
-  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
+  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
 else
   CDN_UP_REALITY_DOWN_NODE_LINE=""
 fi
@@ -249,7 +249,11 @@ fi
 #   h3-direct auto/packet-up 69ms → stream-up 18ms
 # 吞吐不受影响（337 / 356 Mbps）。
 #
-# **CDN 节点绝不能这样改**：packet-up 存在的理由就是 CDN 不支持流式请求体。
+# v4.9.58：按用户要求 CDN 节点（H2 / H3）及其余 auto 节点也统一为 stream-up。
+# 此前注释写「CDN 绝不能这样改：packet-up 存在的理由是 CDN 不支持流式请求体」。Cloudflare 开启 gRPC /
+# WebSockets 后实测（本机经 Cloudflare 回源，单次 20MB 上传）：stream-up 可用、下载不受影响，但 6 次上传中 2 次
+# 未完整传完（auto 为 0/6），H3 上传偏低且波动大（1.4–20 MB/s）。若在某些网络上传卡住，
+# 把该节点链接里的 mode=stream-up 改回 auto（或 packet-up）即可，服务端无需改动。
 # 实测经 Cloudflare 用 stream-up：CDN-TLS 吞吐直接掉到 0、CDN-H3 连接超时。
 # Reality 节点也不用改——它的 auto 本来就会选 stream-up（实测 18ms）。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
@@ -260,7 +264,7 @@ fi
 
 # h2-cdn: 经 CDN 的 TCP(h2) 链路（默认关闭，FEATURE_CDN_H2=true 时启用）
 if [[ "$FEATURE_CDN_H2" == true ]]; then
-  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
+  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
 else
   H2_CDN_NODE_LINE=""
 fi
@@ -271,7 +275,7 @@ fi
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
 # 默认开启（FEATURE_CDN_H3=false 可关闭）。
 if [[ "${FEATURE_CDN_H3:-true}" == true ]]; then
-  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 else
   H3_CDN_NODE_LINE=""
 fi
