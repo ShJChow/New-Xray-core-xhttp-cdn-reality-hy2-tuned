@@ -250,6 +250,7 @@ cmd_sub() {
   echo "  Shadowrocket (小火箭专属): ${base}/shadowrocket.txt"
   echo "  明文节点（备选）:        ${base}/v2rayn-raw.txt"
   echo "  Mihomo 完整分流:         ${base}/mihomo-full.yaml"
+  echo "  Mihomo 完整分流(TUN 按平台): ${base}/mihomo-full-{windows,linux,macos,android}.yaml"
   echo "  Mihomo 纯节点:           ${base}/mihomo-nodes.yaml"
   echo ""
   echo -e "${YELLOW}  订阅拉不到节点时，先在该设备的浏览器里直接打开上面的链接：${NC}"
@@ -260,6 +261,24 @@ cmd_sub() {
     echo -e "${YELLOW}[+] V2RayN 全量订阅二维码${NC}"
     qrencode -t ANSIUTF8 -m 1 "${base}/v2rayn.txt"
   fi
+}
+
+# 按客户端平台生成 TUN 自适应的 Mihomo 完整分流配置（mihomo-full-<平台>.yaml）。
+# 基础文件的 tun 段 strict-route: false、stack: mixed；各平台只改确有区别的字段：
+#   windows：strict-route 开（防止 DNS 经物理网卡泄漏，Wintun 支持）
+#   linux  ：strict-route + auto-redirect 开（nftables 重定向，TCP 不再进用户态协议栈，更省 CPU）
+#   macos / android：保持基础值（macOS 不支持 strict-route，Android 由 VpnService 接管路由）
+# 用法：mihomo_tun_variants <基础 yaml> <输出目录>
+mihomo_tun_variants() {
+  local src="$1" outdir="$2" p
+  [[ -s "$src" ]] || return 0
+  for p in windows linux macos android; do
+    case "$p" in
+      windows) sed 's/^  strict-route: false$/  strict-route: true/' "$src" > "${outdir}/mihomo-full-${p}.yaml" ;;
+      linux)   sed -e 's/^  strict-route: false$/  strict-route: true\n  auto-redirect: true/' "$src" > "${outdir}/mihomo-full-${p}.yaml" ;;
+      *)       cp "$src" "${outdir}/mihomo-full-${p}.yaml" ;;
+    esac
+  done
 }
 
 # 手工改过 ~/client-config.txt 后，用它把订阅文件重新生成，无需重跑安装脚本
@@ -286,6 +305,7 @@ cmd_resub() {
   base64 "${home}/client-config.txt" | tr -d '\n' > "${subdir}/v2rayn.txt"
   [[ -f "${home}/client-config-mihomo-full.yaml" ]]  && cp "${home}/client-config-mihomo-full.yaml"  "${subdir}/mihomo-full.yaml"
   [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
+  mihomo_tun_variants "${home}/client-config-mihomo-full.yaml" "${subdir}"
 
   # 重新生成 Shadowrocket 专属与 v2rayN TUN 优化订阅
   {

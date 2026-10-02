@@ -16,7 +16,26 @@ SUB_DIR="/usr/local/nginx/html/sub/${SUB_TOKEN}"
 install -d -m 755 "$SUB_DIR"
 cp "$USER_HOME/client-config.txt" "$SUB_DIR/v2rayn-raw.txt"
 base64 "$USER_HOME/client-config.txt" | tr -d '\n' > "$SUB_DIR/v2rayn.txt"
+# 按客户端平台生成 TUN 自适应的 Mihomo 完整分流配置（mihomo-full-<平台>.yaml）。
+# 基础文件的 tun 段 strict-route: false、stack: mixed；各平台只改确有区别的字段：
+#   windows：strict-route 开（防止 DNS 经物理网卡泄漏，Wintun 支持）
+#   linux  ：strict-route + auto-redirect 开（nftables 重定向，TCP 不再进用户态协议栈，更省 CPU）
+#   macos / android：保持基础值（macOS 不支持 strict-route，Android 由 VpnService 接管路由）
+# 用法：mihomo_tun_variants <基础 yaml> <输出目录>
+mihomo_tun_variants() {
+  local src="$1" outdir="$2" p
+  [[ -s "$src" ]] || return 0
+  for p in windows linux macos android; do
+    case "$p" in
+      windows) sed 's/^  strict-route: false$/  strict-route: true/' "$src" > "${outdir}/mihomo-full-${p}.yaml" ;;
+      linux)   sed -e 's/^  strict-route: false$/  strict-route: true\n  auto-redirect: true/' "$src" > "${outdir}/mihomo-full-${p}.yaml" ;;
+      *)       cp "$src" "${outdir}/mihomo-full-${p}.yaml" ;;
+    esac
+  done
+}
+
 cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
+mihomo_tun_variants "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
 # Shadowrocket 专属订阅（包含小火箭完全兼容的 REALITY、Hy2；若启用 FEATURE_CDN_H2 则附带）
@@ -104,6 +123,7 @@ ${V2RAYN_RAW_SUB_URL}
 
 Mihomo 完整分流订阅:
 $MIHOMO_FULL_SUB_URL
+（TUN 按平台自适应：把文件名换成 mihomo-full-windows.yaml / -linux.yaml / -macos.yaml / -android.yaml）
 
 Mihomo 纯节点订阅:
 $MIHOMO_NODES_SUB_URL
