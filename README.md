@@ -186,31 +186,37 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ## 三、常驻管理命令 `xh`
 
-部署完成后，系统已常驻快捷管理工具 `xh`，随时在终端输入即可调出交互菜单：
+终端直接输入 `xh` 即可进入交互式管理菜单：
+
+```text
+=== xray-xhttp 管理菜单 ===
+  1) 查看服务与流控状态          14) CDN ECH 加密 SNI 开关
+  2) 查看节点参数与客户端配置      15) TCP ECN 拥塞通知开关
+  3) 查看订阅链接与二维码        16) CDN TCP(h2) 节点开关
+  4) 重启服务                  17) CDN QUIC(h3) 节点开关
+  5) 查看日志 (xray)            18) 出站分流 (屏蔽回国 IP / 广告域名)
+  6) 更新 Xray-core            19) Reality 时间差校验 (maxTimeDiff)
+  7) 系统层调优 (show/on/off)   20) 备用节点 XHTTP-Direct-H2 (TCP直连)
+  8) TCP Brutal 极速加速        21) Hysteria2-Obfs (混淆节点)
+  9) 保活守护开关              22) 上行 Reality / 下行 CDN 分离节点
+ 10) 内核自动更新开关           23) 备用 上行 CDN / 下行 Reality
+ 11) UDP 节点自检 (diag)        24) Hysteria2 总开关 (UDP 443)
+ 12) sysctl 冲突检测 (conflict)  25) 卸载
+ 13) Reality 兼容模式 (1.8.0)    0) 退出
+```
+
+常用命令行快捷指令（免进入菜单）：
 
 ```bash
-xh                     # 进入交互式管理主菜单
-xh status              # 查看服务运行状态、监听端口与调优状态
-xh info                # 查看节点参数与客户端链接（含 minClientVer 状态）
-xh sub                 # 查看/输出订阅链接与订阅二维码
-xh resub               # 修改配置后一键重新生成全量订阅
-xh minversion [on|off|<ver>] # Reality 最低版本控制（默认 1.8.0 兼容 mihomo/Clash）
-xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
-xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
-xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
-xh cdnh3 [show|on|off] # CDN QUIC(h3) 默认节点开关与订阅同步
-xh h2direct [show|on|off]   # 备用节点 XHTTP-Direct-H2（TCP 直连）
-xh hy2 [show|on|off]        # Hysteria2 总开关（Hysteria2-H3-Direct，UDP 443，默认不装）
-xh hy2obfs [show|on|off]    # Hysteria2-Obfs（UDP salamander 混淆，需先开 Hysteria2）
-xh split [show|reality-up on|off|cdn-up on|off]  # 备用节点 上下行分离两条
-xh block [show|cn on|off|ads on|off] # 出站屏蔽回国 IP / 广告域名（默认关闭）
-xh timediff [show|on [毫秒]|off] # Reality maxTimeDiff 时间差校验（默认关闭）
-xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
-xh tuning [win|mac|sb] # 查看对应系统的客户端千兆调优代码
-xh conflict            # sysctl 内核参数冲突检测与一键自愈
-xh log [xray|nginx]    # 实时查看服务运行与连接日志
-xh update [--auto]     # 一键升级 Xray-core（失败自动回滚）
-xh start | stop | restart # 启停与重启服务
+xh status                      # 查看服务运行状态、监听端口与调优状态
+xh info / xh sub / xh resub    # 节点参数 / 查看订阅与二维码 / 重新生成订阅
+xh update [<ver>] [--auto]     # 更新或指定 Xray-core 版本（自检失败自动回滚）
+xh hy2 [on|off]                # Hysteria2 总开关（UDP 443，默认不装）
+xh hy2obfs [on|off]            # Hysteria2-Obfs 混淆节点（UDP 8443）
+xh cdnh2 / xh cdnh3 [on|off]   # CDN 节点开关（TCP-h2 / QUIC-h3）
+xh split [reality-up|cdn-up]   # 上下行分离节点开关
+xh start | stop | restart      # 启停与重启核心服务
+xh log [xray|nginx]            # 实时查看运行与连接日志
 ```
 
 ---

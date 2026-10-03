@@ -137,29 +137,37 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ## 3. Resident Management Command `xh`
 
+Run `xh` directly in terminal to open the interactive management menu:
+
+```text
+=== xray-xhttp Management Menu ===
+  1) Service & Tuning Status     14) CDN ECH Encrypted SNI Switch
+  2) Node Parameters & Config    15) TCP ECN Congestion Switch
+  3) Subscription & QR Code      16) CDN TCP(h2) Node Switch
+  4) Restart Services            17) CDN QUIC(h3) Node Switch
+  5) View Logs (xray)            18) Outbound Filter (Block CN/Ads)
+  6) Update Xray-core            19) Reality maxTimeDiff Check
+  7) System Layer Tuning         20) Spare XHTTP-Direct-H2 Node
+  8) TCP Brutal Acceleration     21) Hysteria2-Obfs Node Switch
+  9) Daemon Keepalive Switch     22) Reality-Up / CDN-Down Split Node
+ 10) Weekly Core Auto-Update     23) Spare CDN-Up / Reality-Down Node
+ 11) UDP Diagnostics (diag)      24) Hysteria2 Master Switch (UDP 443)
+ 12) sysctl Conflict Check       25) Uninstall
+ 13) Reality Compatibility (1.8)  0) Exit
+```
+
+Common CLI shortcut commands (without opening the menu):
+
 ```bash
-xh                     # Open interactive management menu
-xh status              # Show service status, listening ports, tuning stats
-xh info                # Show node parameters and subscription links
-xh sub                 # Output subscription links and terminal QR code
-xh resub               # Regenerate all client subscriptions
-xh minversion [on|off] # Reality minimum client version control
-xh ech [show|on|off]   # Cloudflare CDN ECH toggle & subscription sync
-xh ecn [show|on|off]   # TCP ECN toggle & status inspection
-xh cdnh2 [show|on|off] # CDN TCP(h2) fallback node toggle
-xh cdnh3 [show|on|off] # CDN QUIC(h3) default node toggle
-xh h2direct [show|on|off]   # spare node XHTTP-Direct-H2 (TCP direct)
-xh hy2 [show|on|off]        # Hysteria2 master switch (Hysteria2-H3-Direct, UDP 443, not installed by default)
-xh hy2obfs [show|on|off]    # Hysteria2-Obfs (UDP, salamander; needs Hysteria2 first)
-xh split [show|reality-up on|off|cdn-up on|off]  # spare nodes: split up/down pair
-xh block [show|cn on|off|ads on|off] # reject outbound CN IPs / ad domains (default off)
-xh timediff [show|on [ms]|off] # Reality maxTimeDiff check (default off)
-xh brutal              # TCP Brutal status and bandwidth rate setting
-xh tuning [win|mac|sb] # Display client OS gigabit tuning commands
-xh conflict            # sysctl conflict detection and self-healing
-xh log [xray|nginx]    # Live logs inspection
-xh update [--auto]     # Update Xray-core with automated rollback
-xh restart             # Restart xray and nginx services
+xh status                      # Service status, listening ports & tuning stats
+xh info / xh sub / xh resub    # Node params / Subscription & QR / Regenerate sub
+xh update [<ver>] [--auto]     # Update or specify Xray-core version
+xh hy2 [on|off]                # Hysteria2 master switch (UDP 443)
+xh hy2obfs [on|off]            # Hysteria2-Obfs node switch (UDP 8443)
+xh cdnh2 / xh cdnh3 [on|off]   # CDN node switches (TCP-h2 / QUIC-h3)
+xh split [reality-up|cdn-up]   # Split-routing node switches
+xh start | stop | restart      # Start, stop, or restart services
+xh log [xray|nginx]            # View real-time service logs
 ```
 
 ---
