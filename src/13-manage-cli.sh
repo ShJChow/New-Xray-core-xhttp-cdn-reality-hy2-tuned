@@ -2614,7 +2614,10 @@ cmd_menu() {
     echo " 22) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
     echo " 23) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
     echo " 24) Hysteria2 总开关 Hysteria2-H3-Direct（默认不装）(show / on / off)"
-    echo " 25) 卸载"
+    echo " 25) 重新生成全量订阅 (resub)"
+    echo " 26) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
+    echo " 27) Nginx 版本检查与升级 (nginx: show / check / update)"
+    echo " 28) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -2642,7 +2645,10 @@ cmd_menu() {
       22) read -rp "  show / on / off: " a; ( cmd_split reality-up "${a:-show}" ) ;;
       23) read -rp "  show / on / off: " a; ( cmd_split cdn-up "${a:-show}" ) ;;
       24) read -rp "  show / on / off: " a; ( cmd_hy2 "${a:-show}" ) ;;
-      25) cmd_uninstall; break ;;
+      25) cmd_resub ;;
+      26) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
+      27) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
+      28) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2659,6 +2665,7 @@ xray-xhttp 管理命令
   xh sub                订阅链接与二维码
   xh resub              按当前 client-config.txt 重新生成订阅文件
   xh diag               UDP / HTTP3 节点连不上时的服务端侧自检
+  xh conflict           sysctl 冲突与覆盖检测
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [<ver>] [--auto] 更新或指定 Xray-core 版本（自检失败自动回滚）

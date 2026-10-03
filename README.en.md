@@ -141,34 +141,56 @@ Run `xh` directly in terminal to open the interactive management menu:
 
 ```text
 === xray-xhttp Management Menu ===
-  1) Service & Tuning Status     14) CDN ECH Encrypted SNI Switch
-  2) Node Parameters & Config    15) TCP ECN Congestion Switch
-  3) Subscription & QR Code      16) CDN TCP(h2) Node Switch
-  4) Restart Services            17) CDN QUIC(h3) Node Switch
-  5) View Logs (xray)            18) Outbound Filter (Block CN/Ads)
-  6) Update Xray-core            19) Reality maxTimeDiff Check
-  7) System Layer Tuning         20) Spare XHTTP-Direct-H2 Node
-  8) TCP Brutal Acceleration     21) Hysteria2-Obfs Node Switch
-  9) Daemon Keepalive Switch     22) Reality-Up / CDN-Down Split Node
- 10) Weekly Core Auto-Update     23) Spare CDN-Up / Reality-Down Node
- 11) UDP Diagnostics (diag)      24) Hysteria2 Master Switch (UDP 443)
- 12) sysctl Conflict Check       25) Uninstall
- 13) Reality Compatibility (1.8)  0) Exit
+  1) Service & Tuning Status     15) TCP ECN Congestion Switch
+  2) Node Parameters & Config    16) CDN TCP(h2) Node Switch
+  3) Subscription & QR Code      17) CDN QUIC(h3) Node Switch
+  4) Restart Services            18) Outbound Filter (Block CN/Ads)
+  5) View Logs (xray)            19) Reality maxTimeDiff Check
+  6) Update Xray-core            20) Spare XHTTP-Direct-H2 Node
+  7) System Layer Tuning         21) Hysteria2-Obfs Node Switch
+  8) TCP Brutal Acceleration     22) Reality-Up / CDN-Down Split Node
+  9) Daemon Keepalive Switch     23) Spare CDN-Up / Reality-Down Node
+ 10) Weekly Core Auto-Update     24) Hysteria2 Master Switch (UDP 443)
+ 11) UDP Diagnostics (diag)      25) Regenerate All Subscriptions (resub)
+ 12) sysctl Conflict Check       26) Certificate Mode / DNS-01 (cert)
+ 13) Reality Compatibility (1.8) 27) Nginx Version Check & Upgrade (nginx)
+ 14) CDN ECH Encrypted SNI Switch 28) Uninstall
+                                 0) Exit
 ```
 
-Common CLI shortcut commands (without opening the menu):
+#### Complete CLI Shortcuts Matrix (Non-Interactive)
 
-```bash
-xh status                      # Service status, listening ports & tuning stats
-xh info / xh sub / xh resub    # Node params / Subscription & QR / Regenerate sub
-xh update [<ver>] [--auto]     # Update or specify Xray-core version
-xh hy2 [on|off]                # Hysteria2 master switch (UDP 443)
-xh hy2obfs [on|off]            # Hysteria2-Obfs node switch (UDP 8443)
-xh cdnh2 / xh cdnh3 [on|off]   # CDN node switches (TCP-h2 / QUIC-h3)
-xh split [reality-up|cdn-up]   # Split-routing node switches
-xh start | stop | restart      # Start, stop, or restart services
-xh log [xray|nginx]            # View real-time service logs
-```
+| Category | Command | Menu # | Description |
+| :--- | :--- | :---: | :--- |
+| **Status & Subs** | `xh status` | 1 | Show service status, listening ports, TCP/BBR tuning stats & versions |
+| | `xh info` | 2 | Show node parameters, raw links, and client configurations |
+| | `xh sub` | 3 | Show subscription URLs and terminal QR codes |
+| | `xh resub` | 25 | Regenerate all subscription files based on current configuration |
+| | `xh diag` | 11 | Perform server-side UDP/HTTP3 and certificate connectivity diagnostics |
+| | `xh conflict` | 12 | Check for conflicting or overriding sysctl settings |
+| | `xh version` | — | Display Xray-core and xh management script versions |
+| **Operations** | `xh start` \| `stop` \| `restart` | 4 | Start, stop, or restart all core services |
+| | `xh log [xray\|nginx] [lines]` | 5 | View real-time service and connection logs |
+| | `xh update [<ver>] [--auto]` | 6 | Update or install specific Xray-core version (auto-rollback on check failure) |
+| | `xh keepalive [on\|off\|show]` | 9 | Service watchdog daemon and automatic crash recovery switch |
+| | `xh autoupdate [on\|off\|show]` | 10 | Weekly scheduled Xray-core auto-update switch |
+| | `xh cert [show\|dnscf]` | 26 | Show cert renewal mode / switch to Cloudflare DNS-01 |
+| | `xh nginx [show\|check\|update]` | 27 | Check Nginx mainline version and perform smooth upgrade (PGP-verified) |
+| | `xh guard` | — | Health check & self-healing daemon runner (invoked by cron) |
+| | `xh uninstall` | 28 | Completely uninstall all components and purge configurations |
+| **Network & Tuning** | `xh tuning [show\|on\|off\|win\|mac\|linux\|sb]` | 7 | System BBR+fq tuning / output client-side acceleration commands |
+| | `xh brutal [show\|on\|off\|speed]` | 8 | TCP Brutal congestion control switch / rate adjustments |
+| | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality minimum client version control (default 1.8.0 for Clash/sing-box) |
+| | `xh ech [show\|on\|off]` | 14 | Cloudflare CDN ECH (Encrypted SNI) switch & subscription sync |
+| | `xh ecn [show\|on\|off]` | 15 | TCP ECN (Explicit Congestion Notification) switch and status |
+| | `xh block [show\|cn on\|off\|ads on\|off]` | 18 | Outbound routing filter: block Mainland China IPs / Ads domains |
+| | `xh timediff [show\|on [ms]\|off]` | 19 | Reality client-server maxTimeDiff tolerance control |
+| **Node Switches** | `xh cdnh2 [show\|on\|off]` | 16 | Enable / disable CDN TCP(h2) node |
+| | `xh cdnh3 [show\|on\|off]` | 17 | Enable / disable CDN QUIC(h3) node |
+| | `xh h2direct [show\|on\|off]` | 20 | Enable / disable spare direct TCP node (XHTTP-Direct-H2) |
+| | `xh hy2obfs [show\|on\|off]` | 21 | Enable / disable Hysteria2-Obfs obfuscated node (UDP 8443) |
+| | `xh split [show\|reality-up\|cdn-up]` | 22, 23 | Split-routing node switches (Reality-up enabled by default) |
+| | `xh hy2 [show\|on\|off]` | 24 | Hysteria2 direct node master switch (UDP 443, not installed by default) |
 
 ---
 

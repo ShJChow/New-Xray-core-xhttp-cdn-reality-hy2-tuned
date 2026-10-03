@@ -190,34 +190,56 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ```text
 === xray-xhttp 管理菜单 ===
-  1) 查看服务与流控状态          14) CDN ECH 加密 SNI 开关
-  2) 查看节点参数与客户端配置      15) TCP ECN 拥塞通知开关
-  3) 查看订阅链接与二维码        16) CDN TCP(h2) 节点开关
-  4) 重启服务                  17) CDN QUIC(h3) 节点开关
-  5) 查看日志 (xray)            18) 出站分流 (屏蔽回国 IP / 广告域名)
-  6) 更新 Xray-core            19) Reality 时间差校验 (maxTimeDiff)
-  7) 系统层调优 (show/on/off)   20) 备用节点 XHTTP-Direct-H2 (TCP直连)
-  8) TCP Brutal 极速加速        21) Hysteria2-Obfs (混淆节点)
-  9) 保活守护开关              22) 上行 Reality / 下行 CDN 分离节点
- 10) 内核自动更新开关           23) 备用 上行 CDN / 下行 Reality
- 11) UDP 节点自检 (diag)        24) Hysteria2 总开关 (UDP 443)
- 12) sysctl 冲突检测 (conflict)  25) 卸载
- 13) Reality 兼容模式 (1.8.0)    0) 退出
+  1) 查看服务与流控状态          15) TCP ECN 拥塞通知开关
+  2) 查看节点参数与客户端配置      16) CDN TCP(h2) 节点开关
+  3) 查看订阅链接与二维码        17) CDN QUIC(h3) 节点开关
+  4) 重启服务                  18) 出站分流 (屏蔽回国 IP / 广告域名)
+  5) 查看日志 (xray)            19) Reality 时间差校验 (maxTimeDiff)
+  6) 更新 Xray-core            20) 备用节点 XHTTP-Direct-H2 (TCP 直连)
+  7) 系统层调优 (show/on/off)   21) Hysteria2-Obfs (混淆节点)
+  8) TCP Brutal 极速加速        22) 上行 Reality / 下行 CDN 分离节点
+  9) 保活开关                  23) 备用节点 上行 CDN / 下行 Reality
+ 10) 内核自动更新开关           24) Hysteria2 总开关 (UDP 443)
+ 11) UDP 节点自检 (diag)        25) 重新生成全量订阅 (resub)
+ 12) sysctl 冲突检测 (conflict)  26) 证书续期方式 / DNS-01 (cert)
+ 13) Reality 兼容模式 (1.8.0)    27) Nginx 版本检查与升级 (nginx)
+ 14) CDN ECH 加密 SNI 开关      28) 卸载
+                                0) 退出
 ```
 
-常用命令行快捷指令（免进入菜单）：
+#### 全量 CLI 快捷指令速查表（免进菜单）
 
-```bash
-xh status                      # 查看服务运行状态、监听端口与调优状态
-xh info / xh sub / xh resub    # 节点参数 / 查看订阅与二维码 / 重新生成订阅
-xh update [<ver>] [--auto]     # 更新或指定 Xray-core 版本（自检失败自动回滚）
-xh hy2 [on|off]                # Hysteria2 总开关（UDP 443，默认不装）
-xh hy2obfs [on|off]            # Hysteria2-Obfs 混淆节点（UDP 8443）
-xh cdnh2 / xh cdnh3 [on|off]   # CDN 节点开关（TCP-h2 / QUIC-h3）
-xh split [reality-up|cdn-up]   # 上下行分离节点开关
-xh start | stop | restart      # 启停与重启核心服务
-xh log [xray|nginx]            # 实时查看运行与连接日志
-```
+| 类别 | 快捷指令 | 对应菜单 | 功能说明 |
+| :--- | :--- | :---: | :--- |
+| **状态与订阅** | `xh status` | 1 | 查看服务运行状态、监听端口、TCP/BBR 流控参数与版本 |
+| | `xh info` | 2 | 查看节点连接参数与客户端节点链接 |
+| | `xh sub` | 3 | 查看订阅链接与终端二维码 |
+| | `xh resub` | 25 | 按当前配置重新生成全量订阅文件并重启分发服务 |
+| | `xh diag` | 11 | UDP / HTTP3 连通性自检与证书检测 |
+| | `xh conflict` | 12 | sysctl 冲突与覆盖项排查 |
+| | `xh version` | — | 查看 Xray 内核与 xh 管理脚本版本 |
+| **服务运维** | `xh start` \| `stop` \| `restart` | 4 | 启动 / 停止 / 重启全部核心服务 |
+| | `xh log [xray\|nginx] [行数]` | 5 | 查看实时运行与连接日志 |
+| | `xh update [<ver>] [--auto]` | 6 | 升级或指定 Xray-core 版本（自检失败自动回滚） |
+| | `xh keepalive [on\|off\|show]` | 9 | 服务守护进程保活与异常自动拉起开关 |
+| | `xh autoupdate [on\|off\|show]` | 10 | 每周自动升级 Xray-core 开关（带版本检查提醒） |
+| | `xh cert [show\|dnscf]` | 26 | 证书续期方式查看 / 切换 Cloudflare DNS-01（走 CDN 代理防失效） |
+| | `xh nginx [show\|check\|update]` | 27 | Nginx mainline 检查与平滑升级（官方 PGP 验签） |
+| | `xh guard` | — | 健康检查与故障自愈拉起（cron 定时任务调用） |
+| | `xh uninstall` | 28 | 彻底卸载全部组件并清理配置 |
+| **网络与流控** | `xh tuning [show\|on\|off\|win\|mac\|linux\|sb]` | 7 | 系统级 BBR+fq 流控调优 / 输出多平台客户端调优指令 |
+| | `xh brutal [show\|on\|off\|speed]` | 8 | TCP Brutal 极速拥塞控制 / 调节速率 |
+| | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality 客户端最低版本限制（默认 1.8.0 兼容 Clash/sing-box） |
+| | `xh ech [show\|on\|off]` | 14 | Cloudflare CDN ECH (加密 SNI) 开关与订阅同步 |
+| | `xh ecn [show\|on\|off]` | 15 | TCP ECN (显式拥塞通知) 开关与状态查看 |
+| | `xh block [show\|cn on\|off\|ads on\|off]` | 18 | 出站屏蔽回国 IP / 广告域名 |
+| | `xh timediff [show\|on [ms]\|off]` | 19 | Reality 客户端与服务端最大时间差校验 (maxTimeDiff) |
+| **节点开关** | `xh cdnh2 [show\|on\|off]` | 16 | 开启 / 关闭 CDN TCP(h2) 节点 |
+| | `xh cdnh3 [show\|on\|off]` | 17 | 开启 / 关闭 CDN QUIC(h3) 节点 |
+| | `xh h2direct [show\|on\|off]` | 20 | 开启 / 关闭备用直连 TCP 节点 (XHTTP-Direct-H2) |
+| | `xh hy2obfs [show\|on\|off]` | 21 | 开启 / 关闭 Hysteria2-Obfs 混淆节点 (UDP 8443) |
+| | `xh split [show\|reality-up\|cdn-up]` | 22, 23 | 上下行分离节点开关（上行 Reality 默认开，上行 CDN 备用） |
+| | `xh hy2 [show\|on\|off]` | 24 | Hysteria2 直连节点总开关 (UDP 443，默认不装) |
 
 ---
 
