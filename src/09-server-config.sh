@@ -390,7 +390,7 @@ xray_hy2_h3_inbound() {
 ,
         {
             "listen": "0.0.0.0",
-            "tag": "hy2-h3-443",
+            "tag": "hy2-h3",
             "port": ${HY2_H3_PORT},
             "protocol": "hysteria",
             "settings": {

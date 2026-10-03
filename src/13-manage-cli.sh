@@ -216,11 +216,11 @@ cmd_info() {
   fi
   if [[ "${FEATURE_HY2:-false}" == true ]]; then
     if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-      echo "  Hysteria2-H3:    UDP ${HY2_H3_PORT:-443}（无混淆，标准 HTTP/3 形态）"
+      echo "  Hysteria2-H3:    UDP ${HY2_H3_PORT}（无混淆，随机端口）"
       echo "    认证密码:      ${HY2_PASSWORD}"
     fi
     if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
-      echo "  Hysteria2-obfs:  UDP ${HY2_PORT:-8443}（同一认证密码）"
+      echo "  Hysteria2-obfs:  UDP ${HY2_PORT}（同一认证密码）"
       echo "    混淆:          salamander（Xray finalmask）"
       echo "    混淆密码:      ${OBFS_PASSWORD}"
       echo "    ↑ 两个密码是独立的值，客户端两处都要填对才能握手"
@@ -515,17 +515,17 @@ cmd_diag() {
       fi
     fi
     if [[ "${FEATURE_HY2:-false}" == true && "${FEATURE_HY2_H3:-false}" == true ]]; then
-      if ss -lnup 2>/dev/null | grep -qE ":${HY2_H3_PORT:-443}\b"; then
-        chk "Hysteria2-H3 已监听 UDP ${HY2_H3_PORT:-443}" 0
+      if ss -lnup 2>/dev/null | grep -qE ":${HY2_H3_PORT}\b"; then
+        chk "Hysteria2-H3 已监听 UDP ${HY2_H3_PORT}" 0
       else
-        chk "Hysteria2-H3 未监听 UDP ${HY2_H3_PORT:-443}" 1 "查 ${MANAGE_CMD} log xray；确认 UDP 443 未被其他进程占用"
+        chk "Hysteria2-H3 未监听 UDP ${HY2_H3_PORT}" 1 "查 ${MANAGE_CMD} log xray；确认 UDP ${HY2_H3_PORT} 未被其他进程占用"
       fi
     fi
     if [[ "${FEATURE_HY2:-false}" == true && "${FEATURE_HY2_OBFS:-false}" == true ]]; then
-      if ss -lnup 2>/dev/null | grep -qE ":${HY2_PORT:-8443}\b"; then
-        chk "Hysteria2 已监听 UDP ${HY2_PORT:-8443}" 0
+      if ss -lnup 2>/dev/null | grep -qE ":${HY2_PORT}\b"; then
+        chk "Hysteria2 已监听 UDP ${HY2_PORT}" 0
       else
-        chk "Hysteria2 未监听 UDP ${HY2_PORT:-8443}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.3.27"
+        chk "Hysteria2 未监听 UDP ${HY2_PORT}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.3.27"
       fi
     fi
   fi
@@ -2275,8 +2275,8 @@ import re, sys
 
 src, dst, store, key, act, port = sys.argv[1:7]
 s = open(src, encoding='utf-8').read()
-# port 参数以 tag: 开头时按入站 tag 判断（hy2h3 在 UDP 443，和 Reality 的 TCP 443 同号，不能按端口认）
-pat = ('"tag"\\s*:\\s*"%s"' % re.escape(port[4:])) if port.startswith('tag:') else ('"port"\\s*:\\s*%s\\b' % re.escape(port))
+# port 参数以 tag: 开头时按入站 tag 判断
+pat = ('"tag"\\s*:\\s*"%s' % re.escape(port[4:])) if port.startswith('tag:') else ('"port"\\s*:\\s*%s\\b' % re.escape(port))
 begin = '        // >>xh:' + key
 end = '        // <<xh:' + key
 has = ('// >>xh:' + key) in s
@@ -2410,7 +2410,7 @@ cmd_backup_server_node() {
   local key="$1" action="${2:-show}" flag name label proto port cur rc
   case "$key" in
     h2direct) flag=FEATURE_H2_DIRECT; name="VLESS-XHTTP-Direct-H2"; label="XHTTP-Direct-H2（TCP 直连，h3-direct 的孪生体）"; proto=tcp; port="${H2_PORT:-8445}" ;;
-    hy2obfs)  flag=FEATURE_HY2_OBFS;  name="Hysteria2-Obfs-Direct"; label="Hysteria2-Obfs-Direct（salamander 混淆）";       proto=udp; port="${HY2_PORT:-8443}" ;;
+    hy2obfs)  flag=FEATURE_HY2_OBFS;  name="Hysteria2-Obfs-Direct"; label="Hysteria2-Obfs-Direct（salamander 混淆）";       proto=udp; port="${HY2_PORT}" ;;
   esac
   cur="${!flag:-false}"
   case "$action" in
@@ -2422,8 +2422,8 @@ cmd_backup_server_node() {
       else
         echo -e "  当前状态:       ${YELLOW}未开启${NC}  (开启后监听 ${proto^^} ${port})"
       fi
-      echo -e "  ${MANAGE_CMD} ${key} on     # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
-      echo -e "  ${MANAGE_CMD} ${key} off    # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      echo -e "  ${MANAGE_CMD} hy2 obfs on   # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
+      echo -e "  ${MANAGE_CMD} hy2 obfs off  # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
       echo ""
       ;;
     on)
@@ -2472,25 +2472,38 @@ cmd_backup_server_node() {
 }
 
 cmd_h2direct() { cmd_backup_server_node h2direct "$@"; }
-cmd_hy2obfs()  { cmd_backup_server_node hy2obfs "$@"; }
+cmd_hy2obfs()  { cmd_hy2 obfs "$@"; }
 
-# Hysteria2 总开关：Hysteria2-H3-Direct（UDP HY2_H3_PORT，默认 443，无混淆）。v4.9.71 起默认不装。
-# 开启 = 加服务端入站 + 放行端口 + 加客户端节点 + 写 FEATURE_HY2 / FEATURE_HY2_H3；
-# 关闭时如果混淆节点还开着，先把它一起关掉（混淆节点依附于这个总开关）。
+# Hysteria2 直连与混淆节点统一管理（UDP 随机高端口）
 cmd_hy2() {
-  local action="${1:-show}" port="${HY2_H3_PORT:-443}" rc
-  case "$action" in
+  local subcmd="${1:-show}" port="${HY2_H3_PORT:-}" obfs_port="${HY2_PORT:-}" rc
+  [[ -z "$port" ]] && port="未设置"
+  [[ -z "$obfs_port" ]] && obfs_port="未设置"
+
+  case "$subcmd" in
+    obfs)
+      shift
+      cmd_backup_server_node hy2obfs "${1:-show}"
+      ;;
     show|status)
       echo ""
-      echo -e "${CYAN}=== Hysteria2（总开关）===${NC}"
+      echo -e "${CYAN}=== Hysteria2 节点与混淆管理 ===${NC}"
       if [[ "${FEATURE_HY2:-false}" == true && "${FEATURE_HY2_H3:-false}" == true ]]; then
-        echo -e "  Hysteria2-H3-Direct:  ${GREEN}已开启${NC}  (UDP ${port})"
+        echo -e "  Hysteria2 直连节点:   ${GREEN}已开启${NC}  (UDP ${port}，随机端口)"
       else
-        echo -e "  Hysteria2-H3-Direct:  ${YELLOW}未开启${NC}  (开启后监听 UDP ${port})"
+        echo -e "  Hysteria2 直连节点:   ${YELLOW}未开启${NC}  (开启后监听 UDP ${port})"
       fi
-      [[ "${FEATURE_HY2_OBFS:-false}" == true ]] && echo -e "  Hysteria2-Obfs-Direct: ${GREEN}已开启${NC}  (UDP ${HY2_PORT:-8443})" || echo -e "  Hysteria2-Obfs-Direct: ${YELLOW}未开启${NC}  (xh hy2obfs on，需要先开本开关)"
-      echo -e "  ${MANAGE_CMD} hy2 on     # 开启：加服务端入站、放行 UDP ${port}、重启 xray、更新订阅"
-      echo -e "  ${MANAGE_CMD} hy2 off    # 关闭：连同混淆节点一起移除（防火墙规则保留）"
+      if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
+        echo -e "  Hysteria2 混淆节点:   ${GREEN}已开启${NC}  (UDP ${obfs_port}，salamander 混淆)"
+      else
+        echo -e "  Hysteria2 混淆节点:   ${YELLOW}未开启${NC}  (开启后监听 UDP ${obfs_port})"
+      fi
+      echo ""
+      echo -e "  常用指令:"
+      echo -e "    ${MANAGE_CMD} hy2 on            # 开启 Hysteria2 直连节点（UDP ${port}）"
+      echo -e "    ${MANAGE_CMD} hy2 off           # 关闭全部 Hysteria2 节点（直连与混淆）"
+      echo -e "    ${MANAGE_CMD} hy2 obfs on       # 开启 Hysteria2 混淆节点（UDP ${obfs_port}）"
+      echo -e "    ${MANAGE_CMD} hy2 obfs off      # 关闭 Hysteria2 混淆节点"
       echo ""
       ;;
     on)
@@ -2501,33 +2514,33 @@ cmd_hy2() {
       [[ -s /etc/ssl/private/fullchain.cer ]] || fail "未找到证书 /etc/ssl/private/fullchain.cer，无法开启 Hysteria2"
       [[ -n "${HY2_PASSWORD:-}" ]] || fail "node.env 里没有 HY2_PASSWORD，无法开启 Hysteria2"
       backup_port_busy udp "$port" && fail "UDP ${port} 已被其他进程占用，未做任何修改"
-      info "正在开启 Hysteria2 ..."
+      info "正在开启 Hysteria2 直连节点 ..."
       backup_node_sync_files "Hysteria2-H3-Direct" on || fail "更新客户端文件失败，未改动服务端（原因见上）"
-      backup_inbound_edit hy2h3 on "tag:hy2-h3-443"; rc=$?
+      backup_inbound_edit hy2h3 on "tag:hy2-h3"; rc=$?
       if [[ $rc -ne 0 && $rc -ne 3 ]]; then
         backup_node_sync_files "Hysteria2-H3-Direct" off >/dev/null 2>&1 || true
         fail "服务端入站写入失败，已撤销客户端文件改动"
       fi
       if ! update_node_env FEATURE_HY2 true || ! update_node_env FEATURE_HY2_H3 true \
          || ! grep -qE "^FEATURE_HY2_H3='?true'?\$" "$NODE_ENV_FILE"; then
-        backup_inbound_edit hy2h3 off "tag:hy2-h3-443" >/dev/null 2>&1 || true
+        backup_inbound_edit hy2h3 off "tag:hy2-h3" >/dev/null 2>&1 || true
         backup_node_sync_files "Hysteria2-H3-Direct" off >/dev/null 2>&1 || true
         fail "无法写入 ${NODE_ENV_FILE}，已撤销本次改动"
       fi
       export FEATURE_HY2=true FEATURE_HY2_H3=true
       backup_open_port udp "$port" qdos
-      info "Hysteria2 已开启（UDP ${port}）。云厂商安全组 / 安全列表需自行放行该端口。"
+      info "Hysteria2 直连节点已开启（UDP ${port}）。云厂商安全组 / 安全列表需自行放行该端口。"
       cmd_resub
       ;;
     off)
       if [[ "${FEATURE_HY2:-false}" != true && "${FEATURE_HY2_H3:-false}" != true ]]; then info "Hysteria2 本来就是关闭状态"; return 0; fi
       backup_store_check
       if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
-        info "混淆节点依附于 Hysteria2 总开关，先一并关闭 ..."
+        info "混淆节点依附于 Hysteria2，先一并关闭 ..."
         cmd_backup_server_node hy2obfs off
       fi
       info "正在关闭 Hysteria2 ..."
-      backup_inbound_edit hy2h3 off "tag:hy2-h3-443"; rc=$?
+      backup_inbound_edit hy2h3 off "tag:hy2-h3"; rc=$?
       [[ $rc -eq 0 || $rc -eq 3 ]] || fail "移除服务端入站失败（原因见上），未改动客户端文件和标志位"
       backup_node_sync_files "Hysteria2-H3-Direct" off || warn "服务端入站已移除，但客户端文件没有同步（原因见上）。请手动检查 client-config.txt 与订阅"
       update_node_env FEATURE_HY2 false
@@ -2536,7 +2549,9 @@ cmd_hy2() {
       info "Hysteria2 已关闭"
       cmd_resub
       ;;
-    *) echo "用法: ${MANAGE_CMD} hy2 [show|on|off]" ;;
+    obfs-on) cmd_backup_server_node hy2obfs on ;;
+    obfs-off) cmd_backup_server_node hy2obfs off ;;
+    *) echo "用法: ${MANAGE_CMD} hy2 [show|on|off|obfs on|obfs off]" ;;
   esac
 }
 
@@ -2610,14 +2625,13 @@ cmd_menu() {
     echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
     echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
     echo " 20) 备用节点 XHTTP-Direct-H2（TCP 直连）(show / on / off)"
-    echo " 21) Hysteria2-Obfs（salamander 混淆，需先开 Hysteria2）(show / on / off)"
+    echo " 21) Hysteria2 节点与混淆管理 (show / on / off / obfs on|off)"
     echo " 22) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
     echo " 23) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
-    echo " 24) Hysteria2 总开关 Hysteria2-H3-Direct（默认不装）(show / on / off)"
-    echo " 25) 重新生成全量订阅 (resub)"
-    echo " 26) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
-    echo " 27) Nginx 版本检查与升级 (nginx: show / check / update)"
-    echo " 28) 卸载"
+    echo " 24) 重新生成全量订阅 (resub)"
+    echo " 25) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
+    echo " 26) Nginx 版本检查与升级 (nginx: show / check / update)"
+    echo " 27) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -2641,14 +2655,31 @@ cmd_menu() {
       18) read -rp "  show / cn on|off / ads on|off: " a; cmd_block ${a:-show} ;;
       19) read -rp "  show / on [毫秒] / off: " a; cmd_timediff ${a:-show} ;;
       20) read -rp "  show / on / off: " a; ( cmd_h2direct "${a:-show}" ) ;;
-      21) read -rp "  show / on / off: " a; ( cmd_hy2obfs "${a:-show}" ) ;;
+      21)
+        echo ""
+        echo -e "${CYAN}--- Hysteria2 操作选择 ---${NC}"
+        echo "  1) 查看 Hysteria2 状态 (show)"
+        echo "  2) 开启 Hysteria2 直连节点 (hy2 on)"
+        echo "  3) 关闭全部 Hysteria2 节点 (hy2 off)"
+        echo "  4) 开启 Hysteria2 混淆节点 (hy2 obfs on)"
+        echo "  5) 关闭 Hysteria2 混淆节点 (hy2 obfs off)"
+        read -rp "请选择 [1-5 或输入指令，直接回车查看状态]: " a
+        case "$a" in
+          1|show|"")            cmd_hy2 show ;;
+          2|on)                 cmd_hy2 on ;;
+          3|off)                cmd_hy2 off ;;
+          4|"obfs on"|obfson)   cmd_hy2 obfs on ;;
+          5|"obfs off"|obfsoff) cmd_hy2 obfs off ;;
+          obfs*)                cmd_hy2 $a ;;
+          *)                    cmd_hy2 "${a:-show}" ;;
+        esac
+        ;;
       22) read -rp "  show / on / off: " a; ( cmd_split reality-up "${a:-show}" ) ;;
       23) read -rp "  show / on / off: " a; ( cmd_split cdn-up "${a:-show}" ) ;;
-      24) read -rp "  show / on / off: " a; ( cmd_hy2 "${a:-show}" ) ;;
-      25) cmd_resub ;;
-      26) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
-      27) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
-      28) cmd_uninstall; break ;;
+      24) cmd_resub ;;
+      25) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
+      26) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
+      27) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2677,8 +2708,8 @@ xray-xhttp 管理命令
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认开启）
   xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口
-  xh hy2 [show|on|off]              Hysteria2 总开关：Hysteria2-H3-Direct（UDP 443，默认不装），关闭时连同混淆节点一起移除
-  xh hy2obfs [show|on|off]          Hysteria2-Obfs（UDP salamander 混淆，默认关闭，需先 xh hy2 on）
+  xh hy2 [show|on|off]              Hysteria2 直连节点开关（随机高 UDP 端口，默认不装），关闭时连同混淆节点一起移除
+  xh hy2 obfs [show|on|off]         Hysteria2 混淆节点（salamander 混淆，需先开 hy2；别名: xh hy2obfs）
   xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；reality-up 默认开启，cdn-up 备用）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
@@ -2730,8 +2761,16 @@ case "${1:-menu}" in
   cdnh2|h2cdn) shift; cmd_cdnh2 "$@" ;;
   cdnh3|h3cdn) shift; cmd_cdnh3 "$@" ;;
   h2direct)   shift; cmd_h2direct "$@" ;;
-  hy2)        shift; cmd_hy2 "$@" ;;
-  hy2obfs)    shift; cmd_hy2obfs "$@" ;;
+  hy2)
+    shift
+    if [[ "${1:-}" == "obfs" ]]; then
+      shift
+      cmd_hy2 obfs "$@"
+    else
+      cmd_hy2 "$@"
+    fi
+    ;;
+  hy2obfs)    shift; cmd_hy2 obfs "$@" ;;
   split)      shift; cmd_split "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;

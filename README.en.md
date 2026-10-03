@@ -127,8 +127,10 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | `FEATURE_CDN_H3` | `true` | Enables QUIC(h3) node over CDN (VLESS-XHTTP-CDN-H3, enabled by default). |
 | `FEATURE_H3_DIRECT` | `true` | Enables direct HTTP/3 (QUIC) node (UDP `H3_PORT`, enabled by default). |
 | `FEATURE_REALITY_UP_CDN_DOWN` | `true` | Enables split-routing node (Up via Reality / Down via CDN, enabled by default). |
-| `FEATURE_HY2` | `false` | Hysteria2 master switch (UDP 443, not installed by default; enable via `xh hy2 on`). |
-| `FEATURE_HY2_OBFS` | `false` | Hysteria2 Salamander obfs node (UDP 8443, needs Hysteria2 first, default off). |
+| `FEATURE_HY2` | `false` | Hysteria2 master switch (not installed by default; enable via `xh hy2 on`). |
+| `FEATURE_HY2_OBFS` | `false` | Hysteria2 Salamander obfs node (needs Hysteria2 first, default off; enable via `xh hy2 obfs on`). |
+| `HY2_PORT` | `random` | Hysteria2-Obfs node UDP port (random port in 10000-65000, customizable). |
+| `HY2_H3_PORT` | `random` | Hysteria2 direct node UDP port (random port in 10000-65000, customizable). |
 | `XRAY_DEFAULT_VERSION` | `26.3.27` | Default official stable Xray-core version, matching the host running environment. |
 | `FEATURE_BRUTAL` | `true` | Enables TCP Brutal congestion control (95% host speed). |
 | `REALITY_MIN_CLIENT_VER` | `1.8.0` | Minimum client version compatibility (`1.8.0` for Mihomo/Clash/sing-box). |
@@ -147,15 +149,14 @@ Run `xh` directly in terminal to open the interactive management menu:
   4) Restart Services            18) Outbound Filter (Block CN/Ads)
   5) View Logs (xray)            19) Reality maxTimeDiff Check
   6) Update Xray-core            20) Spare XHTTP-Direct-H2 Node
-  7) System Layer Tuning         21) Hysteria2-Obfs Node Switch
+  7) System Layer Tuning         21) Hysteria2 & Obfs Management (hy2)
   8) TCP Brutal Acceleration     22) Reality-Up / CDN-Down Split Node
   9) Daemon Keepalive Switch     23) Spare CDN-Up / Reality-Down Node
- 10) Weekly Core Auto-Update     24) Hysteria2 Master Switch (UDP 443)
- 11) UDP Diagnostics (diag)      25) Regenerate All Subscriptions (resub)
- 12) sysctl Conflict Check       26) Certificate Mode / DNS-01 (cert)
- 13) Reality Compatibility (1.8) 27) Nginx Version Check & Upgrade (nginx)
- 14) CDN ECH Encrypted SNI Switch 28) Uninstall
-                                 0) Exit
+ 10) Weekly Core Auto-Update     24) Regenerate All Subscriptions (resub)
+ 11) UDP Diagnostics (diag)      25) Certificate Mode / DNS-01 (cert)
+ 12) sysctl Conflict Check       26) Nginx Version Check & Upgrade (nginx)
+ 13) Reality Compatibility (1.8) 27) Uninstall
+ 14) CDN ECH Encrypted SNI Switch 0) Exit
 ```
 
 #### Complete CLI Shortcuts Matrix (Non-Interactive)
@@ -165,7 +166,7 @@ Run `xh` directly in terminal to open the interactive management menu:
 | **Status & Subs** | `xh status` | 1 | Show service status, listening ports, TCP/BBR tuning stats & versions |
 | | `xh info` | 2 | Show node parameters, raw links, and client configurations |
 | | `xh sub` | 3 | Show subscription URLs and terminal QR codes |
-| | `xh resub` | 25 | Regenerate all subscription files based on current configuration |
+| | `xh resub` | 24 | Regenerate all subscription files based on current configuration |
 | | `xh diag` | 11 | Perform server-side UDP/HTTP3 and certificate connectivity diagnostics |
 | | `xh conflict` | 12 | Check for conflicting or overriding sysctl settings |
 | | `xh version` | — | Display Xray-core and xh management script versions |
@@ -174,10 +175,10 @@ Run `xh` directly in terminal to open the interactive management menu:
 | | `xh update [<ver>] [--auto]` | 6 | Update or install specific Xray-core version (auto-rollback on check failure) |
 | | `xh keepalive [on\|off\|show]` | 9 | Service watchdog daemon and automatic crash recovery switch |
 | | `xh autoupdate [on\|off\|show]` | 10 | Weekly scheduled Xray-core auto-update switch |
-| | `xh cert [show\|dnscf]` | 26 | Show cert renewal mode / switch to Cloudflare DNS-01 |
-| | `xh nginx [show\|check\|update]` | 27 | Check Nginx mainline version and perform smooth upgrade (PGP-verified) |
+| | `xh cert [show\|dnscf]` | 25 | Show cert renewal mode / switch to Cloudflare DNS-01 |
+| | `xh nginx [show\|check\|update]` | 26 | Check Nginx mainline version and perform smooth upgrade (PGP-verified) |
 | | `xh guard` | — | Health check & self-healing daemon runner (invoked by cron) |
-| | `xh uninstall` | 28 | Completely uninstall all components and purge configurations |
+| | `xh uninstall` | 27 | Completely uninstall all components and purge configurations |
 | **Network & Tuning** | `xh tuning [show\|on\|off\|win\|mac\|linux\|sb]` | 7 | System BBR+fq tuning / output client-side acceleration commands |
 | | `xh brutal [show\|on\|off\|speed]` | 8 | TCP Brutal congestion control switch / rate adjustments |
 | | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality minimum client version control (default 1.8.0 for Clash/sing-box) |
@@ -188,9 +189,9 @@ Run `xh` directly in terminal to open the interactive management menu:
 | **Node Switches** | `xh cdnh2 [show\|on\|off]` | 16 | Enable / disable CDN TCP(h2) node |
 | | `xh cdnh3 [show\|on\|off]` | 17 | Enable / disable CDN QUIC(h3) node |
 | | `xh h2direct [show\|on\|off]` | 20 | Enable / disable spare direct TCP node (XHTTP-Direct-H2) |
-| | `xh hy2obfs [show\|on\|off]` | 21 | Enable / disable Hysteria2-Obfs obfuscated node (UDP 8443) |
+| | `xh hy2 [show\|on\|off]` | 21 | Hysteria2 direct node master switch (random high UDP port, not installed by default) |
+| | `xh hy2 obfs [show\|on\|off]` | 21 | Enable / disable Hysteria2-Obfs obfuscated node (alias: `xh hy2obfs`) |
 | | `xh split [show\|reality-up\|cdn-up]` | 22, 23 | Split-routing node switches (Reality-up enabled by default) |
-| | `xh hy2 [show\|on\|off]` | 24 | Hysteria2 direct node master switch (UDP 443, not installed by default) |
 
 ---
 
@@ -234,7 +235,7 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.72) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.73) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | TCP node through Cloudflare, fallback when UDP is throttled / blocked |
 | **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | Via CDN UDP 443 | QUIC to the Cloudflare origin |
@@ -243,7 +244,7 @@ flowchart TD
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
 | **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP split up/down | Up via Reality / down via CDN | Client-link only, no server change |
 
-> Not installed by default; switch on with `xh`: `Hysteria2-H3-Direct` (`xh hy2 on`, UDP 443), `Hysteria2-Obfs-Direct` (`xh hy2obfs on`, needs Hysteria2 first), `VLESS-CDN-Up-Reality-Down` (`xh split cdn-up on`), `VLESS-XHTTP-Direct-H2` (`xh h2direct on`).
+> Not installed by default; switch on with `xh`: `Hysteria2-H3-Direct` (`xh hy2 on`, random high UDP port), `Hysteria2-Obfs-Direct` (`xh hy2 obfs on`, needs Hysteria2 first), `VLESS-CDN-Up-Reality-Down` (`xh split cdn-up on`), `VLESS-XHTTP-Direct-H2` (`xh h2direct on`).
 
 ---
 
@@ -306,6 +307,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **nginx: session tickets back on (faster reconnect)** | v4.9.69 | As the user chose, `ssl_session_tickets` goes from `off` back to `on`. A reconnecting client can resume the session, send less certificate data and skip one full handshake; tickets are also required for `ssl_early_data` (0-RTT) and the `Early-Data` header to work, and both were idle since v4.9.62. Verified locally: the second connection shows `Reused` on both TLS1.3 and TLS1.2. Cost: the ticket key lives only inside the nginx process, so old tickets stop working after a restart, and forward secrecy is weaker than with full handshakes. **Not speed-tested**: nginx carries only CDN origin traffic, the subscription and the decoy site (about a fifth of total traffic, very low CPU), so this shortens reconnects and does not raise steady-state throughput. Installed boxes must hand-edit `/etc/nginx/nginx.conf`, then `nginx -t` and reload. |
 | **CDN upload legs back to stream-up** | v4.9.70 | After the request to raise CDN throughput, a small comparison: from this server, an Xray client looped back to itself through Cloudflare, 40 transfers each (20 MB down / 10 MB up) with no stall; upload **stream-up ≈ 365–441 Mbps vs auto ≈ 163–261 Mbps (1.7–2.7× faster)**, download similar (≈ 490–640 Mbps). So the upload legs of CDN-H2 / CDN-H3 and CDN-Up-Reality-Down, and of the dual-cdn / quic-h3 extensions, go back to `stream-up`; the **download leg** over CDN (Reality-Up-CDN-Down's downloadSettings) stays `auto`. Server 8001 stays `auto` (accepts every mode). This replaces v4.9.66's "all CDN legs auto", which rested on an earlier test (2 of 6 stream-up uploads through CF did not finish) that did not reproduce after Cloudflare gRPC / WebSockets were turned on. **Limits: it measures this server to Cloudflare only, not the user's client path; the sample is small and noisy (single runs 60–720 Mbps).** The Reality-Up-CDN-Down node in use uploads over Reality and downloads over CDN, so it is not affected. |
 | **Default node set: no Hysteria2, two CDN nodes by default; Hysteria2 moves into the xh menu** | v4.9.71 | As requested: 1. The install command **no longer installs Hysteria2 by default**: `FEATURE_HY2` defaults to `false` (Hysteria2-H3 goes with it) and `FEATURE_HY2_OBFS` to `false`; 2. **Both CDN nodes are installed by default**: `FEATURE_CDN_H2` and `FEATURE_CDN_H3` default to `true`; 3. The default set is CDN-H2, CDN-H3, Direct-H3, Reality-Vision, Reality-XHTTP, Reality-Up-CDN-Down (6 nodes); 4. New `xh hy2 [show\|on\|off]` and menu item 24 (uninstall moves to 25): on = add the server inbound + open UDP 443 + add the client node + write the flag, undone on any failure; off also removes the obfs node; `xh hy2obfs on` now needs Hysteria2 first; 5. The Hysteria2-H3 inbound also carries `// >>xh:` markers and the spare-node store gains `inbound-hy2h3.json`; 6. The "already present" check for inbound markers now goes by tag (Hysteria2's UDP 443 shares a number with Reality's TCP 443). Local round trip: `xh hy2 off` (with obfs) → `xh hy2 on` → `xh hy2obfs on` leaves client files and subscriptions byte-identical, and `xh diag` shows TCP 443, UDP 443 and UDP 8443 listening. **New installs only**; already installed boxes keep their node set. The Hysteria2 inbound on this machine had no markers and was wrapped in the same markers, so `xh hy2` works here. |
+| **Randomize Hysteria2 ports & merge Obfs management into xh menu** | v4.9.73 | 1. **Randomized Hysteria2 ports**: `HY2_H3_PORT` and `HY2_PORT` now default to dynamic random high ports in the 10000-65000 range (preventing targeted ISP QoS throttling/blocking on fixed 443/8443, while still supporting explicit environment overrides); 2. **Consolidated xh menu**: Merged the previously separate "Hysteria2 master switch" and "Hysteria2-Obfs node switch" into option 21 (with interactive prompts and support for `xh hy2 on\|off` and `xh hy2 obfs on\|off`), streamlining the total menu to 27 options; 3. Optimized server inbound tag resolution with full backwards compatibility for existing configs and legacy `xh hy2obfs` commands. |
 | **Align defaults with host: pin Xray official stable core v26.3.27 & solidify 6 core nodes** | v4.9.72 | 1. Xray-core install default locked to official stable release v26.3.27 (`XRAY_DEFAULT_VERSION="26.3.27"`, matching this host's running environment) to prevent upstream pre-release breaking changes; 2. Default node set fully aligned with this machine to 6 primary nodes (CDN-H2, CDN-H3, Direct-H3, Reality-Vision, Reality-XHTTP, Reality-Up-CDN-Down, with Hysteria2 disabled by default and available in the xh menu); 3. Synchronized environment matrix, build profile and release scripts. |
 
 ---

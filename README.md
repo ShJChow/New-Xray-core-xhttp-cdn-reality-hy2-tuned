@@ -131,7 +131,6 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 ```
 > 如需覆盖更多自定义项，直接在末尾空格追加即可（如 `IP_CHOICE=1`、`CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`）。
 >
-> **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_CDN_H2=true`、`FEATURE_CDN_H3=true`、`FEATURE_REALITY_UP_CDN_DOWN=true` 等优化配置，绝大多数场景无需重复传入。
 ---
 
 ## 三、常驻管理命令 `xh`
@@ -146,15 +145,14 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
   4) 重启服务                  18) 出站分流 (屏蔽回国 IP / 广告域名)
   5) 查看日志 (xray)            19) Reality 时间差校验 (maxTimeDiff)
   6) 更新 Xray-core            20) 备用节点 XHTTP-Direct-H2 (TCP 直连)
-  7) 系统层调优 (show/on/off)   21) Hysteria2-Obfs (混淆节点)
+  7) 系统层调优 (show/on/off)   21) Hysteria2 节点与混淆管理 (hy2)
   8) TCP Brutal 极速加速        22) 上行 Reality / 下行 CDN 分离节点
   9) 保活开关                  23) 备用节点 上行 CDN / 下行 Reality
- 10) 内核自动更新开关           24) Hysteria2 总开关 (UDP 443)
- 11) UDP 节点自检 (diag)        25) 重新生成全量订阅 (resub)
- 12) sysctl 冲突检测 (conflict)  26) 证书续期方式 / DNS-01 (cert)
- 13) Reality 兼容模式 (1.8.0)    27) Nginx 版本检查与升级 (nginx)
- 14) CDN ECH 加密 SNI 开关      28) 卸载
-                                0) 退出
+ 10) 内核自动更新开关           24) 重新生成全量订阅 (resub)
+ 11) UDP 节点自检 (diag)        25) 证书续期方式 / DNS-01 (cert)
+ 12) sysctl 冲突检测 (conflict)  26) Nginx 版本检查与升级 (nginx)
+ 13) Reality 兼容模式 (1.8.0)    27) 卸载
+ 14) CDN ECH 加密 SNI 开关       0) 退出
 ```
 
 #### 全量 CLI 快捷指令速查表（免进菜单）
@@ -164,7 +162,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | **状态与订阅** | `xh status` | 1 | 查看服务运行状态、监听端口、TCP/BBR 流控参数与版本 |
 | | `xh info` | 2 | 查看节点连接参数与客户端节点链接 |
 | | `xh sub` | 3 | 查看订阅链接与终端二维码 |
-| | `xh resub` | 25 | 按当前配置重新生成全量订阅文件并重启分发服务 |
+| | `xh resub` | 24 | 按当前配置重新生成全量订阅文件并重启分发服务 |
 | | `xh diag` | 11 | UDP / HTTP3 连通性自检与证书检测 |
 | | `xh conflict` | 12 | sysctl 冲突与覆盖项排查 |
 | | `xh version` | — | 查看 Xray 内核与 xh 管理脚本版本 |
@@ -173,10 +171,10 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | | `xh update [<ver>] [--auto]` | 6 | 升级或指定 Xray-core 版本（自检失败自动回滚） |
 | | `xh keepalive [on\|off\|show]` | 9 | 服务守护进程保活与异常自动拉起开关 |
 | | `xh autoupdate [on\|off\|show]` | 10 | 每周自动升级 Xray-core 开关（带版本检查提醒） |
-| | `xh cert [show\|dnscf]` | 26 | 证书续期方式查看 / 切换 Cloudflare DNS-01（走 CDN 代理防失效） |
-| | `xh nginx [show\|check\|update]` | 27 | Nginx mainline 检查与平滑升级（官方 PGP 验签） |
+| | `xh cert [show\|dnscf]` | 25 | 证书续期方式查看 / 切换 Cloudflare DNS-01（走 CDN 代理防失效） |
+| | `xh nginx [show\|check\|update]` | 26 | Nginx mainline 检查与平滑升级（官方 PGP 验签） |
 | | `xh guard` | — | 健康检查与故障自愈拉起（cron 定时任务调用） |
-| | `xh uninstall` | 28 | 彻底卸载全部组件并清理配置 |
+| | `xh uninstall` | 27 | 彻底卸载全部组件并清理配置 |
 | **网络与流控** | `xh tuning [show\|on\|off\|win\|mac\|linux\|sb]` | 7 | 系统级 BBR+fq 流控调优 / 输出多平台客户端调优指令 |
 | | `xh brutal [show\|on\|off\|speed]` | 8 | TCP Brutal 极速拥塞控制 / 调节速率 |
 | | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality 客户端最低版本限制（默认 1.8.0 兼容 Clash/sing-box） |
@@ -187,9 +185,9 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | **节点开关** | `xh cdnh2 [show\|on\|off]` | 16 | 开启 / 关闭 CDN TCP(h2) 节点 |
 | | `xh cdnh3 [show\|on\|off]` | 17 | 开启 / 关闭 CDN QUIC(h3) 节点 |
 | | `xh h2direct [show\|on\|off]` | 20 | 开启 / 关闭备用直连 TCP 节点 (XHTTP-Direct-H2) |
-| | `xh hy2obfs [show\|on\|off]` | 21 | 开启 / 关闭 Hysteria2-Obfs 混淆节点 (UDP 8443) |
+| | `xh hy2 [show\|on\|off]` | 21 | Hysteria2 直连节点总开关（随机高 UDP 端口，默认不装） |
+| | `xh hy2 obfs [show\|on\|off]` | 21 | 开启 / 关闭 Hysteria2-Obfs 混淆节点（别名 `xh hy2obfs`） |
 | | `xh split [show\|reality-up\|cdn-up]` | 22, 23 | 上下行分离节点开关（上行 Reality 默认开，上行 CDN 备用） |
-| | `xh hy2 [show\|on\|off]` | 24 | Hysteria2 直连节点总开关 (UDP 443，默认不装) |
 
 ---
 
@@ -197,7 +195,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
-| # | 节点名称（v4.9.72） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.73） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
 | **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
@@ -206,7 +204,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 | **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP 上下行分离 | 上行 Reality 直连 / 下行经 CDN | 纯客户端链接，不动服务端 |
 
-> 默认不装、按需用 `xh` 开启：`Hysteria2-H3-Direct`（`xh hy2 on`，UDP 443）、`Hysteria2-Obfs-Direct`（`xh hy2obfs on`，需先开 Hysteria2）、`VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）、`VLESS-XHTTP-Direct-H2`（`xh h2direct on`）。
+> 默认不装、按需用 `xh` 开启：`Hysteria2-H3-Direct`（`xh hy2 on`，随机高 UDP 端口）、`Hysteria2-Obfs-Direct`（`xh hy2 obfs on`，需先开 Hysteria2）、`VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）、`VLESS-XHTTP-Direct-H2`（`xh h2direct on`）。
 
 ---
 
@@ -233,6 +231,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | **nginx 重新打开 session tickets（重连更快）** | v4.9.69 | 按用户选择，`ssl_session_tickets` 由 `off` 改回 `on`。客户端重连时可以恢复会话，少传证书，少一次完整握手；同时它是 `ssl_early_data`（0-RTT）与 `Early-Data` 头生效的前提，v4.9.62 起这两项一直是空转。本机验证：TLS1.3 与 TLS1.2 的第二次连接都显示 `Reused`。代价：ticket 密钥只在 nginx 进程内，重启后旧 ticket 失效；前向保密弱于完整握手。**未测速**：nginx 只承载 CDN 回源、订阅和伪装站，约占总流量两成，CPU 占用很低，这一项只缩短重连，不提高稳态吞吐。已安装机器需手改 `/etc/nginx/nginx.conf` 后 `nginx -t` 再重载。 |
 | **CDN 上传腿改回 stream-up** | v4.9.70 | 按用户「提高 CDN 吞吐」的要求做了小规模对比：本机用 Xray 客户端经 Cloudflare 回连自己，各 40 次传输（20MB 下载 / 10MB 上传）没有卡住，上传 **stream-up 约 365–441 Mbps，auto 约 163–261 Mbps（快 1.7–2.7 倍）**，下载两者接近（约 490–640 Mbps）。因此 CDN-H2 / CDN-H3、CDN-Up-Reality-Down 的上传腿，以及 dual-cdn / quic-h3 扩展里的上传腿改回 `stream-up`；经 CDN 的**下载腿**（Reality-Up-CDN-Down 的 downloadSettings）保持 `auto`。服务端 8001 继续是 `auto`（什么模式都收）。这个结果取代 v4.9.66 里「CDN 腿全部 auto」，当时的依据是更早一次 stream-up 经 CF 上传 2/6 没传完，在 Cloudflare 开启 gRPC / WebSockets 后的这次测试里没有复现。**限制：只代表本机到 Cloudflare 这一段，不代表用户客户端的线路；样本小、波动大（单次 60–720 Mbps）。** 当前在用的 Reality-Up-CDN-Down 上行走 Reality、下行走 CDN，不受这项影响。 |
 | **默认节点集：去掉 Hysteria2，默认装两条 CDN 节点；Hysteria2 做进 xh 菜单** | v4.9.71 | 按用户要求：1. 安装命令默认**不再装 Hysteria2**：`FEATURE_HY2` 默认 `false`（Hysteria2-H3 随它关闭），`FEATURE_HY2_OBFS` 默认 `false`；2. **默认安装两条 CDN 节点**：`FEATURE_CDN_H2` 与 `FEATURE_CDN_H3` 默认 `true`；3. 默认节点集变为 CDN-H2、CDN-H3、Direct-H3、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down（6 条）；4. 新增 `xh hy2 [show\|on\|off]` 与菜单第 24 项（卸载顺延为 25）：开启 = 加服务端入站 + 放行 UDP 443 + 加客户端节点 + 写标志位，失败即撤销；关闭会连同混淆节点一起移除；`xh hy2obfs on` 现在要求先开 Hysteria2；5. Hysteria2-H3 入站也带 `// >>xh:` 标记，备用节点库新增 `inbound-hy2h3.json`；6. 入站标记的「已存在」检查改按 tag 判断（Hysteria2 的 UDP 443 与 Reality 的 TCP 443 同号）。本机往返验证：`xh hy2 off`（连同混淆）→ `xh hy2 on` → `xh hy2obfs on`，客户端文件与订阅逐字节一致，`xh diag` 显示 TCP 443、UDP 443、UDP 8443 都在监听。**只影响新装机器**；已安装机器的节点集不变。本机 Hysteria2 入站原先没有标记，已用同样的标记包起来，之后即可用 `xh hy2` 开关。 |
+| **Hysteria2 端口改为默认随机分配，与混淆管理合并至 xh 菜单** | v4.9.73 | 1. **Hysteria2 端口随机化**：`HY2_H3_PORT` 与 `HY2_PORT` 默认改为 10000-65000 动态随机分配高端口（避免固定 443 / 8443 被运营商针对性 QoS 限速或阻断，仍支持环境变量显式自定义）；2. **xh 菜单精简合并**：原分散的「Hysteria2 总开关」与「Hysteria2-Obfs 混淆节点」合并为菜单第 21 项（支持子交互与 `xh hy2 on\|off`、`xh hy2 obfs on\|off`），全量菜单收敛为 27 项；3. 同步优化服务端入站 tag 识别并完全向下兼容既有配置与旧命令 `xh hy2obfs`。 |
 | **默认安装对齐本机：锁定 Xray 官方正式稳定内核 v26.3.27 并固化 6 核心节点集** | v4.9.72 | 1. 默认安装 Xray 内核版本锁定为官方稳定正式版 v26.3.27（与本机运行环境一致），规避上游预发布版对第三方客户端的兼容性断层；2. 默认安装节点与本机完全对齐为 6 条主力节点（CDN-H2、CDN-H3、Direct-H3、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down，Hysteria2 默认不装并收录于 xh 菜单备用）；3. 同步环境变量矩阵、安装器 profile 与构建发布脚本。 |
 
 ---

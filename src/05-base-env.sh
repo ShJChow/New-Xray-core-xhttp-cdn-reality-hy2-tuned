@@ -231,11 +231,33 @@ OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 32)}"
 # （XTLS/Xray-core#4391，closed as not planned；#5849 同类），一旦退回，
 # 它就与 Reality 的 TCP 443 抢同一个端口，后 bind 的那个失败 —— 表现为「Reality 不通」。
 # 用独立端口后，即使 h3 退回 TCP 也只影响它自己，不会波及主力节点。
+# 随机端口生成函数：在 10000-65000 间选取未被占用的端口
+get_random_port() {
+  local proto="${1:-udp}" port
+  while true; do
+    port=$(shuf -i 10000-65000 -n 1 2>/dev/null || awk 'BEGIN{srand(); print int(rand()*(65000-10000)+10000)}')
+    [[ "$port" != "8443" && "$port" != "8445" && "$port" != "8446" && "$port" != "443" && "$port" != "80" ]] || continue
+    [[ "$port" != "${H3_PORT:-}" && "$port" != "${H2_PORT:-}" && "$port" != "${HY2_H3_PORT:-}" && "$port" != "${HY2_PORT:-}" ]] || continue
+    if [[ "$proto" == "tcp" ]]; then
+      ss -Hltn "sport = :$port" 2>/dev/null | grep -q . && continue
+    else
+      ss -Hlun "sport = :$port" 2>/dev/null | grep -q . && continue
+    fi
+    echo "$port"
+    return 0
+  done
+}
+
 H3_PORT="${H3_PORT:-8446}"
-HY2_PORT="${HY2_PORT:-8443}"
 # H2_PORT（v4.7.0）：h3-direct 的 TCP 孪生体，见 01-env.sh 的 FEATURE_H2_DIRECT。
 # 它是**真 TCP**，和 Reality 的 TCP 443 属于同一协议族，必须独立端口。
 H2_PORT="${H2_PORT:-8445}"
+# v4.9.73: Hysteria2 直连与混淆节点默认随机分配高端口，支持环境变量自定义覆盖
+HY2_H3_PORT="${HY2_H3_PORT:-$(get_random_port udp)}"
+HY2_PORT="${HY2_PORT:-$(get_random_port udp)}"
+if [[ "$HY2_H3_PORT" == "$HY2_PORT" ]]; then
+  HY2_PORT="$(get_random_port udp)"
+fi
 
 # 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
 if [[ "$H3_PORT" == "443" ]]; then
@@ -248,7 +270,7 @@ if [[ "$H2_PORT" == "443" ]]; then
 fi
 # H2 是 TCP、H3/HY2 是 UDP，端口号相同在内核层面不冲突，但会让排障和安全组
 # 规则变得难以分辨，因此仍然要求三者互不相同。
-if [[ "$H2_PORT" == "$H3_PORT" || "$H2_PORT" == "$HY2_PORT" ]]; then
+if [[ "$H2_PORT" == "$H3_PORT" || "$H2_PORT" == "$HY2_PORT" || "$H2_PORT" == "$HY2_H3_PORT" ]]; then
   warn "H2_PORT=${H2_PORT} 与 UDP 端口重复，已改用 8445"
   H2_PORT=8445
 fi
