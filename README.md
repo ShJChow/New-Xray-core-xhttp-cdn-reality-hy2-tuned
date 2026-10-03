@@ -194,6 +194,9 @@ xh ech [show|on|off]   # Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
 xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
 xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
 xh cdnh3 [show|on|off] # CDN QUIC(h3) 默认节点开关与订阅同步
+xh h2direct [show|on|off]   # 备用节点 XHTTP-Direct-H2（TCP 直连）
+xh hy2obfs [show|on|off]    # 备用节点 Hysteria2-Obfs（UDP salamander 混淆）
+xh split [show|reality-up on|off|cdn-up on|off]  # 备用节点 上下行分离两条
 xh block [show|cn on|off|ads on|off] # 出站屏蔽回国 IP / 广告域名（默认关闭）
 xh timediff [show|on [毫秒]|off] # Reality maxTimeDiff 时间差校验（默认关闭）
 xh brutal              # TCP Brutal 极速拥塞控制状态、开启/关闭与速率调节
@@ -291,6 +294,7 @@ flowchart TD
 | **下行腿与服务端 mode 统一为 stream-up** | v4.9.60 | 按用户要求，Reality/CDN 分离节点的 `downloadSettings` 下行腿（含 dual-cdn / dual-ip / quic-h3 扩展）与服务端 xhttpSettings 的 `mode` 由 `auto` 改为 `stream-up`，与上行腿一致，消除两腿混用。**未实测**（沿用 v4.9.58 的取舍，若上传/下载卡住，把对应 `mode` 改回 `auto` 即可）。已安装机器需把 `/usr/local/etc/xray/config.json` 中的 `"mode": "auto"` 手改后 `xray -test` 再重启；扩展脚本里节点链接本身的上行 `mode=auto` 未改。 |
 | **所有节点上行 / 下行 mode 统一为 stream-up** | v4.9.61 | 把 `src/11-client-config.sh` 中 CDN 分离节点下行的 `xhttpSettings`，以及 dual-cdn / dual-ip / quic-h3 / common-nodes 扩展里节点链接和 Mihomo 片段残留的 `mode=auto` 全部改为 `stream-up`；至此脚本中不再有 `auto`。**未实测**，卡住时把对应节点的 `mode` 改回 `auto` 即可（服务端无需改动）。 |
 | **nginx 放宽 TLS 并关闭 session tickets，回源不再显式关缓冲** | v4.9.62 | 按用户要求：`ssl_protocols` 由仅 TLS1.3 改为 `TLSv1.3 TLSv1.2`（附 TLS1.2 `ssl_ciphers`），`ssl_session_tickets` 由 `on` 改为 `off`；XHTTP 回源 location 去掉 `proxy_buffering off` / `proxy_request_buffering off` / `X-Accel-Buffering`（`grpc_pass` 本就不吃 `proxy_*` 缓冲指令，实际行为基本不变）。副作用：关 tickets 后 `ssl_early_data`（0-RTT）无会话可恢复，不再生效；开 TLS1.2 会放宽原先的降级防护。已安装机器需手改 `/etc/nginx/nginx.conf`，`nginx -t` 后重载。**未实测**。 |
+| **默认 5 节点 + 备用节点用 xh 菜单开关** | v4.9.63 | 安装命令默认的 5 条节点（Reality-Vision、Reality-XHTTP、XHTTP-Direct-H3、CDN-H3、Hysteria2-H3）本来就是源码默认值，未改。其余备用节点新增 xh 开关：`xh h2direct`（TCP 8445，加服务端入站并放行端口）、`xh hy2obfs`（UDP 8443 salamander，同上）、`xh split reality-up|cdn-up`（纯客户端链接）；菜单 20–23，卸载顺延为 24。实现：安装时用「全部备用节点开启」的参数再渲染一遍存进 `/etc/xhttp-cdn/all/`（节点行、Mihomo、两条服务端入站文本），开关只从库里取，与全新安装逐字一致；服务端入站用成对 `// >>xh:` 标记写入，关闭时整块删除，配置字节级还原。**旧版安装的机器没有该库**，需重新部署才有这些开关。云安全组 / 安全列表仍需自行放行端口。修正 cdnh2 / cdnh3 说明里「6 大核心节点」「备用」的过时措辞。 |
 
 ---
 

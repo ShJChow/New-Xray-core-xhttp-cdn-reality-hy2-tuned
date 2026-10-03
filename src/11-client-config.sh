@@ -3,6 +3,12 @@
 # ==================================================
 
 info "[6/7] 生成客户端配置"
+
+# xh-render-begin
+# 渲染整套客户端配置。包成函数是为了能再用「全部备用节点开启」的参数渲染一遍，
+# 存进 /etc/xhttp-cdn/all/ 作为备用节点库：xh 的 h2direct / hy2obfs / split 开关直接从里面取
+# 节点行与 Mihomo 条目，和全新安装逐字一致，不必在 xh 里再抄一遍拼装逻辑。
+render_client_configs() {
 VISION_FLOW="${VISION_FLOW:-xtls-rprx-vision}"
 XHTTP_PATH_ENC=${XHTTP_PATH//\//%2F}
 
@@ -428,3 +434,20 @@ chown "$(stat -c '%u:%g' "$USER_HOME")" \
   "$V2RAYN_TUN_FILE" \
   "$MIHOMO_FULL_FILE" \
   "$MIHOMO_NODES_FILE"
+}
+# xh-render-end
+
+render_client_configs
+
+# 备用节点库：所有 FEATURE 都开时的完整产物（子 shell 渲染，不影响本次安装的变量与文件）
+mkdir -p /etc/xhttp-cdn/all
+(
+  USER_HOME=/etc/xhttp-cdn/all
+  FEATURE_H3_DIRECT=true FEATURE_H2_DIRECT=true FEATURE_HY2=true FEATURE_HY2_H3=true FEATURE_HY2_OBFS=true
+  FEATURE_CDN_H2=true FEATURE_CDN_H3=true FEATURE_PORT_HOPPING=false
+  FEATURE_REALITY_UP_CDN_DOWN=true FEATURE_UP_CDN_DOWN_MIHOMO=true FEATURE_CDN_UP_REALITY_DOWN=true
+  info() { :; }; warn() { :; }
+  render_client_configs
+) >/dev/null 2>&1 || warn "备用节点库生成失败（不影响当前节点，xh 的备用节点开关将不可用）"
+chmod 700 /etc/xhttp-cdn/all 2>/dev/null || true
+chmod 600 /etc/xhttp-cdn/all/* 2>/dev/null || true

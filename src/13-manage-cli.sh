@@ -1564,7 +1564,7 @@ cmd_cdnh2() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，为 6 大核心主力节点之一，保障 CDN 链路稳健可用。"
+      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，默认关闭的备用节点（默认的 CDN 节点是 CDN-H3），需要 TCP CDN 兜底时开启。"
       echo -e "  • 快捷命令:"
       echo -e "      ${MANAGE_CMD} cdnh2 on       # 开启 CDN TCP(h2) 节点并同步更新订阅"
       echo -e "      ${MANAGE_CMD} cdnh2 off      # 关闭 CDN TCP(h2) 节点并恢复精简订阅"
@@ -1665,7 +1665,7 @@ cmd_cdnh3() {
   case "$action" in
     show|status)
       echo ""
-      echo -e "${CYAN}=== CDN QUIC(h3) 备用节点状态 ===${NC}"
+      echo -e "${CYAN}=== CDN QUIC(h3) 节点状态 ===${NC}"
       local cur_h3="${FEATURE_CDN_H3:-true}"
       if [[ "$cur_h3" == "true" ]]; then
         echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
@@ -1678,10 +1678,10 @@ cmd_cdnh3() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 开启此项可生成走 UDP 443 (HTTP/3 / QUIC) 的 VLESS-XHTTP-CDN-H3 备用节点。"
+      echo -e "  • 开启此项可生成走 UDP 443 (HTTP/3 / QUIC) 的 VLESS-XHTTP-CDN-H3 节点（默认开启）。"
       echo -e "  • 快捷命令:"
-      echo -e "      ${MANAGE_CMD} cdnh3 on       # 开启 CDN QUIC(h3) 备用节点并同步更新订阅"
-      echo -e "      ${MANAGE_CMD} cdnh3 off      # 关闭 CDN QUIC(h3) 备用节点并恢复精简订阅"
+      echo -e "      ${MANAGE_CMD} cdnh3 on       # 开启 CDN QUIC(h3) 节点并同步更新订阅"
+      echo -e "      ${MANAGE_CMD} cdnh3 off      # 关闭 CDN QUIC(h3) 节点并恢复精简订阅"
       echo ""
       ;;
     on)
@@ -2103,6 +2103,322 @@ cmd_uninstall() {
   rm -f /usr/local/bin/xh
 }
 
+# ==================================================
+# 备用节点开关：h2direct / hy2obfs / split（上下行分离两条）
+# ==================================================
+# 备用节点库 /etc/xhttp-cdn/all/ 由安装脚本在「全部备用节点开启」的参数下渲染一遍得到
+# （见 11-client-config.sh、09-server-config.sh）。开关只从库里取节点行 / Mihomo 条目 /
+# 服务端入站文本，不在这里重新拼装，所以和全新安装逐字一致。
+ALL_STORE_DIR="/etc/xhttp-cdn/all"
+
+backup_store_check() {
+  [[ -f "${ALL_STORE_DIR}/client-config.txt" ]] || fail "缺少备用节点库 ${ALL_STORE_DIR}（本机由旧版安装脚本部署）。需用最新安装命令重新部署一次才有这些开关。"
+}
+
+# 把一条备用节点加进 / 移出本机的 client-config.txt 与两份 Mihomo yaml。
+# $1 = 节点名（链接 # 后面的名字，不含 NODE_SUFFIX），$2 = on|off
+backup_node_sync_files() {
+  python3 - "$ALL_STORE_DIR" "$1" "$2" "${USER_HOME:-/home/ubuntu}" /home/ubuntu /home/opc /root <<'SYNCPY' || warn "同步客户端文件时出错（节点库缺该节点？）"
+import copy, os, sys
+import yaml
+
+store, name, act = sys.argv[1:4]
+homes = sys.argv[4:]
+enable = (act == 'on')
+
+def frag(line):
+    return line.rsplit('#', 1)[-1]
+
+def match(line):
+    return frag(line).startswith(name)
+
+def insert_pos(all_items, idx, live_keys, key):
+    """新节点放在节点库顺序里「前一个本机已有的节点」之后，都没有就放最前。"""
+    for prev in reversed(all_items[:idx]):
+        k = key(prev)
+        if k in live_keys:
+            return live_keys.index(k) + 1
+    return 0
+
+seen = set()
+for home in homes:
+    if not home or home in seen or not os.path.isdir(home):
+        continue
+    seen.add(home)
+
+    tf = os.path.join(home, 'client-config.txt')
+    sf = os.path.join(store, 'client-config.txt')
+    if os.path.isfile(tf) and os.path.isfile(sf):
+        all_lines = [l.strip() for l in open(sf, encoding='utf-8') if l.strip()]
+        live = [l.strip() for l in open(tf, encoding='utf-8') if l.strip()]
+        has = any(match(l) for l in live)
+        if enable and not has:
+            src = [l for l in all_lines if match(l)]
+            if not src:
+                sys.stderr.write('节点库里没有 %s\n' % name)
+                sys.exit(2)
+            pos = insert_pos(all_lines, all_lines.index(src[0]), [frag(l) for l in live], frag)
+            live.insert(pos, src[0])
+            open(tf, 'w', encoding='utf-8').write('\n'.join(live) + '\n')
+        elif not enable and has:
+            live = [l for l in live if not match(l)]
+            open(tf, 'w', encoding='utf-8').write('\n'.join(live) + '\n')
+
+    for fname in ('client-config-mihomo-nodes.yaml', 'client-config-mihomo-full.yaml'):
+        lf = os.path.join(home, fname)
+        sf = os.path.join(store, fname)
+        if not (os.path.isfile(lf) and os.path.isfile(sf)):
+            continue
+        live = yaml.safe_load(open(lf, encoding='utf-8'))
+        ref = yaml.safe_load(open(sf, encoding='utf-8'))
+        if not isinstance(live, dict) or not isinstance(ref, dict):
+            continue
+        lp = live.setdefault('proxies', [])
+        rp = ref.get('proxies', [])
+        pm = lambda p: str(p.get('name', '')).startswith(name)
+        has = any(pm(p) for p in lp)
+        changed = False
+        if enable and not has:
+            src = [p for p in rp if pm(p)]
+            if not src:
+                continue
+            p = copy.deepcopy(src[0])
+            names = [x.get('name') for x in lp]
+            lp.insert(insert_pos(rp, rp.index(src[0]), names, lambda x: x.get('name')), p)
+            ref_groups = {g.get('name'): g for g in (ref.get('proxy-groups') or []) if isinstance(g, dict)}
+            for g in (live.get('proxy-groups') or []):
+                r = ref_groups.get(g.get('name'))
+                if r and isinstance(r.get('proxies'), list) and isinstance(g.get('proxies'), list) and p['name'] in r['proxies']:
+                    if p['name'] not in g['proxies']:
+                        i = r['proxies'].index(p['name'])
+                        g['proxies'].insert(insert_pos(r['proxies'], i, g['proxies'], lambda x: x), p['name'])
+            changed = True
+        elif not enable and has:
+            gone = [p.get('name') for p in lp if pm(p)]
+            live['proxies'] = [p for p in lp if not pm(p)]
+            for g in (live.get('proxy-groups') or []):
+                if isinstance(g.get('proxies'), list):
+                    g['proxies'] = [n for n in g['proxies'] if n not in gone]
+            changed = True
+        if changed:
+            with open(lf, 'w', encoding='utf-8') as f:
+                yaml.dump(live, f, allow_unicode=True, sort_keys=False)
+SYNCPY
+}
+
+# 往 / 从线上 Xray 配置里加一条服务端入站。入站文本来自节点库，用成对的 // 注释标记包起来，
+# 关闭时按标记整块删掉，配置字节级还原。$1 = h2direct|hy2obfs，$2 = on|off
+backup_inbound_edit() {
+  local key="$1" act="$2" tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak"   # 临时文件必须以 .json 结尾
+  [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
+  python3 - "$XRAY_CONF" "$tmp" "${ALL_STORE_DIR}/inbound-${key}.json" "$key" "$act" <<'INBPY' || fail "改写配置失败，未做任何修改"
+import sys
+
+src, dst, store, key, act = sys.argv[1:6]
+s = open(src, encoding='utf-8').read()
+begin = '        // >>xh:' + key
+end = '        // <<xh:' + key
+has = ('// >>xh:' + key) in s
+
+def inbounds_close(s):
+    """返回 "inbounds" 数组结尾 ] 的下标（跳过字符串与 // /* */ 注释）。"""
+    i, n, depth = 0, len(s), 0
+    target = None
+    while i < n:
+        c = s[i]
+        if c == '"':
+            j = i + 1
+            while j < n and s[j] != '"':
+                j += 2 if s[j] == '\\' else 1
+            tok = s[i + 1:j]
+            i = j + 1
+            if target is None and depth == 1 and tok == 'inbounds':
+                k = i
+                while k < n and s[k] in ' \t\r\n':
+                    k += 1
+                if k < n and s[k] == ':':
+                    k += 1
+                    while k < n and s[k] in ' \t\r\n':
+                        k += 1
+                    if k < n and s[k] == '[':
+                        depth += 1
+                        target = depth
+                        i = k + 1
+            continue
+        if s.startswith('//', i):
+            while i < n and s[i] != '\n':
+                i += 1
+            continue
+        if s.startswith('/*', i):
+            i = s.index('*/', i) + 2
+            continue
+        if c in '{[':
+            depth += 1
+        elif c in '}]':
+            if c == ']' and target is not None and depth == target:
+                return i
+            depth -= 1
+        i += 1
+    return -1
+
+if act == 'off':
+    if has:
+        a = s.index('\n' + begin)
+        b = s.index(end, a) + len(end)
+        s = s[:a] + s[b:]
+elif not has:
+    text = open(store, encoding='utf-8').read().rstrip('\n')
+    pos = inbounds_close(s)
+    if pos < 0:
+        sys.stderr.write('没找到 inbounds 数组\n')
+        sys.exit(1)
+    while pos > 0 and s[pos - 1] in ' \t\r\n':
+        pos -= 1
+    s = s[:pos] + '\n' + begin + '\n' + text + '\n' + end + s[pos:]
+open(dst, 'w', encoding='utf-8').write(s)
+INBPY
+  if ! "$XRAY_BIN" -test -format json -config "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"; fail "Xray 配置校验失败，已放弃，未做任何修改"
+  fi
+  cp -a "$XRAY_CONF" "$bak"
+  mv -f "$tmp" "$XRAY_CONF"; chmod 600 "$XRAY_CONF" 2>/dev/null || true
+  if ! svc restart xray; then
+    cp -a "$bak" "$XRAY_CONF"; svc restart xray >/dev/null 2>&1 || true
+    fail "xray 重启失败，已回滚到修改前的配置"
+  fi
+}
+
+# 放行端口（只开不关：关闭节点时保留规则，和安装脚本一致）。$1 = tcp|udp，$2 = 端口，$3 = 是否加 QUIC 握手限速
+backup_open_port() {
+  local proto="$1" port="$2" qdos="${3:-}" ipt
+  for ipt in iptables ip6tables; do
+    command -v "$ipt" >/dev/null 2>&1 || continue
+    "$ipt" -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || "$ipt" -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || true
+    if [[ -n "$qdos" ]]; then
+      "$ipt" -C INPUT -p udp --dport "$port" -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name "hy_qdos_${port}" -j DROP 2>/dev/null || \
+        "$ipt" -I INPUT 1 -p udp --dport "$port" -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name "hy_qdos_${port}" -j DROP 2>/dev/null || true
+    fi
+  done
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
+    ufw allow "${port}/${proto}" >/dev/null 2>&1 || true
+  fi
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  elif command -v iptables-save >/dev/null 2>&1 && [[ -d /etc/iptables ]]; then
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+  fi
+}
+
+backup_port_busy() {   # $1 = tcp|udp，$2 = 端口
+  if [[ "$1" == tcp ]]; then
+    ss -Hltn "sport = :$2" 2>/dev/null | grep -q .
+  else
+    ss -Hlun "sport = :$2" 2>/dev/null | grep -q .
+  fi
+}
+
+# 需要服务端入站的两条：h2direct（TCP H2_PORT）与 hy2obfs（UDP HY2_PORT）。$1 = key，$2 = show|on|off
+cmd_backup_server_node() {
+  local key="$1" action="${2:-show}" flag name label proto port cur
+  case "$key" in
+    h2direct) flag=FEATURE_H2_DIRECT; name="VLESS-XHTTP-Direct-H2"; label="XHTTP-Direct-H2（TCP 直连，h3-direct 的孪生体）"; proto=tcp; port="${H2_PORT:-8445}" ;;
+    hy2obfs)  flag=FEATURE_HY2_OBFS;  name="Hysteria2-Obfs-Direct"; label="Hysteria2-Obfs-Direct（salamander 混淆）";       proto=udp; port="${HY2_PORT:-8443}" ;;
+  esac
+  cur="${!flag:-false}"
+  case "$action" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== ${label} ===${NC}"
+      if [[ "$cur" == true ]]; then
+        echo -e "  当前状态:       ${GREEN}已开启${NC}  (${proto^^} ${port})"
+      else
+        echo -e "  当前状态:       ${YELLOW}未开启${NC}  (开启后监听 ${proto^^} ${port})"
+      fi
+      echo -e "  ${MANAGE_CMD} ${key} on     # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
+      echo -e "  ${MANAGE_CMD} ${key} off    # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      echo ""
+      ;;
+    on)
+      [[ "$cur" == true ]] && { info "${label} 已经是开启状态"; return 0; }
+      backup_store_check
+      [[ -s "${ALL_STORE_DIR}/inbound-${key}.json" ]] || fail "备用节点库缺少 inbound-${key}.json，需用最新安装命令重新部署"
+      [[ -s /etc/ssl/private/fullchain.cer ]] || fail "未找到证书 /etc/ssl/private/fullchain.cer，无法开启直连类节点"
+      if [[ "$key" == hy2obfs ]]; then
+        [[ "${FEATURE_HY2:-false}" == true ]] || fail "Hysteria2 总开关 FEATURE_HY2 未开启，不能开混淆节点"
+        [[ "${FEATURE_PORT_HOPPING:-false}" != true ]] || fail "本机开着端口跳跃（FEATURE_PORT_HOPPING），该开关暂不处理跳跃规则"
+      fi
+      backup_port_busy "$proto" "$port" && fail "${proto^^} ${port} 已被其他进程占用，未做任何修改"
+      info "正在开启 ${label} ..."
+      backup_inbound_edit "$key" on
+      update_node_env "$flag" "true"
+      export "$flag"=true
+      if [[ "$key" == hy2obfs ]]; then backup_open_port udp "$port" qdos; else backup_open_port "$proto" "$port"; fi
+      backup_node_sync_files "$name" on
+      info "${label} 已开启（${proto^^} ${port}）。云厂商安全组 / 安全列表需自行放行该端口。"
+      cmd_resub
+      ;;
+    off)
+      [[ "$cur" == true ]] || { info "${label} 本来就是关闭状态"; return 0; }
+      info "正在关闭 ${label} ..."
+      backup_inbound_edit "$key" off
+      update_node_env "$flag" "false"
+      export "$flag"=false
+      backup_node_sync_files "$name" off
+      info "${label} 已关闭"
+      cmd_resub
+      ;;
+    *) echo "用法: ${MANAGE_CMD} ${key} [show|on|off]" ;;
+  esac
+}
+
+cmd_h2direct() { cmd_backup_server_node h2direct "$@"; }
+cmd_hy2obfs()  { cmd_backup_server_node hy2obfs "$@"; }
+
+# 上下行分离两条（纯客户端链接，不动服务端）
+cmd_split() {
+  local which="${1:-show}" action="${2:-show}" flag name label
+  case "$which" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== 上下行分离节点（纯客户端链接，不动服务端）===${NC}"
+      [[ "${FEATURE_REALITY_UP_CDN_DOWN:-false}" == true ]] && echo -e "  Reality-Up-CDN-Down:  ${GREEN}已开启${NC}" || echo -e "  Reality-Up-CDN-Down:  ${YELLOW}未开启${NC}"
+      [[ "${FEATURE_CDN_UP_REALITY_DOWN:-false}" == true ]] && echo -e "  CDN-Up-Reality-Down:  ${GREEN}已开启${NC}" || echo -e "  CDN-Up-Reality-Down:  ${YELLOW}未开启${NC}"
+      echo -e "  ${MANAGE_CMD} split reality-up on|off   # 上行 Reality、下行 CDN"
+      echo -e "  ${MANAGE_CMD} split cdn-up on|off       # 上行 CDN、下行 Reality"
+      echo ""
+      return 0
+      ;;
+    reality-up) flag=FEATURE_REALITY_UP_CDN_DOWN;  name="VLESS-Reality-Up-CDN-Down"; label="Reality-Up-CDN-Down（上行 Reality、下行 CDN）" ;;
+    cdn-up)     flag=FEATURE_CDN_UP_REALITY_DOWN;  name="VLESS-CDN-Up-Reality-Down"; label="CDN-Up-Reality-Down（上行 CDN、下行 Reality）" ;;
+    *) echo "用法: ${MANAGE_CMD} split [show|reality-up on|off|cdn-up on|off]"; return 1 ;;
+  esac
+  case "$action" in
+    show|status) cmd_split show ;;
+    on)
+      backup_store_check
+      [[ -n "${CDN_DOMAIN:-}" ]] || fail "未配置 CDN 域名，分离节点没有 CDN 腿可用"
+      info "正在开启 ${label} ..."
+      update_node_env "$flag" "true"
+      export "$flag"=true
+      if [[ "$which" == reality-up ]]; then update_node_env FEATURE_UP_CDN_DOWN_MIHOMO true; fi
+      backup_node_sync_files "$name" on
+      info "${label} 已开启"
+      cmd_resub
+      ;;
+    off)
+      info "正在关闭 ${label} ..."
+      update_node_env "$flag" "false"
+      export "$flag"=false
+      if [[ "$which" == reality-up ]]; then update_node_env FEATURE_UP_CDN_DOWN_MIHOMO false; fi
+      backup_node_sync_files "$name" off
+      info "${label} 已关闭"
+      cmd_resub
+      ;;
+    *) echo "用法: ${MANAGE_CMD} split ${which} on|off" ;;
+  esac
+}
+
 cmd_menu() {
   while true; do
     echo ""
@@ -2123,10 +2439,14 @@ cmd_menu() {
     echo " 14) CDN ECH 加密 SNI 开关 (show / on / off)"
     echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
     echo " 16) CDN TCP(h2) 节点开关 (show / on / off)"
-    echo " 17) CDN QUIC(h3) 备用节点开关 (show / on / off)"
+    echo " 17) CDN QUIC(h3) 节点开关，默认开启 (show / on / off)"
     echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
     echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
-    echo " 20) 卸载"
+    echo " 20) 备用节点 XHTTP-Direct-H2（TCP 直连）(show / on / off)"
+    echo " 21) 备用节点 Hysteria2-Obfs（salamander 混淆）(show / on / off)"
+    echo " 22) 备用节点 上行 Reality / 下行 CDN (show / on / off)"
+    echo " 23) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
+    echo " 24) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -2149,7 +2469,11 @@ cmd_menu() {
       17) read -rp "  show / on / off: " a; cmd_cdnh3 "${a:-show}" ;;
       18) read -rp "  show / cn on|off / ads on|off: " a; cmd_block ${a:-show} ;;
       19) read -rp "  show / on [毫秒] / off: " a; cmd_timediff ${a:-show} ;;
-      20) cmd_uninstall; break ;;
+      20) read -rp "  show / on / off: " a; cmd_h2direct "${a:-show}" ;;
+      21) read -rp "  show / on / off: " a; cmd_hy2obfs "${a:-show}" ;;
+      22) read -rp "  show / on / off: " a; cmd_split reality-up "${a:-show}" ;;
+      23) read -rp "  show / on / off: " a; cmd_split cdn-up "${a:-show}" ;;
+      24) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2175,7 +2499,10 @@ xray-xhttp 管理命令
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
   xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
-  xh cdnh3 [show|on|off]            CDN QUIC(h3) 备用节点开关与订阅同步
+  xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认开启）
+  xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口
+  xh hy2obfs [show|on|off]          备用节点 Hysteria2-Obfs（UDP salamander 混淆），同上
+  xh split [show|reality-up on|off|cdn-up on|off]  备用节点 上下行分离两条（纯客户端链接）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速
@@ -2225,6 +2552,9 @@ case "${1:-menu}" in
   cert)       shift; cmd_cert "$@" ;;
   cdnh2|h2cdn) shift; cmd_cdnh2 "$@" ;;
   cdnh3|h3cdn) shift; cmd_cdnh3 "$@" ;;
+  h2direct)   shift; cmd_h2direct "$@" ;;
+  hy2obfs)    shift; cmd_hy2obfs "$@" ;;
+  split)      shift; cmd_split "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;

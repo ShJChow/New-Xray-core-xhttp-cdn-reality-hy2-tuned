@@ -224,8 +224,9 @@ fi
 # h2-direct（v4.7.0）：与上面的 h3-direct 共用 UUID2、decryption 和 XHTTP_PATH，
 # 仅传输层不同（TCP + alpn h2）。客户端把两者编成 fallback 对，
 # UDP 被封时自动落到这条。sockopt 与 Reality 入站保持一致。
-if [[ "$FEATURE_H2_DIRECT" == true ]]; then
-  XRAY_H2_DIRECT_INBOUND=$(cat <<H2EOF
+# 供 xh h2direct 开关复用：同一份文本，开关开启时直接插进线上配置
+xray_h2_direct_inbound() {
+  cat <<H2EOF
 ,
         {
             "listen": "0.0.0.0",
@@ -272,13 +273,16 @@ if [[ "$FEATURE_H2_DIRECT" == true ]]; then
             }
         }
 H2EOF
-)
+}
+
+if [[ "$FEATURE_H2_DIRECT" == true ]]; then
+  XRAY_H2_DIRECT_INBOUND=$(xray_h2_direct_inbound)
   info "已启用 h2-direct 直连节点: TCP ${H2_PORT}"
 fi
 
-if [[ "$FEATURE_HY2" == true ]]; then
-  if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
-  XRAY_HY2_INBOUND=$(cat <<HY2EOF
+# 供 xh hy2obfs 开关复用（同上）
+xray_hy2_obfs_inbound() {
+  cat <<HY2EOF
 ,
         {
             "listen": "0.0.0.0",
@@ -347,7 +351,11 @@ if [[ "$FEATURE_HY2" == true ]]; then
             }
         }
 HY2EOF
-)
+}
+
+if [[ "$FEATURE_HY2" == true ]]; then
+  if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
+  XRAY_HY2_INBOUND=$(xray_hy2_obfs_inbound)
   info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆，FEATURE_HY2_OBFS=true）"
   fi
 
@@ -516,5 +524,11 @@ info "写入 ${NODE_ENV_FILE} ..."
   fi
 } > "$NODE_ENV_FILE"
 chmod 600 "$NODE_ENV_FILE"
+
+# 备用节点库的服务端部分：两条备用入站的完整文本（带前导逗号），xh 开启时插入 inbounds 末尾
+mkdir -p /etc/xhttp-cdn/all
+xray_h2_direct_inbound  > /etc/xhttp-cdn/all/inbound-h2direct.json
+xray_hy2_obfs_inbound   > /etc/xhttp-cdn/all/inbound-hy2obfs.json
+chmod 700 /etc/xhttp-cdn/all; chmod 600 /etc/xhttp-cdn/all/inbound-*.json
 
 echo ""
