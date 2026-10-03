@@ -1533,7 +1533,7 @@ for home in user_homes:
                         h2_p['alpn'] = ['h2']
                         if 'xhttp-opts' in h2_p:
                             h2_p['xhttp-opts']['host'] = '${CDN_DOMAIN}'
-                            h2_p['xhttp-opts']['mode'] = 'stream-up'
+                            h2_p['xhttp-opts']['mode'] = 'auto'
                         new_proxies.append(h2_p)
                         added = True
                     new_proxies.append(p)

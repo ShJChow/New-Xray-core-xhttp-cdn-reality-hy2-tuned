@@ -45,7 +45,7 @@ BASE_EXTRA_JSON=""
 build_download_extra() {
   local address="$1" port="$2" alpn="$3" download
 
-  download="\"downloadSettings\":{\"address\":\"$(json_escape "$address")\",\"port\":${port},\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_DOMAIN")\",\"allowInsecure\":false,\"alpn\":[\"${alpn}\"],\"fingerprint\":\"chrome\"${ECH_PARAM:+,\"echConfigList\":\"$(json_escape "$(urldecode "$ECH_PARAM")")\"}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_DOMAIN")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"stream-up\"${BASE_EXTRA_JSON:+,\"extra\":${BASE_EXTRA_JSON}}}}"
+  download="\"downloadSettings\":{\"address\":\"$(json_escape "$address")\",\"port\":${port},\"network\":\"xhttp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":\"$(json_escape "$CDN_DOMAIN")\",\"allowInsecure\":false,\"alpn\":[\"${alpn}\"],\"fingerprint\":\"chrome\"${ECH_PARAM:+,\"echConfigList\":\"$(json_escape "$(urldecode "$ECH_PARAM")")\"}},\"xhttpSettings\":{\"host\":\"$(json_escape "$CDN_DOMAIN")\",\"path\":\"$(json_escape "$XHTTP_PATH")\",\"mode\":\"auto\"${BASE_EXTRA_JSON:+,\"extra\":${BASE_EXTRA_JSON}}}}"
 
   if [[ -n "$BASE_EXTRA_JSON" ]]; then
     rawurlencode "${BASE_EXTRA_JSON%\}},${download}}"
@@ -60,9 +60,9 @@ sed -i "/#${NODE_H2UP_H3DOWN_TAG}\$/d"   "$V2RAYN_FILE"
 sed -i "/#${NODE_H3UP_H2DOWN_TAG}\$/d"   "$V2RAYN_FILE"
 
 printf '%s\n%s\n%s\n' \
-  "vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=stream-up${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_H3_TAG}" \
-  "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=stream-up&extra=$(build_download_extra "$BASE_SERVER" "$XHTTP_H3_PORT" "h3")#${NODE_H2UP_H3DOWN_TAG}" \
-  "vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=stream-up&extra=$(build_download_extra "$CDN_DOMAIN" "443" "h2")#${NODE_H3UP_H2DOWN_TAG}" \
+  "vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=auto${XHTTP_EXTRA:+&extra=${XHTTP_EXTRA}}#${NODE_H3_TAG}" \
+  "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=auto&extra=$(build_download_extra "$BASE_SERVER" "$XHTTP_H3_PORT" "h3")#${NODE_H2UP_H3DOWN_TAG}" \
+  "vless://${UUID2}@${BASE_SERVER_URI}:${XHTTP_H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${ECH_PARAM:+&ech=${ECH_PARAM}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH_ENC}&mode=auto&extra=$(build_download_extra "$CDN_DOMAIN" "443" "h2")#${NODE_H3UP_H2DOWN_TAG}" \
   >> "$V2RAYN_FILE"
 
 chown "$(stat -c '%u:%g' "$USER_HOME")" "$V2RAYN_FILE"

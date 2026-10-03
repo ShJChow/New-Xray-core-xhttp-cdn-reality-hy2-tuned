@@ -25,7 +25,7 @@ proxies:
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
@@ -55,7 +55,7 @@ proxies:
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"
@@ -129,9 +129,7 @@ proxies:
     port: ${HY2_H3_PORT}
     password: ${HY2_PASSWORD}
     sni: ${REALITY_DOMAIN}
-    skip-cert-verify: false
-    up: "${HY2_UP_MBPS} Mbps"
-    down: "${HY2_DOWN_MBPS} Mbps"
+    skip-cert-verify: false${MIHOMO_HY2_BW_BLOCK}
     alpn:
       - h3
   #>>FEATURE_HY2_H3
@@ -147,9 +145,7 @@ proxies:
     obfs: salamander
     obfs-password: ${OBFS_PASSWORD}
     sni: ${REALITY_DOMAIN}
-    skip-cert-verify: false
-    up: "${HY2_UP_MBPS} Mbps"
-    down: "${HY2_DOWN_MBPS} Mbps"
+    skip-cert-verify: false${MIHOMO_HY2_BW_BLOCK}
     alpn:
       - h3
   #>>FEATURE_HY2_OBFS
@@ -273,7 +269,7 @@ proxies:
     xhttp-opts:
       host: ${CDN_DOMAIN}
       path: ${XHTTP_PATH}
-      mode: stream-up${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
+      mode: auto${MIHOMO_XPADDING_XHTTP_BLOCK}${MIHOMO_SC_MIN_POSTS_BLOCK}
       reuse-settings:
         max-concurrency: "16-32"
         c-max-reuse-times: "0"

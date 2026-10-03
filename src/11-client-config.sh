@@ -114,8 +114,15 @@ XHTTP_SC_MIN_POSTS_MS=${XHTTP_SC_MIN_POSTS_MS:-10}
 # 上传期间同线路并行 ping 也更高）；不声明在「慢上行 + 丢包」下跌到 13。
 # 默认保持 100：国内家宽上行多在 30~100 Mbps，100 离主流最近。上行快（≥300）的用户应设成
 # 接近自己真实上行的值：HY2_UP_MBPS=300 bash install.sh；或在客户端里直接改节点的上行带宽。
-HY2_UP_MBPS=${HY2_UP_MBPS:-100}
-HY2_DOWN_MBPS=${HY2_DOWN_MBPS:-1000}
+# v4.9.66：默认不再声明带宽（客户端用 BBR）。声明后 sing-box / Mihomo 客户端会按该速率 Brutal 硬发，
+# 线路实际达不到时超发丢包，速度忽快忽慢。确实知道自己的线路带宽时再设：HY2_UP_MBPS=300 HY2_DOWN_MBPS=500 bash install.sh
+HY2_UP_MBPS=${HY2_UP_MBPS:-}
+HY2_DOWN_MBPS=${HY2_DOWN_MBPS:-}
+if [[ -n "${HY2_UP_MBPS}${HY2_DOWN_MBPS}" ]]; then
+  MIHOMO_HY2_BW_BLOCK=$(printf '\n    up: "%s Mbps"\n    down: "%s Mbps"' "${HY2_UP_MBPS:-100}" "${HY2_DOWN_MBPS:-1000}")
+else
+  MIHOMO_HY2_BW_BLOCK=""
+fi
 
 XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
 
@@ -177,11 +184,11 @@ else
   DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
 fi
 if [[ "$FEATURE_XPADDING" == true ]]; then
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22stream-up%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
   XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 else
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22stream-up%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
   XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
@@ -212,7 +219,7 @@ fi
 REALITY_DOWNLOAD_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${VPS_IP//:/%3A}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22serverName%22%3A%22${REALITY_DOMAIN}%22%2C%22fingerprint%22%3A%22chrome%22%2C%22publicKey%22%3A%22${PUBLIC_KEY}%22%2C%22shortId%22%3A%22${SHORT_ID}%22%2C%22spiderX%22%3A%22%22%7D%2C%22xhttpSettings%22%3A%7B%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22stream-up%22%2C%22extra%22%3A${XPAD_EXTRA_ENC}%7D%7D"
 XPAD_REV_SPLIT_EXTRA_ENC="${XPAD_CDN_EXTRA_ENC%\%7D}%2C${REALITY_DOWNLOAD_ENC}%7D"
 if [[ "${FEATURE_CDN_UP_REALITY_DOWN:-false}" == true ]]; then
-  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
+  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
 else
   CDN_UP_REALITY_DOWN_NODE_LINE=""
 fi
@@ -256,6 +263,8 @@ fi
 # 吞吐不受影响（337 / 356 Mbps）。
 #
 # v4.9.58：按用户要求 CDN 节点（H2 / H3）及其余 auto 节点也统一为 stream-up。
+# v4.9.66：用户反馈速度不稳，CDN 经过的腿（CDN-H2/H3、CDN 上行腿、CDN 下行腿）改回 auto；
+#          直连与 Reality 腿保持 stream-up。依据：上面的实测里 stream-up 经 Cloudflare 上传 2/6 没传完（auto 0/6）。
 # 此前注释写「CDN 绝不能这样改：packet-up 存在的理由是 CDN 不支持流式请求体」。Cloudflare 开启 gRPC /
 # WebSockets 后实测（本机经 Cloudflare 回源，单次 20MB 上传）：stream-up 可用、下载不受影响，但 6 次上传中 2 次
 # 未完整传完（auto 为 0/6），H3 上传偏低且波动大（1.4–20 MB/s）。若在某些网络上传卡住，
@@ -270,7 +279,7 @@ fi
 
 # h2-cdn: 经 CDN 的 TCP(h2) 链路（默认关闭，FEATURE_CDN_H2=true 时启用）
 if [[ "$FEATURE_CDN_H2" == true ]]; then
-  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
+  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
 else
   H2_CDN_NODE_LINE=""
 fi
@@ -281,7 +290,7 @@ fi
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
 # 默认关闭（v4.9.64；FEATURE_CDN_H3=true 或 xh cdnh3 on 开启）。
 if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
-  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 else
   H3_CDN_NODE_LINE=""
 fi
@@ -320,10 +329,10 @@ hy2_client_fm_param() {
 
 if [[ "$FEATURE_HY2" == true && "${FEATURE_HY2_OBFS:-false}" == true ]]; then
   if [[ "${FEATURE_PORT_HOPPING:-false}" == true ]]; then
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "$OBFS_PASSWORD" "${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&mport=${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")${HY2_UP_MBPS:+&upmbps=${HY2_UP_MBPS}}${HY2_DOWN_MBPS:+&downmbps=${HY2_DOWN_MBPS}}$(hy2_client_fm_param "$OBFS_PASSWORD" "${HY2_PORT},${PORT_HOP_RANGE:-40000-50000}")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
     MIHOMO_HY2_PORTS_LINE=$(printf '\n    ports: %s,%s' "${HY2_PORT}" "${PORT_HOP_RANGE:-40000-50000}")
   else
-    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "$OBFS_PASSWORD" "")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
+    HY2_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_PORT}/?sni=${REALITY_DOMAIN}&insecure=0&obfs=salamander&obfs-password=$(rawurlencode "$OBFS_PASSWORD")${HY2_UP_MBPS:+&upmbps=${HY2_UP_MBPS}}${HY2_DOWN_MBPS:+&downmbps=${HY2_DOWN_MBPS}}$(hy2_client_fm_param "$OBFS_PASSWORD" "")#Hysteria2-Obfs-Direct${NODE_SUFFIX}"
     MIHOMO_HY2_PORTS_LINE=""
   fi
 else
@@ -333,7 +342,7 @@ fi
 
 # Hysteria2-H3（v4.9.26）：UDP 443、无混淆，其余与 Hysteria2-Obfs-Direct 相同。
 if [[ "${FEATURE_HY2_H3:-false}" == true ]]; then
-  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0&upmbps=${HY2_UP_MBPS}&downmbps=${HY2_DOWN_MBPS}$(hy2_client_fm_param "" "")#Hysteria2-H3-Direct${NODE_SUFFIX}"
+  HY2_H3_NODE_LINE="hysteria2://$(rawurlencode "$HY2_PASSWORD")@${REALITY_DOMAIN}:${HY2_H3_PORT:-443}/?sni=${REALITY_DOMAIN}&alpn=h3&insecure=0${HY2_UP_MBPS:+&upmbps=${HY2_UP_MBPS}}${HY2_DOWN_MBPS:+&downmbps=${HY2_DOWN_MBPS}}$(hy2_client_fm_param "" "")#Hysteria2-H3-Direct${NODE_SUFFIX}"
 else
   HY2_H3_NODE_LINE=""
 fi
