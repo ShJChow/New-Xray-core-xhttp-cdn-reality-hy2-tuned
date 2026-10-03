@@ -247,25 +247,6 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
-```mermaid
-flowchart TD
-    Client[客户端设备] --> Router{分流调度 / URL-Test}
-    
-    subgraph 场景 B：极致性能（日常主力 90% 流量）
-        Router -->|直连极低延迟| Reality[VLESS-Reality-Vision<br>TCP 443 Splice 零拷贝]
-        Router -->|抗丢包大带宽| Hy2[Hysteria 2 / TUIC v5<br>UDP 8443 Brutal 引擎]
-        Reality --> VPS[VPS 源站真实 IP]
-        Hy2 --> VPS
-    end
-    
-    subgraph 场景 A：安全容灾（备用 / 救砖）
-        Router -->|防封锁 / 隐匿源站| XHTTP[VLESS-XHTTP<br>TCP/UDP 443 xmux 多路复用]
-        XHTTP --> CF[Cloudflare CDN 优选边缘]
-        CF -->|HTTP/2 流式回源| Nginx[Nginx grpc_pass<br>零缓冲直通]
-        Nginx --> XrayInbound[Xray 本地 8001 入站]
-    end
-```
-
 | # | 节点名称（v4.9.72） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
