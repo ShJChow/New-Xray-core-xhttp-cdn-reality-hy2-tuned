@@ -100,9 +100,11 @@ http {
     ssl_session_cache          shared:SSL:16m;
     ssl_session_timeout        1h;
     # TLS1.1 / 1.2 只为兼容老客户端：1.1 需要 ssl_ciphers 里的 CBC-SHA 套件与 @SECLEVEL=0 才能协商（否则服务端回
-    # protocol version 告警），@SECLEVEL=0 对整个 nginx TLS 生效。关 tickets 后没有会话可恢复，
-    # 所以下面的 ssl_early_data（0-RTT）与 Early-Data 头实际不再起作用，保留只是无害。
-    ssl_session_tickets        off;
+    # protocol version 告警），@SECLEVEL=0 对整个 nginx TLS 生效。
+    # v4.9.69：session tickets 重新打开。tickets 让客户端重连时恢复会话、少传证书，并且是下面 ssl_early_data
+    # （0-RTT）与 Early-Data 头生效的前提。代价：ticket 密钥在 nginx 进程内，重启后旧 ticket 失效，前向保密弱于
+    # 关 tickets 时的完整握手。**未测速**，只是去掉重连时多余的完整握手。
+    ssl_session_tickets        on;
     ssl_protocols              TLSv1.3 TLSv1.2 TLSv1.1;
     ssl_ciphers                TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:@SECLEVEL=0;
     ssl_prefer_server_ciphers  on;
