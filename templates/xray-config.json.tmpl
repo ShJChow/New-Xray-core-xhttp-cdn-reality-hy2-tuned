@@ -134,8 +134,8 @@
                 "xhttpSettings": {
                     "host": "",
                     "path": "${XHTTP_PATH}",
-                    // 8001 同时服务 nginx 回源（CDN 腿，客户端 mode=auto 即 packet-up）与 Reality 回落（stream-up）。
-                    // 服务端写 stream-up 会拒绝 packet-up 的上传 POST（实测 auto / packet-up 客户端全部不通），所以这里必须是 auto。
+                    // 8001 同时服务 nginx 回源（CDN 腿）与 Reality 回落。auto 什么上传模式都收；
+                    // 写成 stream-up 会拒绝 auto / packet-up 客户端的上传 POST（实测全部不通），所以这里保持 auto。
                     "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
                 }
             },

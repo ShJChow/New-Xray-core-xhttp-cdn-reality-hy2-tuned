@@ -82,7 +82,8 @@ rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null
 #   hMaxReusableSecs: 1800-3000 → 定期切换主连接消除特征
 #   hKeepAlivePeriod: 0    → h3 取 quic-go 默认、h2 取 Chrome 默认
 # ---------- XHTTP packet-up 的最小 POST 间隔（v4.9.1） ----------
-# 经 CDN 的节点用 mode=auto（TLS 下 auto 选 packet-up；见下方 stream-up 的实测反证），packet-up 把上行
+# 这里的 scMinPostsIntervalMs 只在 packet-up（mode=auto 在 TLS 下选 packet-up）时起作用；v4.9.70 起经 CDN 的上传腿也
+# 用 stream-up，该参数对它们不生效，保留是为了客户端改回 auto 时仍有合理的 POST 间隔。packet-up 把上行
 # 切成一串 POST，两次 POST 之间有一个最小间隔。这个间隔就是 CDN 节点延迟的**主项**，
 # 不是 Cloudflare 边缘慢。实测（经 CF，socks 打 gstatic/generate_204，各 9 个样本）：
 #
@@ -219,7 +220,7 @@ fi
 REALITY_DOWNLOAD_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${VPS_IP//:/%3A}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22reality%22%2C%22realitySettings%22%3A%7B%22serverName%22%3A%22${REALITY_DOMAIN}%22%2C%22fingerprint%22%3A%22chrome%22%2C%22publicKey%22%3A%22${PUBLIC_KEY}%22%2C%22shortId%22%3A%22${SHORT_ID}%22%2C%22spiderX%22%3A%22%22%7D%2C%22xhttpSettings%22%3A%7B%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22stream-up%22%2C%22extra%22%3A${XPAD_EXTRA_ENC}%7D%7D"
 XPAD_REV_SPLIT_EXTRA_ENC="${XPAD_CDN_EXTRA_ENC%\%7D}%2C${REALITY_DOWNLOAD_ENC}%7D"
 if [[ "${FEATURE_CDN_UP_REALITY_DOWN:-false}" == true ]]; then
-  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
+  CDN_UP_REALITY_DOWN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_REV_SPLIT_EXTRA_ENC}#VLESS-CDN-Up-Reality-Down${NODE_SUFFIX}"
 else
   CDN_UP_REALITY_DOWN_NODE_LINE=""
 fi
@@ -262,12 +263,15 @@ fi
 #   h3-direct auto/packet-up 69ms → stream-up 18ms
 # 吞吐不受影响（337 / 356 Mbps）。
 #
-# 当前规则（v4.9.66）：直连腿与 Reality 腿用 stream-up；经 Cloudflare 的腿（CDN-H2 / CDN-H3、
-# CDN 上行腿、CDN 下行腿）用 auto。依据：Cloudflare 开启 gRPC / WebSockets 后实测（本机经 Cloudflare
-# 回源，单次 20MB 上传），stream-up 经 CF 6 次上传有 2 次没传完（auto 为 0/6），H3 上传偏低且波动大
-# （1.4–20 MB/s）。更早的一次实测还见过 stream-up 经 CF 吞吐掉到 0，当时 CF 尚未开 gRPC / WebSockets。
-# 服务端 8001 入站必须是 mode=auto：它同时接 nginx 回源（CDN 腿，auto 即 packet-up）与 Reality 回落，
-# 写成 stream-up 会拒绝 packet-up 的上传（实测 auto / packet-up 客户端全部不通）。直连入站只收 stream-up。
+# 当前规则（v4.9.70）：上传腿一律 stream-up（直连、Reality、经 Cloudflare 都是）；只有「经 CDN 的下载腿」
+# （Reality-Up-CDN-Down 的 downloadSettings）保持 auto。依据：本机经 Cloudflare 回连自己，各 40 次传输
+# （20MB 下载 / 10MB 上传）都没有卡住，上传 stream-up 约 365–441 Mbps、auto 约 163–261 Mbps（快 1.7–2.7 倍），
+# 下载两者接近（约 490–640 Mbps）。这只代表本机到 Cloudflare 这一段，不代表用户客户端的线路。
+# v4.9.66 曾把 CDN 腿全改成 auto，依据是更早一次实测（stream-up 经 CF 上传 6 次有 2 次没传完）；
+# 该现象在 Cloudflare 开启 gRPC / WebSockets 后的这次测试里没有复现，所以上传腿改回 stream-up，下载腿保持 auto。
+# 服务端 8001 入站保持 mode=auto：它同时接 nginx 回源（CDN 腿）与 Reality 回落，auto 什么上传模式都收。
+# 写成 stream-up 会拒绝 auto / packet-up 的上传（实测这两种客户端全部不通），用户把链接改回 auto 就会断。
+# 直连入站只收 stream-up。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
   H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H3${NODE_SUFFIX}"
 else
@@ -276,7 +280,7 @@ fi
 
 # h2-cdn: 经 CDN 的 TCP(h2) 链路（默认关闭，FEATURE_CDN_H2=true 时启用）
 if [[ "$FEATURE_CDN_H2" == true ]]; then
-  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
+  H2_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H2${NODE_SUFFIX}"
 else
   H2_CDN_NODE_LINE=""
 fi
@@ -287,7 +291,7 @@ fi
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
 # 默认关闭（v4.9.64；FEATURE_CDN_H3=true 或 xh cdnh3 on 开启）。
 if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
-  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 else
   H3_CDN_NODE_LINE=""
 fi

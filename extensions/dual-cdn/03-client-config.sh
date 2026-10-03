@@ -26,7 +26,7 @@ else
 fi
 EXTRA_ENC=$(rawurlencode "$EXTRA_JSON")
 
-NEW_V2RAYN_LINE="vless://${UUID2}@${CDN_A}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_A}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${ECH_URI_PARAM}&type=xhttp&host=${CDN_A}&path=${XHTTP_PATH}&mode=auto&extra=${EXTRA_ENC}#${NODE_TAG}"
+NEW_V2RAYN_LINE="vless://${UUID2}@${CDN_A}:443?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${CDN_A}&fp=chrome&alpn=h2&insecure=0&allowInsecure=0${ECH_URI_PARAM}&type=xhttp&host=${CDN_A}&path=${XHTTP_PATH}&mode=stream-up&extra=${EXTRA_ENC}#${NODE_TAG}"
 
 sed -i "/#${NODE_TAG}\$/d" "$V2RAYN_FILE"
 sed -i "/#${LEGACY_NODE_TAG}\$/d" "$V2RAYN_FILE"
