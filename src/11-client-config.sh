@@ -324,7 +324,19 @@ hy2_client_fm_param() {
   fi
   [[ -n "$mport" ]] && qp+=",\"udpHop\":{\"ports\":\"${mport//:/-}\",\"interval\":\"30\"}"
   qp+=',"keepAlivePeriod":10'
-  [[ -n "$obfs" ]] && udp=",\"udp\":[{\"type\":\"salamander\",\"settings\":{\"password\":\"${obfs}\"}}]"
+  local noise_item=""
+  if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then
+    noise_item="{\"type\":\"noise\",\"settings\":{\"noise\":[{\"type\":\"exp\",\"packet\":\"${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}\",\"delay\":\"${NOISE_EXP_DELAY:-10-50}\"}]}}"
+  fi
+  if [[ -n "$obfs" ]]; then
+    if [[ -n "$noise_item" ]]; then
+      udp=",\"udp\":[${noise_item},{\"type\":\"salamander\",\"settings\":{\"password\":\"${obfs}\"}}]"
+    else
+      udp=",\"udp\":[{\"type\":\"salamander\",\"settings\":{\"password\":\"${obfs}\"}}]"
+    fi
+  elif [[ -n "$noise_item" ]]; then
+    udp=",\"udp\":[${noise_item}]"
+  fi
   printf '&fm=%s' "$(rawurlencode "{\"quicParams\":{${qp}}${udp}}")"
 }
 
@@ -348,7 +360,13 @@ else
   HY2_H3_NODE_LINE=""
 fi
 
-info "节点集: cdn-h2(${FEATURE_CDN_H2:-false}) cdn-h3(${FEATURE_CDN_H3:-false}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Hysteria2-Obfs(${FEATURE_HY2_OBFS:-false}) + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false}) + Reality x2 [备用默认关闭: CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false})]"
+if [[ "${FEATURE_MASQUE:-false}" == true ]]; then
+  MASQUE_NODE_LINE="masque://user%40${CDN_DOMAIN}:${MASQUE_PASSWORD}@${REALITY_DOMAIN}:${MASQUE_PORT:-8447}/.well-known/masque/ip/*/*/?sni=${REALITY_DOMAIN}&alpn=h3#MASQUE-CONNECT-IP${NODE_SUFFIX}"
+else
+  MASQUE_NODE_LINE=""
+fi
+
+info "节点集: cdn-h2(${FEATURE_CDN_H2:-false}) cdn-h3(${FEATURE_CDN_H3:-false}) + h3-direct(${FEATURE_H3_DIRECT}) + Hysteria2-H3(${FEATURE_HY2_H3:-false}) + Hysteria2-Obfs(${FEATURE_HY2_OBFS:-false}) + Reality-up-CDN-down(${FEATURE_REALITY_UP_CDN_DOWN:-false}) + Reality x2 [备用默认关闭: CDN-up-Reality-down(${FEATURE_CDN_UP_REALITY_DOWN:-false}) MASQUE(${FEATURE_MASQUE:-false})]"
 
 cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 @@include templates/client-config.txt.tmpl
@@ -459,10 +477,11 @@ if (
   FEATURE_H3_DIRECT=true FEATURE_H2_DIRECT=true FEATURE_HY2=true FEATURE_HY2_H3=true FEATURE_HY2_OBFS=true
   FEATURE_CDN_H2=true FEATURE_CDN_H3=true FEATURE_PORT_HOPPING=false
   FEATURE_REALITY_UP_CDN_DOWN=true FEATURE_UP_CDN_DOWN_MIHOMO=true FEATURE_CDN_UP_REALITY_DOWN=true
+  FEATURE_MASQUE=true
   info() { :; }; warn() { :; }
   render_client_configs
 ) >"${STATE_DIR}/all-render.log" 2>&1 \
-  && for _n in VLESS-XHTTP-CDN-H2 VLESS-XHTTP-CDN-H3 VLESS-XHTTP-Direct-H2 Hysteria2-H3-Direct Hysteria2-Obfs-Direct VLESS-Reality-Up-CDN-Down VLESS-CDN-Up-Reality-Down; do
+  && for _n in VLESS-XHTTP-CDN-H2 VLESS-XHTTP-CDN-H3 VLESS-XHTTP-Direct-H2 Hysteria2-H3-Direct Hysteria2-Obfs-Direct VLESS-Reality-Up-CDN-Down VLESS-CDN-Up-Reality-Down MASQUE-CONNECT-IP; do
        grep -q "#${_n}" /etc/xhttp-cdn/all.new/client-config.txt || { echo "备用节点库缺少 ${_n}" >> "${STATE_DIR}/all-render.log"; false; }
      done; then
   # 保留旧库里的服务端入站文本（由 09 写入），换入新渲染的客户端文件

@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.74"
+PROJECT_VERSION="4.9.75"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：升级至最新稳定/前沿版 v26.9.30（具备 XDRIVE 云盘代理、MASQUE、Finalmask Noise exp、WFP 防泄露等特性）。
 XRAY_DEFAULT_VERSION="26.9.30"
@@ -159,6 +159,26 @@ BRUTAL_DEFAULT_MBPS=${BRUTAL_DEFAULT_MBPS:-auto}
 # 兼容别名：MIN_CLIENT_VER、MINVERSION、MIN_VERSION。
 REALITY_MIN_CLIENT_VER="${REALITY_MIN_CLIENT_VER:-${MIN_CLIENT_VER:-${MINVERSION:-${MIN_VERSION:-1.8.0}}}}"
 
+# ==================================================
+# Xray v26.9.30+ 前沿新特性开关（默认可选）
+# ==================================================
+# FEATURE_MASQUE: IETF RFC 9484 CONNECT-IP 标准 L3 隧道
+FEATURE_MASQUE=${FEATURE_MASQUE:-false}
+MASQUE_PORT=${MASQUE_PORT:-}
+MASQUE_PASSWORD=${MASQUE_PASSWORD:-""}
+
+# FEATURE_XDRIVE: 基于云存储 (Google Drive) 的穿透代理（应对极端 IP 白名单/无公网 IP）
+FEATURE_XDRIVE=${FEATURE_XDRIVE:-false}
+XDRIVE_FOLDER=${XDRIVE_FOLDER:-""}
+XDRIVE_CLIENT_ID=${XDRIVE_CLIENT_ID:-""}
+XDRIVE_CLIENT_SECRET=${XDRIVE_CLIENT_SECRET:-""}
+XDRIVE_REFRESH_TOKEN=${XDRIVE_REFRESH_TOKEN:-""}
+
+# FEATURE_NOISE_EXP: Finalmask Noise dynamic expression 动态模板混淆（防 UDP DPI 识别）
+FEATURE_NOISE_EXP=${FEATURE_NOISE_EXP:-false}
+NOISE_EXP_PACKET=${NOISE_EXP_PACKET:-"<b 16030100><r 32><t><c><rd 8>"}
+NOISE_EXP_DELAY=${NOISE_EXP_DELAY:-"10-50"}
+
 
 # ==================================================
 # 未识别环境变量检查（v4.7.10）
@@ -184,7 +204,7 @@ check_unknown_env_vars() {
   # 只看长得像本项目参数的变量，避免把系统里成百上千的环境变量全扫一遍
   while IFS= read -r name; do
     grep -q "\b${name}\b" <<< "$code" || unknown+=("$name")
-  done < <(compgen -v | grep -E '^(AUTO|FEATURE_|CDN_|REALITY_|XHTTP_|HY2_|OBFS_|H2_|H3_|IP_CHOICE|FALLBACK_|VISION_|KEEP_|NODE_|XRAY_|MIN_CLIENT_VER|MINVERSION|MIN_VERSION)')
+  done < <(compgen -v | grep -E '^(AUTO|FEATURE_|CDN_|REALITY_|XHTTP_|HY2_|OBFS_|H2_|H3_|IP_CHOICE|FALLBACK_|VISION_|KEEP_|NODE_|XRAY_|MIN_CLIENT_VER|MINVERSION|MIN_VERSION|MASQUE_|XDRIVE_|NOISE_)')
 
   [[ ${#unknown[@]} -eq 0 ]] && return 0
   warn "以下环境变量本脚本不认识，已被忽略（通常是拼写或版本差异）："

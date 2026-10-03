@@ -224,6 +224,7 @@ rawurlencode() {
 # 允许用环境变量覆盖，便于重装时保持客户端配置不变。
 HY2_PASSWORD="${HY2_PASSWORD:-$(openssl rand -hex 32)}"
 OBFS_PASSWORD="${OBFS_PASSWORD:-$(openssl rand -hex 32)}"
+MASQUE_PASSWORD="${MASQUE_PASSWORD:-$(openssl rand -hex 16)}"
 
 # H3_PORT **不能用 443**（v4.0.3 修复）：
 # v4.0.0 曾按「一个 UDP 一个 TCP，协议不同不冲突」把它设成 443，那是**未经验证的假设**。
@@ -237,7 +238,7 @@ get_random_port() {
   while true; do
     port=$(shuf -i 10000-65000 -n 1 2>/dev/null || awk 'BEGIN{srand(); print int(rand()*(65000-10000)+10000)}')
     [[ "$port" != "8443" && "$port" != "8445" && "$port" != "8446" && "$port" != "443" && "$port" != "80" ]] || continue
-    [[ "$port" != "${H3_PORT:-}" && "$port" != "${H2_PORT:-}" && "$port" != "${HY2_H3_PORT:-}" && "$port" != "${HY2_PORT:-}" ]] || continue
+    [[ "$port" != "${H3_PORT:-}" && "$port" != "${H2_PORT:-}" && "$port" != "${HY2_H3_PORT:-}" && "$port" != "${HY2_PORT:-}" && "$port" != "${MASQUE_PORT:-}" ]] || continue
     if [[ "$proto" == "tcp" ]]; then
       ss -Hltn "sport = :$port" 2>/dev/null | grep -q . && continue
     else
@@ -258,6 +259,9 @@ HY2_PORT="${HY2_PORT:-$(get_random_port udp)}"
 if [[ "$HY2_H3_PORT" == "$HY2_PORT" ]]; then
   HY2_PORT="$(get_random_port udp)"
 fi
+# v4.9.75: MASQUE 隧道节点默认动态随机分配高端口
+MASQUE_PORT="${MASQUE_PORT:-$(get_random_port udp)}"
+export MASQUE_PORT MASQUE_PASSWORD
 
 # 兜底：无论用户怎么设，都不允许与 Reality 的 TCP 443 同端口。
 if [[ "$H3_PORT" == "443" ]]; then

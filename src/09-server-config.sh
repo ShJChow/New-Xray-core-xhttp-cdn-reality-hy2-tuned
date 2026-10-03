@@ -352,6 +352,21 @@ xray_hy2_obfs_inbound() {
                 },
                 "finalmask": {
                     "udp": [
+$(if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then cat <<NEOF
+                        {
+                            "type": "noise",
+                            "settings": {
+                                "noise": [
+                                    {
+                                        "type": "exp",
+                                        "packet": "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}",
+                                        "delay": "${NOISE_EXP_DELAY:-10-50}"
+                                    }
+                                ]
+                            }
+                        },
+NEOF
+fi)
                         {
                             "type": "salamander",
                             "settings": {
@@ -436,7 +451,26 @@ xray_hy2_h3_inbound() {
                 "sockopt": {
                     "tcpFastOpen": true,
                     "tcpcongestion": "brutal"
+                }$(if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then cat <<NEOF
+,
+                "finalmask": {
+                    "udp": [
+                        {
+                            "type": "noise",
+                            "settings": {
+                                "noise": [
+                                    {
+                                        "type": "exp",
+                                        "packet": "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}",
+                                        "delay": "${NOISE_EXP_DELAY:-10-50}"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
                 }
+NEOF
+fi)
             },
             "sniffing": {
                 "enabled": true,
@@ -452,6 +486,102 @@ if [[ "$FEATURE_HY2_H3" == true ]]; then
   XRAY_HY2_H3_INBOUND=$(printf '\n        // >>xh:hy2h3\n%s\n        // <<xh:hy2h3' "$(xray_hy2_h3_inbound)")
   info "已启用 Hysteria2-H3 直连节点: UDP ${HY2_H3_PORT}（无混淆，标准 HTTP/3 形态）"
 fi
+fi
+
+# MASQUE 标准 L3 隧道 (IETF RFC 9484 CONNECT-IP, Xray v26.9.30+)
+xray_masque_inbound() {
+  cat <<MASQUEEOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${MASQUE_PORT},
+            "protocol": "masque",
+            "settings": {
+                "users": [
+                    {
+                        "email": "user@${CDN_DOMAIN}",
+                        "pass": "${MASQUE_PASSWORD}",
+                        "level": 0
+                    }
+                ],
+                "address": [
+                    "10.13.0.1/24",
+                    "fd13::1/64"
+                ],
+                "mtu": 1400
+            },
+            "streamSettings": {
+                "network": "masque",
+                "security": "tls",
+                "tlsSettings": {
+                    "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "rejectUnknownSni": true,
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE}",
+                            "keyFile": "${CERT_KEY}"
+                        }
+                    ],
+                    "alpn": ["h3", "h2"]
+                },
+                "sockopt": {
+                    "tcpcongestion": "bbr"
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+MASQUEEOF
+}
+
+XRAY_MASQUE_INBOUND=""
+if [[ "$FEATURE_MASQUE" == true ]]; then
+  XRAY_MASQUE_INBOUND=$(printf '\n        // >>xh:masque\n%s\n        // <<xh:masque' "$(xray_masque_inbound)")
+  info "已启用 MASQUE 标准 L3 隧道 (RFC 9484): UDP/TCP ${MASQUE_PORT}"
+fi
+
+# XDRIVE 网盘穿透代理 (Google Drive 中继, Xray v26.9.30+)
+xray_xdrive_inbound() {
+  cat <<XDRIVEEOF
+,
+        {
+            "tag": "vless-xdrive",
+            "port": 0,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "xdrive",
+                "xdriveSettings": {
+                    "service": "Google Drive",
+                    "remoteFolder": "${XDRIVE_FOLDER:-unknown}",
+                    "secrets": [
+                        "${XDRIVE_CLIENT_ID:-unknown}",
+                        "${XDRIVE_CLIENT_SECRET:-unknown}",
+                        "${XDRIVE_REFRESH_TOKEN:-unknown}"
+                    ]
+                }
+            }
+        }
+XDRIVEEOF
+}
+
+XRAY_XDRIVE_INBOUND=""
+if [[ "$FEATURE_XDRIVE" == true && -n "${XDRIVE_FOLDER:-}" && -n "${XDRIVE_CLIENT_ID:-}" ]]; then
+  XRAY_XDRIVE_INBOUND=$(printf '\n        // >>xh:xdrive\n%s\n        // <<xh:xdrive' "$(xray_xdrive_inbound)")
+  info "已启用 XDRIVE 网盘穿透代理 (Google Drive)"
 fi
 
 info "写入 /etc/nginx/nginx.conf ..."
@@ -542,6 +672,17 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'REALITY_MAX_TIME_DIFF=%q\n'  "${REALITY_MAX_TIME_DIFF:-}"
   printf 'FEATURE_CDN_ECH=%q\n'   "$FEATURE_CDN_ECH"
   printf 'CDN_ECH_ENABLED=%q\n'   "$CDN_ECH_ENABLED"
+  printf 'FEATURE_MASQUE=%q\n'         "${FEATURE_MASQUE:-false}"
+  printf 'MASQUE_PORT=%q\n'            "${MASQUE_PORT:-}"
+  printf 'MASQUE_PASSWORD=%q\n'        "${MASQUE_PASSWORD:-}"
+  printf 'FEATURE_XDRIVE=%q\n'         "${FEATURE_XDRIVE:-false}"
+  printf 'XDRIVE_FOLDER=%q\n'          "${XDRIVE_FOLDER:-}"
+  printf 'XDRIVE_CLIENT_ID=%q\n'       "${XDRIVE_CLIENT_ID:-}"
+  printf 'XDRIVE_CLIENT_SECRET=%q\n'   "${XDRIVE_CLIENT_SECRET:-}"
+  printf 'XDRIVE_REFRESH_TOKEN=%q\n'   "${XDRIVE_REFRESH_TOKEN:-}"
+  printf 'FEATURE_NOISE_EXP=%q\n'      "${FEATURE_NOISE_EXP:-false}"
+  printf 'NOISE_EXP_PACKET=%q\n'       "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
+  printf 'NOISE_EXP_DELAY=%q\n'        "${NOISE_EXP_DELAY:-10-50}"
   if [[ "$FEATURE_XPADDING" == true ]]; then
     printf 'XHTTP_PADDING_HEADER=%q\n'    "$XHTTP_PADDING_HEADER"
     printf 'XHTTP_PADDING_KEY=%q\n'       "$XHTTP_PADDING_KEY"
@@ -551,11 +692,13 @@ info "写入 ${NODE_ENV_FILE} ..."
 } > "$NODE_ENV_FILE"
 chmod 600 "$NODE_ENV_FILE"
 
-# 备用节点库的服务端部分：两条备用入站的完整文本（带前导逗号），xh 开启时插入 inbounds 末尾
+# 备用节点库的服务端部分：备用入站的完整文本（带前导逗号），xh 开启时插入 inbounds 末尾
 mkdir -p /etc/xhttp-cdn/all
 xray_h2_direct_inbound  > /etc/xhttp-cdn/all/inbound-h2direct.json
 xray_hy2_obfs_inbound   > /etc/xhttp-cdn/all/inbound-hy2obfs.json
-xray_hy2_h3_inbound      > /etc/xhttp-cdn/all/inbound-hy2h3.json
+xray_hy2_h3_inbound     > /etc/xhttp-cdn/all/inbound-hy2h3.json
+xray_masque_inbound     > /etc/xhttp-cdn/all/inbound-masque.json
+xray_xdrive_inbound     > /etc/xhttp-cdn/all/inbound-xdrive.json
 chmod 700 /etc/xhttp-cdn/all; chmod 600 /etc/xhttp-cdn/all/inbound-*.json
 
 echo ""

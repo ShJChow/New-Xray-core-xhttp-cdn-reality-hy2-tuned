@@ -228,6 +228,20 @@ cmd_info() {
   else
     echo "  Hysteria2:       未启用"
   fi
+  if [[ "${FEATURE_MASQUE:-false}" == true ]]; then
+    echo "  MASQUE 隧道:     UDP/TCP ${MASQUE_PORT:-8447}（RFC 9484 CONNECT-IP）"
+    echo "    认证账号:      user@${CDN_DOMAIN:-example.com}"
+  else
+    echo "  MASQUE 隧道:     未启用"
+  fi
+  if [[ "${FEATURE_XDRIVE:-false}" == true ]]; then
+    echo "  XDRIVE 网盘代理: 已启用 (Google Drive 穿透)"
+  else
+    echo "  XDRIVE 网盘代理: 未启用"
+  fi
+  if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then
+    echo "  Noise 动态混淆:  已开启 (${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>})"
+  fi
   if [[ -f "$SYSCTL_CONF" ]]; then
     echo "  系统层调优:      已开启（${MANAGE_CMD} tuning off 可回滚）"
   else
@@ -527,6 +541,16 @@ cmd_diag() {
       else
         chk "Hysteria2 未监听 UDP ${HY2_PORT}" 1 "查 ${MANAGE_CMD} log xray；确认内核 ≥26.3.27"
       fi
+    fi
+    if [[ "${FEATURE_MASQUE:-false}" == true ]]; then
+      if ss -lnup 2>/dev/null | grep -qE ":${MASQUE_PORT:-8447}\b"; then
+        chk "MASQUE 已监听 UDP ${MASQUE_PORT:-8447}" 0
+      else
+        chk "MASQUE 未监听 UDP ${MASQUE_PORT:-8447}" 1 "查 ${MANAGE_CMD} log xray"
+      fi
+    fi
+    if [[ "${FEATURE_XDRIVE:-false}" == true ]]; then
+      chk "XDRIVE 网盘代理 (Google Drive) 已激活" 0
     fi
   fi
 
@@ -2217,8 +2241,7 @@ try:
             if enable and not has:
                 src = [p for p in rp if pm(p)]
                 if not src:
-                    sys.stderr.write('Mihomo 节点库里没有 %s\n' % name)
-                    sys.exit(2)
+                    continue
                 p = copy.deepcopy(src[0])
                 names = [x.get('name') for x in lp]
                 lp.insert(insert_pos(rp, rp.index(src[0]), names, lambda x: x.get('name')), p)
@@ -2408,13 +2431,14 @@ backup_port_busy() {   # $1 = tcp|udp，$2 = 端口
   fi
 }
 
-# 需要服务端入站的两条：h2direct（TCP H2_PORT）与 hy2obfs（UDP HY2_PORT）。$1 = key，$2 = show|on|off
+# 需要服务端入站的备用节点：h2direct（TCP H2_PORT）、hy2obfs（UDP HY2_PORT）与 masque（UDP MASQUE_PORT）。$1 = key，$2 = show|on|off
 # 顺序：开启时先改客户端文件（可原子撤销），再改服务端，最后写标志位；任何一步失败都撤销前面的步骤。
 cmd_backup_server_node() {
   local key="$1" action="${2:-show}" flag name label proto port cur rc
   case "$key" in
     h2direct) flag=FEATURE_H2_DIRECT; name="VLESS-XHTTP-Direct-H2"; label="XHTTP-Direct-H2（TCP 直连，h3-direct 的孪生体）"; proto=tcp; port="${H2_PORT:-8445}" ;;
     hy2obfs)  flag=FEATURE_HY2_OBFS;  name="Hysteria2-Obfs-Direct"; label="Hysteria2-Obfs-Direct（salamander 混淆）";       proto=udp; port="${HY2_PORT}" ;;
+    masque)   flag=FEATURE_MASQUE;    name="MASQUE-CONNECT-IP";     label="MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP)";        proto=udp; port="${MASQUE_PORT:-8447}" ;;
   esac
   cur="${!flag:-false}"
   case "$action" in
@@ -2426,15 +2450,31 @@ cmd_backup_server_node() {
       else
         echo -e "  当前状态:       ${YELLOW}未开启${NC}  (开启后监听 ${proto^^} ${port})"
       fi
-      echo -e "  ${MANAGE_CMD} hy2 obfs on   # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
-      echo -e "  ${MANAGE_CMD} hy2 obfs off  # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      if [[ "$key" == hy2obfs ]]; then
+        echo -e "  ${MANAGE_CMD} hy2 obfs on   # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
+        echo -e "  ${MANAGE_CMD} hy2 obfs off  # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      elif [[ "$key" == masque ]]; then
+        echo -e "  ${MANAGE_CMD} masque on     # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
+        echo -e "  ${MANAGE_CMD} masque off    # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      else
+        echo -e "  ${MANAGE_CMD} ${key} on     # 开启：加服务端入站、放行端口、重启 xray、更新订阅"
+        echo -e "  ${MANAGE_CMD} ${key} off    # 关闭：移除入站并从订阅中去掉（防火墙规则保留）"
+      fi
       echo ""
       ;;
     on)
       [[ "$cur" == true ]] && { info "${label} 已经是开启状态"; return 0; }
       backup_store_check
       [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
-      [[ -s "${ALL_STORE_DIR}/inbound-${key}.json" ]] || fail "备用节点库缺少 inbound-${key}.json，需用最新安装命令重新部署"
+      if [[ ! -s "${ALL_STORE_DIR}/inbound-${key}.json" ]]; then
+        if [[ "$key" == masque ]]; then
+          mkdir -p "${ALL_STORE_DIR}"
+          render_masque_inbound > "${ALL_STORE_DIR}/inbound-masque.json"
+          chmod 600 "${ALL_STORE_DIR}/inbound-masque.json"
+        else
+          fail "备用节点库缺少 inbound-${key}.json，需用最新安装命令重新部署"
+        fi
+      fi
       [[ -s /etc/ssl/private/fullchain.cer ]] || fail "未找到证书 /etc/ssl/private/fullchain.cer，无法开启直连类节点"
       if [[ "$key" == hy2obfs ]]; then
         [[ "${FEATURE_HY2:-false}" == true ]] || fail "Hysteria2 总开关未开启，不能开混淆节点。先执行：${MANAGE_CMD} hy2 on"
@@ -2477,6 +2517,88 @@ cmd_backup_server_node() {
 
 cmd_h2direct() { cmd_backup_server_node h2direct "$@"; }
 cmd_hy2obfs()  { cmd_hy2 obfs "$@"; }
+
+render_masque_inbound() {
+  cat <<MASQUEEOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${MASQUE_PORT:-8447},
+            "protocol": "masque",
+            "settings": {
+                "users": [
+                    {
+                        "email": "user@${CDN_DOMAIN:-example.com}",
+                        "pass": "${MASQUE_PASSWORD:-${UUID2}}",
+                        "level": 0
+                    }
+                ],
+                "address": [
+                    "10.13.0.1/24",
+                    "fd13::1/64"
+                ],
+                "mtu": 1400
+            },
+            "streamSettings": {
+                "network": "masque",
+                "security": "tls",
+                "tlsSettings": {
+                    "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "rejectUnknownSni": true,
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE:-/etc/ssl/private/fullchain.cer}",
+                            "keyFile": "${CERT_KEY:-/etc/ssl/private/private.key}"
+                        }
+                    ],
+                    "alpn": ["h3", "h2"]
+                },
+                "sockopt": {
+                    "tcpcongestion": "bbr"
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+MASQUEEOF
+}
+
+cmd_masque() {
+  local subcmd="${1:-show}" port="${MASQUE_PORT:-8447}"
+  case "$subcmd" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP) ===${NC}"
+      if [[ "${FEATURE_MASQUE:-false}" == true ]]; then
+        echo -e "  MASQUE 隧道节点:      ${GREEN}已开启${NC}  (UDP/TCP ${port}，alpn: h3,h2)"
+      else
+        echo -e "  MASQUE 隧道节点:      ${YELLOW}未开启${NC}  (开启后监听 UDP/TCP ${port})"
+      fi
+      echo -e "  认证邮箱:             user@${CDN_DOMAIN:-example.com}"
+      echo -e "  内网虚拟 IP 池:       10.13.0.1/24, fd13::1/64"
+      echo -e "  协议标准:             IETF RFC 9484 (CONNECT-IP) / RFC 8441 Extended CONNECT"
+      echo ""
+      echo -e "  常用指令:"
+      echo -e "    ${MANAGE_CMD} masque on            # 开启 MASQUE 隧道节点（UDP/TCP ${port}）"
+      echo -e "    ${MANAGE_CMD} masque off           # 关闭 MASQUE 隧道节点"
+      echo ""
+      ;;
+    on)
+      cmd_backup_server_node masque on
+      ;;
+    off)
+      cmd_backup_server_node masque off
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} masque [show|on|off]"
+      ;;
+  esac
+}
 
 # Hysteria2 直连与混淆节点统一管理（UDP 随机高端口）
 cmd_hy2() {
@@ -2559,6 +2681,485 @@ cmd_hy2() {
   esac
 }
 
+render_xdrive_inbound() {
+  cat <<XDRIVEEOF
+,
+        {
+            "tag": "vless-xdrive",
+            "port": 0,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "xdrive",
+                "xdriveSettings": {
+                    "service": "Google Drive",
+                    "remoteFolder": "${XDRIVE_FOLDER:-unknown}",
+                    "secrets": [
+                        "${XDRIVE_CLIENT_ID:-unknown}",
+                        "${XDRIVE_CLIENT_SECRET:-unknown}",
+                        "${XDRIVE_REFRESH_TOKEN:-unknown}"
+                    ]
+                }
+            }
+        }
+XDRIVEEOF
+}
+
+generate_xdrive_client_config() {
+  local target="${USER_HOME:-/root}/xdrive-client.json"
+  cat > "$target" <<XCEOF
+{
+    "remarks": "XDRIVE-Google-Drive",
+    "outbounds": [
+        {
+            "tag": "proxy-xdrive",
+            "protocol": "vless",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "127.0.0.1",
+                        "port": 0,
+                        "users": [
+                            {
+                                "id": "${UUID2}",
+                                "encryption": "none"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "xdrive",
+                "xdriveSettings": {
+                    "service": "Google Drive",
+                    "remoteFolder": "${XDRIVE_FOLDER:-your_folder_id}",
+                    "secrets": [
+                        "${XDRIVE_CLIENT_ID:-your_client_id}",
+                        "${XDRIVE_CLIENT_SECRET:-your_client_secret}",
+                        "${XDRIVE_REFRESH_TOKEN:-your_refresh_token}"
+                    ]
+                }
+            }
+        }
+    ]
+}
+XCEOF
+  chmod 600 "$target" 2>/dev/null || true
+  chown "$(stat -c '%u:%g' "${USER_HOME:-/root}")" "$target" 2>/dev/null || true
+}
+
+# XDRIVE 网盘穿透代理管理 (Google Drive)
+cmd_xdrive() {
+  local subcmd="${1:-show}" rc
+  case "$subcmd" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== XDRIVE 网盘穿透代理 (Google Drive) ===${NC}"
+      if [[ "${FEATURE_XDRIVE:-false}" == true ]]; then
+        echo -e "  XDRIVE 网盘代理:      ${GREEN}已开启${NC}  (零公网 IP / 极端白名单网络穿透)"
+      else
+        echo -e "  XDRIVE 网盘代理:      ${YELLOW}未开启${NC}"
+      fi
+      echo -e "  云存储服务类型:       Google Drive (原生 HTTP API，无需第三方 SDK)"
+      echo -e "  远程中转目录 ID:      ${XDRIVE_FOLDER:-未配置}"
+      if [[ -n "${XDRIVE_CLIENT_ID:-}" ]]; then
+        local masked_cid="${XDRIVE_CLIENT_ID:0:8}***.apps.googleusercontent.com"
+        echo -e "  OAuth Client ID:      ${masked_cid}"
+      else
+        echo -e "  OAuth Client ID:      未配置"
+      fi
+      echo -e "  客户端配置示例:       ${USER_HOME:-/root}/xdrive-client.json"
+      echo ""
+      echo -e "  使用说明与提示 (Google zhoushj6@gmail.com):"
+      echo -e "    1. 在 Google Cloud Console 创建 OAuth 2.0 Client ID (类型选桌面应用或 Web)"
+      echo -e "    2. 在 Google Drive 新建一个中转文件夹，获取 URL 中的 folderId"
+      echo -e "    3. 获取 OAuth Refresh Token 并运行: ${MANAGE_CMD} xdrive setup 进行配置"
+      echo ""
+      echo -e "  常用指令:"
+      echo -e "    ${MANAGE_CMD} xdrive show          # 查看 XDRIVE 状态与配置"
+      echo -e "    ${MANAGE_CMD} xdrive setup         # 交互式配置 Google Drive 凭据"
+      echo -e "    ${MANAGE_CMD} xdrive on            # 开启 XDRIVE 网盘穿透代理入站"
+      echo -e "    ${MANAGE_CMD} xdrive off           # 关闭 XDRIVE 网盘穿透代理入站"
+      echo ""
+      ;;
+    setup)
+      echo ""
+      echo -e "${CYAN}=== 配置 XDRIVE Google Drive 网盘穿透凭证 ===${NC}"
+      echo "提示: 请先在 Google Cloud Console 创建 OAuth 2.0 桌面客户端，并在 Google Drive 新建中转目录。"
+      read -rp "请输入 Google Drive 中转目录 ID (Folder ID) [${XDRIVE_FOLDER:-}]: " folder
+      [[ -z "$folder" ]] && folder="${XDRIVE_FOLDER:-}"
+      read -rp "请输入 Google OAuth Client ID [${XDRIVE_CLIENT_ID:-}]: " cid
+      [[ -z "$cid" ]] && cid="${XDRIVE_CLIENT_ID:-}"
+      read -rp "请输入 Google OAuth Client Secret: " csec
+      [[ -z "$csec" ]] && csec="${XDRIVE_CLIENT_SECRET:-}"
+      read -rp "请输入 Google OAuth Refresh Token: " rtok
+      [[ -z "$rtok" ]] && rtok="${XDRIVE_REFRESH_TOKEN:-}"
+
+      if [[ -z "$folder" || -z "$cid" || -z "$csec" || -z "$rtok" ]]; then
+        fail "所有 4 项凭据均不能为空！"
+      fi
+
+      update_node_env XDRIVE_FOLDER "$folder"
+      update_node_env XDRIVE_CLIENT_ID "$cid"
+      update_node_env XDRIVE_CLIENT_SECRET "$csec"
+      update_node_env XDRIVE_REFRESH_TOKEN "$rtok"
+      export XDRIVE_FOLDER="$folder" XDRIVE_CLIENT_ID="$cid" XDRIVE_CLIENT_SECRET="$csec" XDRIVE_REFRESH_TOKEN="$rtok"
+
+      mkdir -p "${ALL_STORE_DIR}"
+      render_xdrive_inbound > "${ALL_STORE_DIR}/inbound-xdrive.json"
+      chmod 600 "${ALL_STORE_DIR}/inbound-xdrive.json"
+
+      generate_xdrive_client_config
+
+      info "Google Drive 凭据配置成功并已保存！"
+      if [[ "${FEATURE_XDRIVE:-false}" == true ]]; then
+        info "正在重新加载线上 XDRIVE 配置 ..."
+        backup_inbound_edit xdrive off "tag:vless-xdrive" >/dev/null 2>&1 || true
+        backup_inbound_edit xdrive on "tag:vless-xdrive"
+      else
+        info "可运行 ${MANAGE_CMD} xdrive on 开启入站"
+      fi
+      ;;
+    on)
+      if [[ "${FEATURE_XDRIVE:-false}" == true ]]; then info "XDRIVE 网盘代理已经是开启状态"; return 0; fi
+      if [[ -z "${XDRIVE_FOLDER:-}" || "${XDRIVE_FOLDER:-}" == "unknown" || -z "${XDRIVE_CLIENT_ID:-}" || "${XDRIVE_CLIENT_ID:-}" == "unknown" || -z "${XDRIVE_CLIENT_SECRET:-}" || "${XDRIVE_CLIENT_SECRET:-}" == "unknown" || -z "${XDRIVE_REFRESH_TOKEN:-}" || "${XDRIVE_REFRESH_TOKEN:-}" == "unknown" ]]; then
+        warn "XDRIVE 凭据尚未完整配置，现在进入交互式配置："
+        cmd_xdrive setup || return 1
+      fi
+      backup_store_check
+      [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
+      [[ -s "${ALL_STORE_DIR}/inbound-xdrive.json" ]] || {
+        mkdir -p "${ALL_STORE_DIR}"
+        render_xdrive_inbound > "${ALL_STORE_DIR}/inbound-xdrive.json"
+        chmod 600 "${ALL_STORE_DIR}/inbound-xdrive.json"
+      }
+      info "正在开启 XDRIVE 网盘穿透代理 ..."
+      backup_inbound_edit xdrive on "tag:vless-xdrive"; rc=$?
+      if [[ $rc -ne 0 && $rc -ne 3 ]]; then
+        fail "服务端入站写入失败，未改动配置"
+      fi
+      update_node_env FEATURE_XDRIVE true
+      export FEATURE_XDRIVE=true
+      generate_xdrive_client_config
+      info "XDRIVE 网盘穿透入站已开启（tag: vless-xdrive）。"
+      info "客户端配置文件已生成: ${USER_HOME:-/root}/xdrive-client.json"
+      ;;
+    off)
+      if [[ "${FEATURE_XDRIVE:-false}" != true ]]; then info "XDRIVE 网盘代理本来就是关闭状态"; return 0; fi
+      backup_store_check
+      info "正在关闭 XDRIVE 网盘穿透代理 ..."
+      backup_inbound_edit xdrive off "tag:vless-xdrive"; rc=$?
+      [[ $rc -eq 0 || $rc -eq 3 ]] || fail "移除服务端入站失败"
+      update_node_env FEATURE_XDRIVE false
+      export FEATURE_XDRIVE=false
+      info "XDRIVE 网盘穿透代理已关闭"
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} xdrive [show|setup|on|off]"
+      ;;
+  esac
+}
+
+render_hy2_obfs_inbound() {
+  cat <<HY2EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "port": ${HY2_PORT},
+            "protocol": "hysteria",
+            "settings": {
+                "version": 2,
+                "clients": [
+                    {
+                        "auth": "${HY2_PASSWORD}",
+                        "level": 0
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "hysteria",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h3"],
+                    "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
+                    "rejectUnknownSni": true,
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE:-/etc/ssl/private/fullchain.cer}",
+                            "keyFile": "${CERT_KEY:-/etc/ssl/private/private.key}"
+                        }
+                    ]
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "udpIdleTimeout": 60,
+                    "masquerade": {
+                        "type": "proxy",
+                        "url": "https://127.0.0.1:8003",
+                        "rewriteHost": false,
+                        "insecure": true
+                    }
+                },
+                "sockopt": {
+                    "tcpFastOpen": true,
+                    "tcpcongestion": "brutal"
+                },
+                "finalmask": {
+                    "udp": [
+$(if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then cat <<NEOF
+                        {
+                            "type": "noise",
+                            "settings": {
+                                "noise": [
+                                    {
+                                        "type": "exp",
+                                        "packet": "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}",
+                                        "delay": "${NOISE_EXP_DELAY:-10-50}"
+                                    }
+                                ]
+                            }
+                        },
+NEOF
+fi)
+                        {
+                            "type": "salamander",
+                            "settings": {
+                                "password": "${OBFS_PASSWORD}"
+                            }
+                        }
+                    ]
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+HY2EOF
+}
+
+render_hy2_h3_inbound() {
+  cat <<HY2H3EOF
+,
+        {
+            "listen": "0.0.0.0",
+            "tag": "hy2-h3",
+            "port": ${HY2_H3_PORT:-443},
+            "protocol": "hysteria",
+            "settings": {
+                "version": 2,
+                "clients": [
+                    {
+                        "auth": "${HY2_PASSWORD}",
+                        "level": 0
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "hysteria",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h3"],
+                    "minVersion": "1.3",
+                    "maxVersion": "1.3",
+                    "cipherSuites": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
+                    "rejectUnknownSni": true,
+                    "certificates": [
+                        {
+                            "certificateFile": "${CERT_FILE:-/etc/ssl/private/fullchain.cer}",
+                            "keyFile": "${CERT_KEY:-/etc/ssl/private/private.key}"
+                        }
+                    ]
+                },
+                "hysteriaSettings": {
+                    "version": 2,
+                    "udpIdleTimeout": 60,
+                    "masquerade": {
+                        "type": "proxy",
+                        "url": "https://127.0.0.1:8003",
+                        "rewriteHost": false,
+                        "insecure": true
+                    }
+                },
+                "sockopt": {
+                    "tcpFastOpen": true,
+                    "tcpcongestion": "brutal"
+                }$(if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then cat <<NEOF
+,
+                "finalmask": {
+                    "udp": [
+                        {
+                            "type": "noise",
+                            "settings": {
+                                "noise": [
+                                    {
+                                        "type": "exp",
+                                        "packet": "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}",
+                                        "delay": "${NOISE_EXP_DELAY:-10-50}"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+NEOF
+fi)
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        }
+HY2H3EOF
+}
+
+sync_noise_live_config() {
+  local tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak"
+  [[ -f "$XRAY_CONF" ]] || return 0
+  python3 - "$XRAY_CONF" "$tmp" "${ALL_STORE_DIR}" <<'NPY'
+import sys, os
+
+src, dst, store_dir = sys.argv[1:4]
+s = open(src, encoding='utf-8').read()
+changed = False
+
+for key in ['hy2h3', 'hy2obfs']:
+    begin = '        // >>xh:' + key
+    end = '        // <<xh:' + key
+    sf = os.path.join(store_dir, 'inbound-%s.json' % key)
+    if begin in s and end in s and os.path.isfile(sf):
+        a = s.index('\n' + begin)
+        b = s.index(end, a) + len(end)
+        text = open(sf, encoding='utf-8').read().rstrip('\n')
+        s = s[:a] + '\n' + begin + '\n' + text + '\n' + end + s[b:]
+        changed = True
+
+if not changed:
+    sys.exit(3)
+open(dst, 'w', encoding='utf-8').write(s)
+NPY
+  local rc=$?
+  if [[ $rc -eq 3 ]]; then
+    return 0
+  elif [[ $rc -ne 0 ]]; then
+    rm -f "$tmp"; warn "替换 Noise 配置失败"; return 1
+  fi
+
+  if ! err=$("$XRAY_BIN" -test -format json -config "$tmp" 2>&1); then
+    rm -f "$tmp"; warn "Xray 配置校验失败，已放弃修改：$err"; return 1
+  fi
+  cp -a "$XRAY_CONF" "$bak"
+  mv -f "$tmp" "$XRAY_CONF"
+  if ! svc restart xray; then
+    cp -a "$bak" "$XRAY_CONF"
+    svc restart xray >/dev/null 2>&1 || true
+    warn "重启 Xray 失败，已回滚"
+    return 1
+  fi
+  return 0
+}
+
+# Finalmask Noise 动态混淆管理 (Xray v26.9.30+)
+cmd_noise() {
+  local subcmd="${1:-show}" cur="${FEATURE_NOISE_EXP:-false}"
+  local cur_pkt="${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
+  local cur_delay="${NOISE_EXP_DELAY:-10-50}"
+  case "$subcmd" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== Finalmask Noise 动态混淆 (Xray v26.9.30+) ===${NC}"
+      if [[ "$cur" == true ]]; then
+        echo -e "  Noise 动态混淆:       ${GREEN}已开启${NC}"
+      else
+        echo -e "  Noise 动态混淆:       ${YELLOW}未开启${NC}"
+      fi
+      echo -e "  混淆数据包表达式:     ${CYAN}${cur_pkt}${NC}"
+      echo -e "  延迟范围 (毫秒):      ${CYAN}${cur_delay}${NC}"
+      echo ""
+      echo -e "  支持的动态表达式标签 (AWG 风格):"
+      echo -e "    <b hex>   指定十六进制字节（例如: <b 16030100> 伪造 TLS ClientHello 头）"
+      echo -e "    <r N>     N 个随机字节（例如: <r 32> 伪造 32 字节 Session ID）"
+      echo -e "    <rc>      随机英文字母"
+      echo -e "    <rd N>    N 个随机十进制数字"
+      echo -e "    <t>       4 字节时间戳"
+      echo -e "    <c>       递增计数器"
+      echo -e "    <n>       8 字节随机 Nonce"
+      echo ""
+      echo -e "  常用指令:"
+      echo -e "    ${MANAGE_CMD} noise on                 # 开启 Noise 动态混淆"
+      echo -e "    ${MANAGE_CMD} noise off                # 关闭 Noise 动态混淆"
+      echo -e "    ${MANAGE_CMD} noise set \"<exp>\" [延时]  # 自定义混淆模板与延时"
+      echo ""
+      ;;
+    on)
+      if [[ "$cur" == true ]]; then info "Noise 动态混淆已经是开启状态"; return 0; fi
+      backup_store_check
+      [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
+      info "正在开启 Noise 动态混淆 ..."
+      update_node_env FEATURE_NOISE_EXP true
+      export FEATURE_NOISE_EXP=true
+      mkdir -p "${ALL_STORE_DIR}"
+      render_hy2_obfs_inbound > "${ALL_STORE_DIR}/inbound-hy2obfs.json"
+      render_hy2_h3_inbound   > "${ALL_STORE_DIR}/inbound-hy2h3.json"
+      chmod 600 "${ALL_STORE_DIR}"/inbound-hy2*.json 2>/dev/null || true
+      sync_noise_live_config
+      info "Noise 动态混淆已开启！"
+      cmd_resub
+      ;;
+    off)
+      if [[ "$cur" != true ]]; then info "Noise 动态混淆本来就是关闭状态"; return 0; fi
+      backup_store_check
+      info "正在关闭 Noise 动态混淆 ..."
+      update_node_env FEATURE_NOISE_EXP false
+      export FEATURE_NOISE_EXP=false
+      mkdir -p "${ALL_STORE_DIR}"
+      render_hy2_obfs_inbound > "${ALL_STORE_DIR}/inbound-hy2obfs.json"
+      render_hy2_h3_inbound   > "${ALL_STORE_DIR}/inbound-hy2h3.json"
+      chmod 600 "${ALL_STORE_DIR}"/inbound-hy2*.json 2>/dev/null || true
+      sync_noise_live_config
+      info "Noise 动态混淆已关闭"
+      cmd_resub
+      ;;
+    set)
+      shift
+      local new_pkt="${1:-}" new_delay="${2:-10-50}"
+      [[ -z "$new_pkt" ]] && new_pkt="<b 16030100><r 32><t><c><rd 8>"
+      backup_store_check
+      [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存状态"
+      info "正在更新 Noise 混淆模板: packet=${new_pkt}, delay=${new_delay} ..."
+      update_node_env NOISE_EXP_PACKET "$new_pkt"
+      update_node_env NOISE_EXP_DELAY "$new_delay"
+      export NOISE_EXP_PACKET="$new_pkt" NOISE_EXP_DELAY="$new_delay"
+      mkdir -p "${ALL_STORE_DIR}"
+      render_hy2_obfs_inbound > "${ALL_STORE_DIR}/inbound-hy2obfs.json"
+      render_hy2_h3_inbound   > "${ALL_STORE_DIR}/inbound-hy2h3.json"
+      chmod 600 "${ALL_STORE_DIR}"/inbound-hy2*.json 2>/dev/null || true
+      if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then
+        sync_noise_live_config
+      fi
+      info "Noise 混淆模板已更新！"
+      cmd_resub
+      ;;
+    *)
+      echo "用法: ${MANAGE_CMD} noise [show|on|off|set <packet> [delay]]"
+      ;;
+  esac
+}
+
 # 上下行分离两条（纯客户端链接，不动服务端）
 cmd_split() {
   local which="${1:-show}" action="${2:-show}" flag name label
@@ -2630,12 +3231,15 @@ cmd_menu() {
     echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
     echo " 20) 备用节点 XHTTP-Direct-H2（TCP 直连）(show / on / off)"
     echo " 21) Hysteria2 节点与混淆管理 (show / on / off / obfs on|off)"
-    echo " 22) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
-    echo " 23) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
-    echo " 24) 重新生成全量订阅 (resub)"
-    echo " 25) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
-    echo " 26) Nginx 版本检查与升级 (nginx: show / check / update)"
-    echo " 27) 卸载"
+    echo " 22) MASQUE 标准 L3 隧道 (show / on / off)"
+    echo " 23) XDRIVE 网盘穿透代理 (show / setup / on / off)"
+    echo " 24) Finalmask Noise exp 动态混淆 (show / on / off / set)"
+    echo " 25) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
+    echo " 26) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
+    echo " 27) 重新生成全量订阅 (resub)"
+    echo " 28) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
+    echo " 29) Nginx 版本检查与升级 (nginx: show / check / update)"
+    echo " 30) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -2678,12 +3282,47 @@ cmd_menu() {
           *)                    cmd_hy2 "${a:-show}" ;;
         esac
         ;;
-      22) read -rp "  show / on / off: " a; ( cmd_split reality-up "${a:-show}" ) ;;
-      23) read -rp "  show / on / off: " a; ( cmd_split cdn-up "${a:-show}" ) ;;
-      24) cmd_resub ;;
-      25) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
-      26) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
-      27) cmd_uninstall; break ;;
+      22) read -rp "  show / on / off: " a; ( cmd_masque "${a:-show}" ) ;;
+      23)
+        echo ""
+        echo -e "${CYAN}--- XDRIVE 网盘代理操作选择 ---${NC}"
+        echo "  1) 查看 XDRIVE 状态 (show)"
+        echo "  2) 配置 Google Drive 凭证 (setup)"
+        echo "  3) 开启 XDRIVE 网盘穿透入站 (on)"
+        echo "  4) 关闭 XDRIVE 网盘穿透入站 (off)"
+        read -rp "请选择 [1-4 或输入指令，直接回车查看状态]: " a
+        case "$a" in
+          1|show|"")  cmd_xdrive show ;;
+          2|setup)    cmd_xdrive setup ;;
+          3|on)       cmd_xdrive on ;;
+          4|off)      cmd_xdrive off ;;
+          *)          cmd_xdrive "${a:-show}" ;;
+        esac
+        ;;
+      24)
+        echo ""
+        echo -e "${CYAN}--- Finalmask Noise exp 动态混淆操作选择 ---${NC}"
+        echo "  1) 查看 Noise 状态与模板 (show)"
+        echo "  2) 开启 Noise 动态混淆 (on)"
+        echo "  3) 关闭 Noise 动态混淆 (off)"
+        echo "  4) 自定义数据包表达式与延时 (set)"
+        read -rp "请选择 [1-4 或输入指令，直接回车查看状态]: " a
+        case "$a" in
+          1|show|"")  cmd_noise show ;;
+          2|on)       cmd_noise on ;;
+          3|off)      cmd_noise off ;;
+          4|set)      read -rp "请输入数据包表达式 (回车默认: <b 16030100><r 32><t><c><rd 8>): " p
+                      read -rp "请输入延时范围毫秒 (回车默认: 10-50): " d
+                      cmd_noise set "$p" "$d" ;;
+          *)          cmd_noise "${a:-show}" ;;
+        esac
+        ;;
+      25) read -rp "  show / on / off: " a; ( cmd_split reality-up "${a:-show}" ) ;;
+      26) read -rp "  show / on / off: " a; ( cmd_split cdn-up "${a:-show}" ) ;;
+      27) cmd_resub ;;
+      28) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
+      29) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
+      30) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -2714,6 +3353,9 @@ xray-xhttp 管理命令
   xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口
   xh hy2 [show|on|off]              Hysteria2 直连节点开关（随机高 UDP 端口，默认不装），关闭时连同混淆节点一起移除
   xh hy2 obfs [show|on|off]         Hysteria2 混淆节点（salamander 混淆，需先开 hy2；别名: xh hy2obfs）
+  xh masque [show|on|off]           MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP, UDP/TCP 8447)
+  xh xdrive [show|setup|on|off]     XDRIVE 网盘穿透代理 (Google Drive 中继，零公网 IP 穿透)
+  xh noise [show|on|off|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
   xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；reality-up 默认开启，cdn-up 备用）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
@@ -2775,6 +3417,9 @@ case "${1:-menu}" in
     fi
     ;;
   hy2obfs)    shift; cmd_hy2 obfs "$@" ;;
+  masque)     shift; cmd_masque "$@" ;;
+  xdrive)     shift; cmd_xdrive "$@" ;;
+  noise)      shift; cmd_noise "$@" ;;
   split)      shift; cmd_split "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
