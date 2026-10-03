@@ -195,7 +195,8 @@ xh ecn [show|on|off]   # TCP ECN (显式拥塞通知) 开关与状态查看
 xh cdnh2 [show|on|off] # CDN TCP(h2) 备用节点开关与订阅同步
 xh cdnh3 [show|on|off] # CDN QUIC(h3) 默认节点开关与订阅同步
 xh h2direct [show|on|off]   # 备用节点 XHTTP-Direct-H2（TCP 直连）
-xh hy2obfs [show|on|off]    # 备用节点 Hysteria2-Obfs（UDP salamander 混淆）
+xh hy2 [show|on|off]        # Hysteria2 总开关（Hysteria2-H3-Direct，UDP 443，默认不装）
+xh hy2obfs [show|on|off]    # Hysteria2-Obfs（UDP salamander 混淆，需先开 Hysteria2）
 xh split [show|reality-up on|off|cdn-up on|off]  # 备用节点 上下行分离两条
 xh block [show|cn on|off|ads on|off] # 出站屏蔽回国 IP / 广告域名（默认关闭）
 xh timediff [show|on [毫秒]|off] # Reality maxTimeDiff 时间差校验（默认关闭）
@@ -232,16 +233,16 @@ flowchart TD
     end
 ```
 
-| # | 节点名称（v4.9.64） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.71） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
-| **2** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
-| **3** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | 直连 UDP 8443 | 混淆版，QUIC 被深度识别时使用 |
+| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
+| **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
+| **3** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 | **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP 上下行分离 | 上行 Reality 直连 / 下行经 CDN | 纯客户端链接，不动服务端 |
 
-> 默认关闭、按需用 `xh` 开启：`VLESS-XHTTP-CDN-H3`（`xh cdnh3 on`）、`VLESS-XHTTP-CDN-H2`（`xh cdnh2 on`，TCP 兜底）、`VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）、`VLESS-XHTTP-Direct-H2`（`xh h2direct on`）。
+> 默认不装、按需用 `xh` 开启：`Hysteria2-H3-Direct`（`xh hy2 on`，UDP 443）、`Hysteria2-Obfs-Direct`（`xh hy2obfs on`，需先开 Hysteria2）、`VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）、`VLESS-XHTTP-Direct-H2`（`xh h2direct on`）。
 
 ---
 
@@ -303,6 +304,7 @@ flowchart TD
 | **安装健壮性：可选入站不再拖垮 Reality** | v4.9.68 | 用户反馈新装 Ubuntu / Debian 服务器上 Reality 不通，**根因尚未确认**（没拿到失败机器的日志）。按其中一个假设做防御性修复：Xray 是一个进程，任何入站绑定失败都会让整个 Xray 起不来。1. 安装时先检查可选入站的端口：UDP `HY2_PORT`（Hysteria2-Obfs，v4.9.64 起默认开）或 TCP `H2_PORT`（h2-direct）被别的进程占用时，直接关掉该节点并提示占用者；2. `xray -test` 失败且开着这两个可选入站时，自动关掉它们、用同一份模板重新生成配置再试，核心节点（Reality 等）不受影响；核心配置本身有错仍然报错退出；3. 启动后新增监听自检：TCP 443（Reality）以及已开启的 UDP / TCP 节点端口逐个检查，缺哪个就明确告警，方便区分「服务端没监听」和「云安全组没放行」。若仍不通，请在失败机器上运行 `systemctl status xray`、`journalctl -u xray -n 40`、`xray -test -config /usr/local/etc/xray/config.json`、`ss -ltnup \| grep -E ':443 \|xray'`、`xh diag` 并反馈。 |
 | **nginx 重新打开 session tickets（重连更快）** | v4.9.69 | 按用户选择，`ssl_session_tickets` 由 `off` 改回 `on`。客户端重连时可以恢复会话，少传证书，少一次完整握手；同时它是 `ssl_early_data`（0-RTT）与 `Early-Data` 头生效的前提，v4.9.62 起这两项一直是空转。本机验证：TLS1.3 与 TLS1.2 的第二次连接都显示 `Reused`。代价：ticket 密钥只在 nginx 进程内，重启后旧 ticket 失效；前向保密弱于完整握手。**未测速**：nginx 只承载 CDN 回源、订阅和伪装站，约占总流量两成，CPU 占用很低，这一项只缩短重连，不提高稳态吞吐。已安装机器需手改 `/etc/nginx/nginx.conf` 后 `nginx -t` 再重载。 |
 | **CDN 上传腿改回 stream-up** | v4.9.70 | 按用户「提高 CDN 吞吐」的要求做了小规模对比：本机用 Xray 客户端经 Cloudflare 回连自己，各 40 次传输（20MB 下载 / 10MB 上传）没有卡住，上传 **stream-up 约 365–441 Mbps，auto 约 163–261 Mbps（快 1.7–2.7 倍）**，下载两者接近（约 490–640 Mbps）。因此 CDN-H2 / CDN-H3、CDN-Up-Reality-Down 的上传腿，以及 dual-cdn / quic-h3 扩展里的上传腿改回 `stream-up`；经 CDN 的**下载腿**（Reality-Up-CDN-Down 的 downloadSettings）保持 `auto`。服务端 8001 继续是 `auto`（什么模式都收）。这个结果取代 v4.9.66 里「CDN 腿全部 auto」，当时的依据是更早一次 stream-up 经 CF 上传 2/6 没传完，在 Cloudflare 开启 gRPC / WebSockets 后的这次测试里没有复现。**限制：只代表本机到 Cloudflare 这一段，不代表用户客户端的线路；样本小、波动大（单次 60–720 Mbps）。** 当前在用的 Reality-Up-CDN-Down 上行走 Reality、下行走 CDN，不受这项影响。 |
+| **默认节点集：去掉 Hysteria2，默认装两条 CDN 节点；Hysteria2 做进 xh 菜单** | v4.9.71 | 按用户要求：1. 安装命令默认**不再装 Hysteria2**：`FEATURE_HY2` 默认 `false`（Hysteria2-H3 随它关闭），`FEATURE_HY2_OBFS` 默认 `false`；2. **默认安装两条 CDN 节点**：`FEATURE_CDN_H2` 与 `FEATURE_CDN_H3` 默认 `true`；3. 默认节点集变为 CDN-H2、CDN-H3、Direct-H3、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down（6 条）；4. 新增 `xh hy2 [show\|on\|off]` 与菜单第 24 项（卸载顺延为 25）：开启 = 加服务端入站 + 放行 UDP 443 + 加客户端节点 + 写标志位，失败即撤销；关闭会连同混淆节点一起移除；`xh hy2obfs on` 现在要求先开 Hysteria2；5. Hysteria2-H3 入站也带 `// >>xh:` 标记，备用节点库新增 `inbound-hy2h3.json`；6. 入站标记的「已存在」检查改按 tag 判断（Hysteria2 的 UDP 443 与 Reality 的 TCP 443 同号）。本机往返验证：`xh hy2 off`（连同混淆）→ `xh hy2 on` → `xh hy2obfs on`，客户端文件与订阅逐字节一致，`xh diag` 显示 TCP 443、UDP 443、UDP 8443 都在监听。**只影响新装机器**；已安装机器的节点集不变。本机 Hysteria2 入站原先没有标记，已用同样的标记包起来，之后即可用 `xh hy2` 开关。 |
 
 ---
 

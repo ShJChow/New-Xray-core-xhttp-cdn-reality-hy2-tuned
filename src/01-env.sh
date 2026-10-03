@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.70"
+PROJECT_VERSION="4.9.71"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -84,26 +84,27 @@ AUTO=${AUTO:-0}
 #   5. VLESS-Reality-XHTTP-Direct  直连 TCP 443，XHTTP 上下行不分离
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
-FEATURE_HY2=${FEATURE_HY2:-true}
+# v4.9.71 起 Hysteria2 默认不装（FEATURE_HY2 默认 false），需要时 FEATURE_HY2=true 安装，或装好后 xh hy2 on。
+FEATURE_HY2=${FEATURE_HY2:-false}
 # FEATURE_HY2_H3（v4.9.26）：在 UDP 443 上再开一条**不加混淆**的 Hysteria2（Hysteria2-H3-Direct），
 # 流量形态就是一个普通网站的 HTTP/3，是 UDP 里最不容易被运营商按端口/特征 QoS 的样子。
 # 依附于 FEATURE_HY2（共用认证密码与证书）；UDP 443 被占用时自动关闭。v4.9.28 起为 Xray 唯一的 Hysteria2 节点。
 FEATURE_HY2_H3=${FEATURE_HY2_H3:-true}
-# FEATURE_HY2_OBFS（v4.9.28；v4.9.64 起默认开启）：UDP 8443 + salamander 混淆的 Hysteria2-Obfs-Direct。
+# FEATURE_HY2_OBFS（v4.9.28）：UDP 8443 + salamander 混淆的 Hysteria2-Obfs-Direct。v4.9.71 起默认关闭（依附于 Hysteria2 总开关）。
 # 同条件实测 Hysteria2-H3-Direct 下行三种线路都更快、上行持平、延迟更低，Xray 侧只保留它一条。
-# 不需要时可关：FEATURE_HY2_OBFS=false bash install.sh，或装好后 xh hy2obfs off。
+# 需要时：FEATURE_HY2=true FEATURE_HY2_OBFS=true bash install.sh，或装好后 xh hy2 on 再 xh hy2obfs on。
 # （同机 sbbox 的 Hysteria2 自带 salamander，也可作为混淆备选）。
 # FEATURE_HY2 仍是 Hysteria2 的总开关（内核版本不够、缺证书时两条一起关）。
-FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-true}
+FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 默认关闭，需要 TCP CDN 兜底时可通过 FEATURE_CDN_H2=true 开启（CDN-H3 自 v4.9.64 起也默认关闭）。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
+# v4.9.71 起默认开启（CDN-H2 与 CDN-H3 两条 CDN 节点都默认安装）；不需要时 FEATURE_CDN_H2=false 或装好后 xh cdnh2 off。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
-# v4.9.64 起默认关闭（默认的 CDN 相关节点改为 Reality-Up-CDN-Down）；需要时 FEATURE_CDN_H3=true 或装好后 xh cdnh3 on。
-FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
+# v4.9.71 起默认开启；不需要时 FEATURE_CDN_H3=false 或装好后 xh cdnh3 off。
+FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
 
 # FEATURE_BLOCK_CN / FEATURE_BLOCK_ADS（v4.9.53，默认关闭）：出站屏蔽回国 IP（geoip:cn）/ 广告域名
 # （geosite:category-ads-all），参考 zxcvos/Xray-script 的可选规则。运行期用 xh block cn|ads on|off 切换。

@@ -384,8 +384,9 @@ if [[ "$FEATURE_HY2" == true ]]; then
 #   300↓50↑   1%丢包  H3-443 129 / 139   Obfs-8443 127 / 118   Reality-Vision 108
 # 上行与 Obfs-8443 持平（范围重叠）。去掉混淆后流量就是标准 HTTP/3，伪装到本机站点。
 # 代价是未认证者能完成 QUIC 握手，所以防火墙对 UDP 443 同样加了每源 IP 50/s 的握手限速。
-if [[ "$FEATURE_HY2_H3" == true ]]; then
-  XRAY_HY2_H3_INBOUND=$(cat <<HY2H3EOF
+# 供 xh hy2 开关复用（同上）
+xray_hy2_h3_inbound() {
+  cat <<HY2H3EOF
 ,
         {
             "listen": "0.0.0.0",
@@ -445,7 +446,10 @@ if [[ "$FEATURE_HY2_H3" == true ]]; then
             }
         }
 HY2H3EOF
-)
+}
+
+if [[ "$FEATURE_HY2_H3" == true ]]; then
+  XRAY_HY2_H3_INBOUND=$(printf '\n        // >>xh:hy2h3\n%s\n        // <<xh:hy2h3' "$(xray_hy2_h3_inbound)")
   info "已启用 Hysteria2-H3 直连节点: UDP ${HY2_H3_PORT}（无混淆，标准 HTTP/3 形态）"
 fi
 fi
@@ -496,7 +500,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_H3_DIRECT=%q\n' "$FEATURE_H3_DIRECT"
   printf 'FEATURE_HY2=%q\n'       "$FEATURE_HY2"
   printf 'FEATURE_HY2_H3=%q\n'    "$FEATURE_HY2_H3"
-  printf 'FEATURE_HY2_OBFS=%q\n'  "${FEATURE_HY2_OBFS:-true}"
+  printf 'FEATURE_HY2_OBFS=%q\n'  "${FEATURE_HY2_OBFS:-false}"
   printf 'HY2_H3_PORT=%q\n'       "${HY2_H3_PORT:-443}"
   printf 'FEATURE_H2_DIRECT=%q\n' "$FEATURE_H2_DIRECT"
   printf 'FEATURE_PORT_HOPPING=%q\n' "${FEATURE_PORT_HOPPING:-false}"
@@ -527,8 +531,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'VPS_IP_URI=%q\n'          "${VPS_IP_URI:-$VPS_IP}"
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
   printf 'FEATURE_XHTTP_VLESSENC=%q\n' "${FEATURE_XHTTP_VLESSENC:-true}"
-  printf 'FEATURE_CDN_H2=%q\n'    "${FEATURE_CDN_H2:-false}"
-  printf 'FEATURE_CDN_H3=%q\n'    "${FEATURE_CDN_H3:-false}"
+  printf 'FEATURE_CDN_H2=%q\n'    "${FEATURE_CDN_H2:-true}"
+  printf 'FEATURE_CDN_H3=%q\n'    "${FEATURE_CDN_H3:-true}"
   printf 'FEATURE_BLOCK_CN=%q\n'  "${FEATURE_BLOCK_CN:-false}"
   printf 'FEATURE_BLOCK_ADS=%q\n' "${FEATURE_BLOCK_ADS:-false}"
   printf 'FEATURE_REALITY_UP_CDN_DOWN=%q\n' "${FEATURE_REALITY_UP_CDN_DOWN:-true}"
@@ -551,6 +555,7 @@ chmod 600 "$NODE_ENV_FILE"
 mkdir -p /etc/xhttp-cdn/all
 xray_h2_direct_inbound  > /etc/xhttp-cdn/all/inbound-h2direct.json
 xray_hy2_obfs_inbound   > /etc/xhttp-cdn/all/inbound-hy2obfs.json
+xray_hy2_h3_inbound      > /etc/xhttp-cdn/all/inbound-hy2h3.json
 chmod 700 /etc/xhttp-cdn/all; chmod 600 /etc/xhttp-cdn/all/inbound-*.json
 
 echo ""

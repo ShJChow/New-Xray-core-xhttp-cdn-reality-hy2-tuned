@@ -142,7 +142,8 @@ xh ecn [show|on|off]   # TCP ECN toggle & status inspection
 xh cdnh2 [show|on|off] # CDN TCP(h2) fallback node toggle
 xh cdnh3 [show|on|off] # CDN QUIC(h3) default node toggle
 xh h2direct [show|on|off]   # spare node XHTTP-Direct-H2 (TCP direct)
-xh hy2obfs [show|on|off]    # spare node Hysteria2-Obfs (UDP, salamander)
+xh hy2 [show|on|off]        # Hysteria2 master switch (Hysteria2-H3-Direct, UDP 443, not installed by default)
+xh hy2obfs [show|on|off]    # Hysteria2-Obfs (UDP, salamander; needs Hysteria2 first)
 xh split [show|reality-up on|off|cdn-up on|off]  # spare nodes: split up/down pair
 xh block [show|cn on|off|ads on|off] # reject outbound CN IPs / ad domains (default off)
 xh timediff [show|on [ms]|off] # Reality maxTimeDiff check (default off)
@@ -196,16 +197,16 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.64) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.71) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8446 | Direct QUIC, `mode=stream-up` |
-| **2** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 shape, fastest downlink measured (v4.9.26) |
-| **3** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | Direct UDP 8443 | Obfuscated variant for networks that fingerprint QUIC |
+| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | TCP node through Cloudflare, fallback when UDP is throttled / blocked |
+| **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | Via CDN UDP 443 | QUIC to the Cloudflare origin |
+| **3** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8446 | Direct QUIC, `mode=stream-up` |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, fastest single stream |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
 | **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP split up/down | Up via Reality / down via CDN | Client-link only, no server change |
 
-> Off by default, switch on with `xh`: `VLESS-XHTTP-CDN-H3` (`xh cdnh3 on`), `VLESS-XHTTP-CDN-H2` (`xh cdnh2 on`, TCP fallback), `VLESS-CDN-Up-Reality-Down` (`xh split cdn-up on`), `VLESS-XHTTP-Direct-H2` (`xh h2direct on`).
+> Not installed by default; switch on with `xh`: `Hysteria2-H3-Direct` (`xh hy2 on`, UDP 443), `Hysteria2-Obfs-Direct` (`xh hy2obfs on`, needs Hysteria2 first), `VLESS-CDN-Up-Reality-Down` (`xh split cdn-up on`), `VLESS-XHTTP-Direct-H2` (`xh h2direct on`).
 
 ---
 
@@ -267,6 +268,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **Install robustness: optional inbounds can no longer take Reality down** | v4.9.68 | Report: on a freshly installed Ubuntu / Debian server the Reality node does not work. **The root cause is not confirmed** (no log from the failing machine). This is a defensive fix for one hypothesis: Xray is a single process, so one inbound failing to bind stops all of Xray. 1. The installer now checks the optional inbound ports first: if UDP `HY2_PORT` (Hysteria2-Obfs, on by default since v4.9.64) or TCP `H2_PORT` (h2-direct) is held by another process, that node is turned off with a notice naming the holder; 2. If `xray -test` fails while those two optional inbounds are on, they are turned off and the config is regenerated from the same template and retried, so core nodes (Reality etc.) are unaffected; an error in the core config still aborts; 3. A listening self-check after start: TCP 443 (Reality) and each enabled UDP / TCP node port are checked and a missing one is reported, which separates "server not listening" from "cloud security group not open". If it still fails, run `systemctl status xray`, `journalctl -u xray -n 40`, `xray -test -config /usr/local/etc/xray/config.json`, `ss -ltnup \| grep -E ':443 \|xray'` and `xh diag` on the failing machine and report the output. |
 | **nginx: session tickets back on (faster reconnect)** | v4.9.69 | As the user chose, `ssl_session_tickets` goes from `off` back to `on`. A reconnecting client can resume the session, send less certificate data and skip one full handshake; tickets are also required for `ssl_early_data` (0-RTT) and the `Early-Data` header to work, and both were idle since v4.9.62. Verified locally: the second connection shows `Reused` on both TLS1.3 and TLS1.2. Cost: the ticket key lives only inside the nginx process, so old tickets stop working after a restart, and forward secrecy is weaker than with full handshakes. **Not speed-tested**: nginx carries only CDN origin traffic, the subscription and the decoy site (about a fifth of total traffic, very low CPU), so this shortens reconnects and does not raise steady-state throughput. Installed boxes must hand-edit `/etc/nginx/nginx.conf`, then `nginx -t` and reload. |
 | **CDN upload legs back to stream-up** | v4.9.70 | After the request to raise CDN throughput, a small comparison: from this server, an Xray client looped back to itself through Cloudflare, 40 transfers each (20 MB down / 10 MB up) with no stall; upload **stream-up ≈ 365–441 Mbps vs auto ≈ 163–261 Mbps (1.7–2.7× faster)**, download similar (≈ 490–640 Mbps). So the upload legs of CDN-H2 / CDN-H3 and CDN-Up-Reality-Down, and of the dual-cdn / quic-h3 extensions, go back to `stream-up`; the **download leg** over CDN (Reality-Up-CDN-Down's downloadSettings) stays `auto`. Server 8001 stays `auto` (accepts every mode). This replaces v4.9.66's "all CDN legs auto", which rested on an earlier test (2 of 6 stream-up uploads through CF did not finish) that did not reproduce after Cloudflare gRPC / WebSockets were turned on. **Limits: it measures this server to Cloudflare only, not the user's client path; the sample is small and noisy (single runs 60–720 Mbps).** The Reality-Up-CDN-Down node in use uploads over Reality and downloads over CDN, so it is not affected. |
+| **Default node set: no Hysteria2, two CDN nodes by default; Hysteria2 moves into the xh menu** | v4.9.71 | As requested: 1. The install command **no longer installs Hysteria2 by default**: `FEATURE_HY2` defaults to `false` (Hysteria2-H3 goes with it) and `FEATURE_HY2_OBFS` to `false`; 2. **Both CDN nodes are installed by default**: `FEATURE_CDN_H2` and `FEATURE_CDN_H3` default to `true`; 3. The default set is CDN-H2, CDN-H3, Direct-H3, Reality-Vision, Reality-XHTTP, Reality-Up-CDN-Down (6 nodes); 4. New `xh hy2 [show\|on\|off]` and menu item 24 (uninstall moves to 25): on = add the server inbound + open UDP 443 + add the client node + write the flag, undone on any failure; off also removes the obfs node; `xh hy2obfs on` now needs Hysteria2 first; 5. The Hysteria2-H3 inbound also carries `// >>xh:` markers and the spare-node store gains `inbound-hy2h3.json`; 6. The "already present" check for inbound markers now goes by tag (Hysteria2's UDP 443 shares a number with Reality's TCP 443). Local round trip: `xh hy2 off` (with obfs) → `xh hy2 on` → `xh hy2obfs on` leaves client files and subscriptions byte-identical, and `xh diag` shows TCP 443, UDP 443 and UDP 8443 listening. **New installs only**; already installed boxes keep their node set. The Hysteria2 inbound on this machine had no markers and was wrapped in the same markers, so `xh hy2` works here. |
 
 ---
 

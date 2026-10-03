@@ -462,7 +462,7 @@ if (
   info() { :; }; warn() { :; }
   render_client_configs
 ) >"${STATE_DIR}/all-render.log" 2>&1 \
-  && for _n in VLESS-XHTTP-CDN-H2 VLESS-XHTTP-CDN-H3 VLESS-XHTTP-Direct-H2 Hysteria2-Obfs-Direct VLESS-Reality-Up-CDN-Down VLESS-CDN-Up-Reality-Down; do
+  && for _n in VLESS-XHTTP-CDN-H2 VLESS-XHTTP-CDN-H3 VLESS-XHTTP-Direct-H2 Hysteria2-H3-Direct Hysteria2-Obfs-Direct VLESS-Reality-Up-CDN-Down VLESS-CDN-Up-Reality-Down; do
        grep -q "#${_n}" /etc/xhttp-cdn/all.new/client-config.txt || { echo "备用节点库缺少 ${_n}" >> "${STATE_DIR}/all-render.log"; false; }
      done; then
   # 保留旧库里的服务端入站文本（由 09 写入），换入新渲染的客户端文件
