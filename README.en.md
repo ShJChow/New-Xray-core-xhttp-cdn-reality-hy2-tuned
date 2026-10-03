@@ -196,15 +196,16 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.43) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.64) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | Via CDN UDP 443 | **Default CDN node**, QUIC to Cloudflare origin |
-| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8443 | Direct QUIC, `mode=stream-up` |
-| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 format, fastest measured download |
-| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, max single-stream |
+| **1** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | Direct UDP 8446 | Direct QUIC, `mode=stream-up` |
+| **2** | `Hysteria2-H3-Direct` | Hysteria 2 | Direct UDP 443 | Standard HTTP/3 shape, fastest downlink measured (v4.9.26) |
+| **3** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | Direct UDP 8443 | Obfuscated variant for networks that fingerprint QUIC |
+| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | Direct TCP 443 | **xtls-rprx-vision zero-copy**, fastest single stream |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | Direct TCP 443 | Reality camouflage + XHTTP padding |
+| **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP split up/down | Up via Reality / down via CDN | Client-link only, no server change |
 
-> Disabled by default, toggleable on demand: `VLESS-Reality-Up-CDN-Down` (`FEATURE_REALITY_UP_CDN_DOWN`), `VLESS-XHTTP-CDN-H2` (`FEATURE_CDN_H2`, TCP fallback for UDP throttling/blocking), `VLESS-CDN-Up-Reality-Down` (`FEATURE_CDN_UP_REALITY_DOWN`), `VLESS-XHTTP-Direct-H2` (`FEATURE_H2_DIRECT`), `Hysteria2-Obfs-Direct` (`FEATURE_HY2_OBFS`).
+> Off by default, switch on with `xh`: `VLESS-XHTTP-CDN-H3` (`xh cdnh3 on`), `VLESS-XHTTP-CDN-H2` (`xh cdnh2 on`, TCP fallback), `VLESS-CDN-Up-Reality-Down` (`xh split cdn-up on`), `VLESS-XHTTP-Direct-H2` (`xh h2direct on`).
 
 ---
 
@@ -259,6 +260,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 | **All nodes: upload and download mode unified to stream-up** | v4.9.61 | The CDN split-node download `xhttpSettings` in `src/11-client-config.sh` and the leftover `mode=auto` in node links / Mihomo snippets of the dual-cdn, dual-ip, quic-h3 and common-nodes extensions now use `stream-up`; no `auto` remains in the scripts. **Not measured**; if a node stalls, set its `mode` back to `auto` (no server change needed). |
 | **nginx: allow TLS1.2, tickets off, no explicit buffering-off on the origin leg** | v4.9.62 | As requested: `ssl_protocols` goes from TLS1.3-only to `TLSv1.3 TLSv1.2` (with TLS1.2 `ssl_ciphers`), `ssl_session_tickets` from `on` to `off`; the XHTTP origin location drops `proxy_buffering off` / `proxy_request_buffering off` / `X-Accel-Buffering` (`grpc_pass` ignores `proxy_*` buffering directives, so behaviour is largely unchanged). Side effects: with tickets off, `ssl_early_data` (0-RTT) has no session to resume and stops working; enabling TLS1.2 loosens the former downgrade protection. Installed boxes must hand-edit `/etc/nginx/nginx.conf` and reload after `nginx -t`. **Not measured**. |
 | **Default 5 nodes; spare nodes switched from the xh menu** | v4.9.63 | The 5 install-time default nodes (Reality-Vision, Reality-XHTTP, XHTTP-Direct-H3, CDN-H3, Hysteria2-H3) were already the source defaults and are unchanged. The remaining spare nodes get xh switches: `xh h2direct` (TCP 8445, adds the server inbound and opens the port), `xh hy2obfs` (UDP 8443 salamander, same), `xh split reality-up|cdn-up` (client links only); menu items 20–23, uninstall moves to 24. How: at install the client files are rendered once more with every spare node enabled and stored in `/etc/xhttp-cdn/all/` (node lines, Mihomo entries, both server inbound texts); the switches only copy from that store, so results match a fresh install exactly. Server inbounds are written between paired `// >>xh:` markers and removed as a block, restoring the config byte for byte. **Boxes installed by an older version have no store** and must be redeployed to get these switches. Cloud security-list rules are still yours to open. Stale wording about "6 core nodes" / "spare" in the cdnh2 / cdnh3 text was fixed. |
+| **Default node set changed to the 6 nodes in use** | v4.9.64 | Install-time defaults now follow the nodes actually in use: `FEATURE_HY2_OBFS` defaults to `true` (Hysteria2-Obfs-Direct, UDP 8443), `FEATURE_REALITY_UP_CDN_DOWN` to `true` (Reality-Up-CDN-Down), `FEATURE_CDN_H3` to `false` (CDN-H3 becomes a spare, `xh cdnh3 on`). Defaults: Direct-H3, Hysteria2-H3, Hysteria2-Obfs, Reality-Vision, Reality-XHTTP, Reality-Up-CDN-Down; the other spares are xh switches. Wording about "default / spare" in the xh menu and help was corrected and the README node table updated. **New installs only**; already installed boxes keep their node set. |
 
 ---
 

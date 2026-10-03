@@ -1564,7 +1564,7 @@ cmd_cdnh2() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，默认关闭的备用节点（默认的 CDN 节点是 CDN-H3），需要 TCP CDN 兜底时开启。"
+      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，默认关闭的备用节点，需要 TCP CDN 兜底时开启。"
       echo -e "  • 快捷命令:"
       echo -e "      ${MANAGE_CMD} cdnh2 on       # 开启 CDN TCP(h2) 节点并同步更新订阅"
       echo -e "      ${MANAGE_CMD} cdnh2 off      # 关闭 CDN TCP(h2) 节点并恢复精简订阅"
@@ -1666,7 +1666,7 @@ cmd_cdnh3() {
     show|status)
       echo ""
       echo -e "${CYAN}=== CDN QUIC(h3) 节点状态 ===${NC}"
-      local cur_h3="${FEATURE_CDN_H3:-true}"
+      local cur_h3="${FEATURE_CDN_H3:-false}"
       if [[ "$cur_h3" == "true" ]]; then
         echo -e "  当前状态:       ${GREEN}已开启 (Enabled)${NC}"
       else
@@ -1678,7 +1678,7 @@ cmd_cdnh3() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 开启此项可生成走 UDP 443 (HTTP/3 / QUIC) 的 VLESS-XHTTP-CDN-H3 节点（默认开启）。"
+      echo -e "  • 开启此项可生成走 UDP 443 (HTTP/3 / QUIC) 的 VLESS-XHTTP-CDN-H3 节点（默认关闭）。"
       echo -e "  • 快捷命令:"
       echo -e "      ${MANAGE_CMD} cdnh3 on       # 开启 CDN QUIC(h3) 节点并同步更新订阅"
       echo -e "      ${MANAGE_CMD} cdnh3 off      # 关闭 CDN QUIC(h3) 节点并恢复精简订阅"
@@ -2104,7 +2104,7 @@ cmd_uninstall() {
 }
 
 # ==================================================
-# 备用节点开关：h2direct / hy2obfs / split（上下行分离两条）
+# 可选节点开关：h2direct / hy2obfs / split（上下行分离两条）；各自的默认开关状态见 01-env.sh
 # ==================================================
 # 备用节点库 /etc/xhttp-cdn/all/ 由安装脚本在「全部备用节点开启」的参数下渲染一遍得到
 # （见 11-client-config.sh、09-server-config.sh）。开关只从库里取节点行 / Mihomo 条目 /
@@ -2439,12 +2439,12 @@ cmd_menu() {
     echo " 14) CDN ECH 加密 SNI 开关 (show / on / off)"
     echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
     echo " 16) CDN TCP(h2) 节点开关 (show / on / off)"
-    echo " 17) CDN QUIC(h3) 节点开关，默认开启 (show / on / off)"
+    echo " 17) CDN QUIC(h3) 节点开关，默认关闭 (show / on / off)"
     echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
     echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
     echo " 20) 备用节点 XHTTP-Direct-H2（TCP 直连）(show / on / off)"
-    echo " 21) 备用节点 Hysteria2-Obfs（salamander 混淆）(show / on / off)"
-    echo " 22) 备用节点 上行 Reality / 下行 CDN (show / on / off)"
+    echo " 21) Hysteria2-Obfs（salamander 混淆，默认开启）(show / on / off)"
+    echo " 22) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
     echo " 23) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
     echo " 24) 卸载"
     echo "  0) 退出"
@@ -2499,10 +2499,10 @@ xray-xhttp 管理命令
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
   xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
-  xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认开启）
+  xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认关闭）
   xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口
-  xh hy2obfs [show|on|off]          备用节点 Hysteria2-Obfs（UDP salamander 混淆），同上
-  xh split [show|reality-up on|off|cdn-up on|off]  备用节点 上下行分离两条（纯客户端链接）
+  xh hy2obfs [show|on|off]          Hysteria2-Obfs（UDP salamander 混淆，默认开启），开关同上
+  xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；reality-up 默认开启，cdn-up 备用）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速

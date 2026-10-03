@@ -232,15 +232,16 @@ flowchart TD
     end
 ```
 
-| # | 节点名称（v4.9.43） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.64） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | **默认 CDN 节点**，QUIC 经 Cloudflare 回源 |
-| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8443 | 直连 QUIC，`mode=stream-up` |
-| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **1** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
+| **2** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 UDP 443 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **3** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | 直连 UDP 8443 | 混淆版，QUIC 被深度识别时使用 |
 | **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
 | **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
+| **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP 上下行分离 | 上行 Reality 直连 / 下行经 CDN | 纯客户端链接，不动服务端 |
 
-> 默认关闭、按需开启：`VLESS-Reality-Up-CDN-Down`（`FEATURE_REALITY_UP_CDN_DOWN`）、`VLESS-XHTTP-CDN-H2`（`FEATURE_CDN_H2`，TCP 兜底，UDP 被限速/封锁时开启）、`VLESS-CDN-Up-Reality-Down`（`FEATURE_CDN_UP_REALITY_DOWN`）、`VLESS-XHTTP-Direct-H2`（`FEATURE_H2_DIRECT`）、`Hysteria2-Obfs-Direct`（`FEATURE_HY2_OBFS`）。
+> 默认关闭、按需用 `xh` 开启：`VLESS-XHTTP-CDN-H3`（`xh cdnh3 on`）、`VLESS-XHTTP-CDN-H2`（`xh cdnh2 on`，TCP 兜底）、`VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）、`VLESS-XHTTP-Direct-H2`（`xh h2direct on`）。
 
 ---
 
@@ -295,6 +296,7 @@ flowchart TD
 | **所有节点上行 / 下行 mode 统一为 stream-up** | v4.9.61 | 把 `src/11-client-config.sh` 中 CDN 分离节点下行的 `xhttpSettings`，以及 dual-cdn / dual-ip / quic-h3 / common-nodes 扩展里节点链接和 Mihomo 片段残留的 `mode=auto` 全部改为 `stream-up`；至此脚本中不再有 `auto`。**未实测**，卡住时把对应节点的 `mode` 改回 `auto` 即可（服务端无需改动）。 |
 | **nginx 放宽 TLS 并关闭 session tickets，回源不再显式关缓冲** | v4.9.62 | 按用户要求：`ssl_protocols` 由仅 TLS1.3 改为 `TLSv1.3 TLSv1.2`（附 TLS1.2 `ssl_ciphers`），`ssl_session_tickets` 由 `on` 改为 `off`；XHTTP 回源 location 去掉 `proxy_buffering off` / `proxy_request_buffering off` / `X-Accel-Buffering`（`grpc_pass` 本就不吃 `proxy_*` 缓冲指令，实际行为基本不变）。副作用：关 tickets 后 `ssl_early_data`（0-RTT）无会话可恢复，不再生效；开 TLS1.2 会放宽原先的降级防护。已安装机器需手改 `/etc/nginx/nginx.conf`，`nginx -t` 后重载。**未实测**。 |
 | **默认 5 节点 + 备用节点用 xh 菜单开关** | v4.9.63 | 安装命令默认的 5 条节点（Reality-Vision、Reality-XHTTP、XHTTP-Direct-H3、CDN-H3、Hysteria2-H3）本来就是源码默认值，未改。其余备用节点新增 xh 开关：`xh h2direct`（TCP 8445，加服务端入站并放行端口）、`xh hy2obfs`（UDP 8443 salamander，同上）、`xh split reality-up|cdn-up`（纯客户端链接）；菜单 20–23，卸载顺延为 24。实现：安装时用「全部备用节点开启」的参数再渲染一遍存进 `/etc/xhttp-cdn/all/`（节点行、Mihomo、两条服务端入站文本），开关只从库里取，与全新安装逐字一致；服务端入站用成对 `// >>xh:` 标记写入，关闭时整块删除，配置字节级还原。**旧版安装的机器没有该库**，需重新部署才有这些开关。云安全组 / 安全列表仍需自行放行端口。修正 cdnh2 / cdnh3 说明里「6 大核心节点」「备用」的过时措辞。 |
+| **默认节点集改为当前使用的 6 条** | v4.9.64 | 按用户实际使用的节点调整安装命令默认值：`FEATURE_HY2_OBFS` 默认 `true`（Hysteria2-Obfs-Direct，UDP 8443）、`FEATURE_REALITY_UP_CDN_DOWN` 默认 `true`（Reality-Up-CDN-Down）、`FEATURE_CDN_H3` 默认 `false`（CDN-H3 改为备用，`xh cdnh3 on` 开启）。默认节点为 Direct-H3、Hysteria2-H3、Hysteria2-Obfs、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down；其余备用节点用 xh 开关。同步修正 xh 菜单 / 帮助里「默认开启 / 备用」的措辞，README 节点表更新。**只影响新装机器**；已安装机器的节点集不变。 |
 
 ---
 

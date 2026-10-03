@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.63"
+PROJECT_VERSION="4.9.64"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -89,12 +89,12 @@ FEATURE_HY2=${FEATURE_HY2:-true}
 # 流量形态就是一个普通网站的 HTTP/3，是 UDP 里最不容易被运营商按端口/特征 QoS 的样子。
 # 依附于 FEATURE_HY2（共用认证密码与证书）；UDP 443 被占用时自动关闭。v4.9.28 起为 Xray 唯一的 Hysteria2 节点。
 FEATURE_HY2_H3=${FEATURE_HY2_H3:-true}
-# FEATURE_HY2_OBFS（v4.9.28）：UDP 8443 + salamander 混淆的 Hysteria2-Obfs-Direct，**默认关闭**。
+# FEATURE_HY2_OBFS（v4.9.28；v4.9.64 起默认开启）：UDP 8443 + salamander 混淆的 Hysteria2-Obfs-Direct。
 # 同条件实测 Hysteria2-H3-Direct 下行三种线路都更快、上行持平、延迟更低，Xray 侧只保留它一条。
-# 所处网络对 QUIC 做深度识别封锁、需要混淆时再打开：FEATURE_HY2_OBFS=true bash install.sh
+# 不需要时可关：FEATURE_HY2_OBFS=false bash install.sh，或装好后 xh hy2obfs off。
 # （同机 sbbox 的 Hysteria2 自带 salamander，也可作为混淆备选）。
 # FEATURE_HY2 仍是 Hysteria2 的总开关（内核版本不够、缺证书时两条一起关）。
-FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
+FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-true}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
@@ -102,8 +102,8 @@ HY2_H3_PORT=443
 FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
-# 默认开启（作为默认 CDN 节点，走 UDP 443 QUIC），如遇 QoS 丢包可通过 FEATURE_CDN_H3=false 关闭。
-FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
+# v4.9.64 起默认关闭（默认的 CDN 相关节点改为 Reality-Up-CDN-Down）；需要时 FEATURE_CDN_H3=true 或装好后 xh cdnh3 on。
+FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
 
 # FEATURE_BLOCK_CN / FEATURE_BLOCK_ADS（v4.9.53，默认关闭）：出站屏蔽回国 IP（geoip:cn）/ 广告域名
 # （geosite:category-ads-all），参考 zxcvos/Xray-script 的可选规则。运行期用 xh block cn|ads on|off 切换。
@@ -122,10 +122,10 @@ FEATURE_REALITY_SPX=${FEATURE_REALITY_SPX:-true}
 # 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
 FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
-# FEATURE_REALITY_UP_CDN_DOWN（v4.9.43 默认关闭精简）：上下行分离节点
+# FEATURE_REALITY_UP_CDN_DOWN（v4.9.64 起默认开启）：上下行分离节点
 # VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN H2 443）。
-# 默认关闭保持核心节点精简，需要时可通过 FEATURE_REALITY_UP_CDN_DOWN=true 开启。
-FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-false}
+# 不需要时 FEATURE_REALITY_UP_CDN_DOWN=false，或装好后 xh split reality-up off。
+FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-true}
 FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN}}
 
 # FEATURE_CDN_UP_REALITY_DOWN（v4.9.29 新增，v4.9.36 默认关闭）：反向的上下行分离节点
