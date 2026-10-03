@@ -131,7 +131,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 ```
 > 如需覆盖更多自定义项，直接在末尾空格追加即可（如 `IP_CHOICE=1`、`CDN_FALLBACK_ORIGIN="https://www.harvard.edu"`）。
 >
-> **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_HY2=true` 等优化配置，绝大多数场景无需重复传入。
+> **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_CDN_H2=true`、`FEATURE_CDN_H3=true`、`FEATURE_REALITY_UP_CDN_DOWN=true` 等优化配置，绝大多数场景无需重复传入。
 
 
 #### 方案 B：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
@@ -162,9 +162,14 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | `FEATURE_AUTO_TUNING` | 系统优化 | `true` | 自动开启 BBR+fq、64MB Socket 缓冲区、1048576 句柄等系统级调优。 |
 | `FEATURE_XPADDING` | 流量混淆 | `true` | 启用 XHTTP 流量填充混淆（`xPaddingObfsMode`），破坏 CDN 侧长度指纹。 |
 | `FEATURE_CDN_ECH` | 实验特性 | `false` | Cloudflare ECH 加密 SNI 开关。未在 CF 控制台开启 ECH 时务必保持 `false`。 |
-| `FEATURE_H3_DIRECT` | 协议开关 | `true` | 开启直连 HTTP/3 (QUIC) 节点（监听 UDP `H3_PORT`）。 |
-| `FEATURE_H2_DIRECT` | 协议开关 | `false` | 开启直连 HTTP/2 (TCP) 节点（监听 TCP `H2_PORT`，默认关闭保持 7 节点）。 |
-| `FEATURE_HY2` | 协议开关 | `true` | 开启原生 Hysteria2 + Salamander 混淆节点（监听 UDP `HY2_PORT`）。 |
+| `FEATURE_CDN_H2` | 协议开关 | `true` | 开启经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2（默认开启）。 |
+| `FEATURE_CDN_H3` | 协议开关 | `true` | 开启经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3（默认开启）。 |
+| `FEATURE_H3_DIRECT` | 协议开关 | `true` | 开启直连 HTTP/3 (QUIC) 节点（监听 UDP `H3_PORT`，默认开启）。 |
+| `FEATURE_H2_DIRECT` | 协议开关 | `false` | 开启直连 HTTP/2 (TCP) 节点（监听 TCP `H2_PORT`，默认关闭）。 |
+| `FEATURE_REALITY_UP_CDN_DOWN` | 协议开关 | `true` | 开启上下行分离节点（上行 Reality 直连 / 下行 CDN，默认开启）。 |
+| `FEATURE_HY2` | 协议开关 | `false` | Hysteria2 总开关（UDP 443，默认不装，装好后可通过 `xh hy2 on` 开启）。 |
+| `FEATURE_HY2_OBFS` | 协议开关 | `false` | Hysteria2 Salamander 混淆节点（UDP 8443，需先开 Hysteria2，默认关闭）。 |
+| `XRAY_DEFAULT_VERSION` | 内核版本 | `26.3.27` | 默认安装的 Xray-core 官方稳定正式版本，兼容全平台第三方客户端。 |
 | `FEATURE_AUTOUPDATE` | 运维管理 | `true` | 开启每周定期自动升级 Xray-core（自检不通过自动回滚）。 |
 | `FEATURE_KEEPALIVE` | 进程自愈 | `true` | 开启服务守护进程保活与自动拉起。 |
 | `FEATURE_BRUTAL` | 拥塞控制 | `true` | 开启 TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制。 |
@@ -233,7 +238,7 @@ flowchart TD
     end
 ```
 
-| # | 节点名称（v4.9.71） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.72） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
 | **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
@@ -305,6 +310,7 @@ flowchart TD
 | **nginx 重新打开 session tickets（重连更快）** | v4.9.69 | 按用户选择，`ssl_session_tickets` 由 `off` 改回 `on`。客户端重连时可以恢复会话，少传证书，少一次完整握手；同时它是 `ssl_early_data`（0-RTT）与 `Early-Data` 头生效的前提，v4.9.62 起这两项一直是空转。本机验证：TLS1.3 与 TLS1.2 的第二次连接都显示 `Reused`。代价：ticket 密钥只在 nginx 进程内，重启后旧 ticket 失效；前向保密弱于完整握手。**未测速**：nginx 只承载 CDN 回源、订阅和伪装站，约占总流量两成，CPU 占用很低，这一项只缩短重连，不提高稳态吞吐。已安装机器需手改 `/etc/nginx/nginx.conf` 后 `nginx -t` 再重载。 |
 | **CDN 上传腿改回 stream-up** | v4.9.70 | 按用户「提高 CDN 吞吐」的要求做了小规模对比：本机用 Xray 客户端经 Cloudflare 回连自己，各 40 次传输（20MB 下载 / 10MB 上传）没有卡住，上传 **stream-up 约 365–441 Mbps，auto 约 163–261 Mbps（快 1.7–2.7 倍）**，下载两者接近（约 490–640 Mbps）。因此 CDN-H2 / CDN-H3、CDN-Up-Reality-Down 的上传腿，以及 dual-cdn / quic-h3 扩展里的上传腿改回 `stream-up`；经 CDN 的**下载腿**（Reality-Up-CDN-Down 的 downloadSettings）保持 `auto`。服务端 8001 继续是 `auto`（什么模式都收）。这个结果取代 v4.9.66 里「CDN 腿全部 auto」，当时的依据是更早一次 stream-up 经 CF 上传 2/6 没传完，在 Cloudflare 开启 gRPC / WebSockets 后的这次测试里没有复现。**限制：只代表本机到 Cloudflare 这一段，不代表用户客户端的线路；样本小、波动大（单次 60–720 Mbps）。** 当前在用的 Reality-Up-CDN-Down 上行走 Reality、下行走 CDN，不受这项影响。 |
 | **默认节点集：去掉 Hysteria2，默认装两条 CDN 节点；Hysteria2 做进 xh 菜单** | v4.9.71 | 按用户要求：1. 安装命令默认**不再装 Hysteria2**：`FEATURE_HY2` 默认 `false`（Hysteria2-H3 随它关闭），`FEATURE_HY2_OBFS` 默认 `false`；2. **默认安装两条 CDN 节点**：`FEATURE_CDN_H2` 与 `FEATURE_CDN_H3` 默认 `true`；3. 默认节点集变为 CDN-H2、CDN-H3、Direct-H3、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down（6 条）；4. 新增 `xh hy2 [show\|on\|off]` 与菜单第 24 项（卸载顺延为 25）：开启 = 加服务端入站 + 放行 UDP 443 + 加客户端节点 + 写标志位，失败即撤销；关闭会连同混淆节点一起移除；`xh hy2obfs on` 现在要求先开 Hysteria2；5. Hysteria2-H3 入站也带 `// >>xh:` 标记，备用节点库新增 `inbound-hy2h3.json`；6. 入站标记的「已存在」检查改按 tag 判断（Hysteria2 的 UDP 443 与 Reality 的 TCP 443 同号）。本机往返验证：`xh hy2 off`（连同混淆）→ `xh hy2 on` → `xh hy2obfs on`，客户端文件与订阅逐字节一致，`xh diag` 显示 TCP 443、UDP 443、UDP 8443 都在监听。**只影响新装机器**；已安装机器的节点集不变。本机 Hysteria2 入站原先没有标记，已用同样的标记包起来，之后即可用 `xh hy2` 开关。 |
+| **默认安装对齐本机：锁定 Xray 官方正式稳定内核 v26.3.27 并固化 6 核心节点集** | v4.9.72 | 1. 默认安装 Xray 内核版本锁定为官方稳定正式版 v26.3.27（与本机运行环境一致），规避上游预发布版对第三方客户端的兼容性断层；2. 默认安装节点与本机完全对齐为 6 条主力节点（CDN-H2、CDN-H3、Direct-H3、Reality-Vision、Reality-XHTTP、Reality-Up-CDN-Down，Hysteria2 默认不装并收录于 xh 菜单备用）；3. 同步环境变量矩阵、安装器 profile 与构建发布脚本。 |
 
 ---
 

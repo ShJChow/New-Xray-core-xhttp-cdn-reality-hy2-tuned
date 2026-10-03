@@ -175,7 +175,7 @@ install_xray() {
       if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
         if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
           warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
-          local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
+          local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.3.27}}"
           if [[ "$OS_ID" != "alpine" ]]; then
             local install_flag=""
             [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
@@ -210,8 +210,8 @@ install_xray() {
         info "残留进程已清理"
       fi
     fi
-    # 默认安装最新官方正式版（releases/latest，严格排除 pre-release / beta 不稳定测试版）
-    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
+    # 默认安装锁定版本（默认 v26.3.27 官方正式稳定版，严格排除 pre-release / beta 不稳定测试版）
+    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.3.27}}"
     local install_flag=""
     [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root
@@ -228,7 +228,7 @@ install_xray() {
 
   command -v unzip >/dev/null 2>&1 || pkg_install unzip
   tmpdir=$(mktemp -d)
-  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-latest}}"
+  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.3.27}}"
   local latest_tag asset_url
   if [[ -n "$target_ver" && "$target_ver" != "latest" ]]; then
     latest_tag="v${target_ver#v}"

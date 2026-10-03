@@ -33,11 +33,11 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.71"
+PROJECT_VERSION="4.9.72"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
-# 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
-# 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
-XRAY_DEFAULT_VERSION="latest"
+# 默认推荐的 Xray-core 版本：锁定官方稳定正式版 v26.3.27（与本机运行环境一致）。
+# 具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY，避免受上游 pre-release 测试版改动影响。
+XRAY_DEFAULT_VERSION="26.3.27"
 MANAGE_CMD="xh"
 MANAGE_BIN="/usr/local/bin/${MANAGE_CMD}"
 STATE_DIR="/etc/xhttp-cdn"
