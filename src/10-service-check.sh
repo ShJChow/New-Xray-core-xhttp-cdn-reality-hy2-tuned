@@ -35,7 +35,23 @@ info "测试 Nginx 配置..."
 nginx -t || error "Nginx 配置有误，具体报错见上方 nginx -t 输出"
 
 info "测试 Xray 配置..."
-xray -test -config /usr/local/etc/xray/config.json
+if ! xray -test -config /usr/local/etc/xray/config.json; then
+  # 可选入站（h2-direct / Hysteria2-Obfs）出问题时，不让它拖垮 Reality 等核心节点：
+  # 关掉它们，用同一份模板重新生成配置再试一次。核心节点的配置本身有错时，这里仍然报错退出。
+  if [[ "${FEATURE_H2_DIRECT:-false}" == true || "${FEATURE_HY2_OBFS:-false}" == true ]]; then
+    warn "Xray 配置校验失败。先关闭可选入站（h2-direct / Hysteria2-Obfs）后重新生成配置再试"
+    FEATURE_H2_DIRECT=false
+    FEATURE_HY2_OBFS=false
+    XRAY_H2_DIRECT_INBOUND=""
+    XRAY_HY2_INBOUND=""
+    write_xray_config
+    sed -i -E "s/^FEATURE_H2_DIRECT=.*/FEATURE_H2_DIRECT=false/; s/^FEATURE_HY2_OBFS=.*/FEATURE_HY2_OBFS='false'/" "$NODE_ENV_FILE" 2>/dev/null || true
+    xray -test -config /usr/local/etc/xray/config.json || error "关闭可选入站后 Xray 配置仍然校验失败，核心节点配置有误，见上方输出"
+    warn "已关闭 h2-direct / Hysteria2-Obfs 两个可选节点，Reality 等核心节点不受影响。原因见上方 xray -test 输出"
+  else
+    xray -test -config /usr/local/etc/xray/config.json
+  fi
+fi
 
 # `nginx -t` 只解析配置，不绑定端口、不初始化 QUIC/TLS 运行时，所以"语法 OK 但
 # 启动失败"是完全可能的（端口占用、QUIC 运行时初始化、SELinux 拒绝……）。
@@ -73,6 +89,24 @@ fi
 service_is_active xray || error "Xray 启动失败"
 info "Xray 运行中"
 info "Nginx 运行中"
+
+# 监听自检：进程在运行不等于端口真的在监听。Reality 在 TCP 443，缺了它节点一定不通，所以单独报错；
+# 其余按已开启的节点逐个检查，缺哪个就告诉用户哪个，方便区分「服务端没监听」和「云安全组没放行」。
+sleep 1
+_listening() {   # $1 = tcp|udp，$2 = 端口
+  local flag=-ltnH
+  [[ "$1" == udp ]] && flag=-lunH
+  ss "$flag" "sport = :$2" 2>/dev/null | grep -q .
+}
+if _listening tcp 443; then
+  info "监听自检：TCP 443（Reality）正常"
+else
+  warn "监听自检：TCP 443 没有在监听，Reality 节点会不通。查看：journalctl -u xray -n 40 --no-pager；ss -ltnup | grep -E ':443 |xray'"
+fi
+[[ "${FEATURE_H3_DIRECT:-false}" == true ]] && { _listening udp "$H3_PORT" || warn "监听自检：UDP ${H3_PORT}（XHTTP-Direct-H3）没有在监听"; }
+[[ "${FEATURE_HY2_H3:-false}" == true ]] && { _listening udp "${HY2_H3_PORT:-443}" || warn "监听自检：UDP ${HY2_H3_PORT:-443}（Hysteria2-H3）没有在监听"; }
+[[ "${FEATURE_HY2_OBFS:-false}" == true ]] && { _listening udp "$HY2_PORT" || warn "监听自检：UDP ${HY2_PORT}（Hysteria2-Obfs）没有在监听"; }
+[[ "${FEATURE_H2_DIRECT:-false}" == true ]] && { _listening tcp "$H2_PORT" || warn "监听自检：TCP ${H2_PORT}（XHTTP-Direct-H2）没有在监听"; }
 
 echo ""
 

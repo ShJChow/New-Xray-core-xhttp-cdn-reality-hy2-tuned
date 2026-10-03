@@ -151,6 +151,23 @@ fi
 # 会把两个节点误判为不可用。时序上没有问题：xray -test 在 10:23，install-cert 在 10:13。
 CERT_FILE="/etc/ssl/private/fullchain.cer"
 CERT_KEY="/etc/ssl/private/private.key"
+# 可选入站的端口预检：默认开启的 Hysteria2-Obfs（UDP HY2_PORT）和可选的 h2-direct（TCP H2_PORT）。
+# Xray 是一个进程，任何一个入站绑定失败都会让整个 Xray 起不来，Reality 也就跟着不通。
+# 端口已被别的进程（不是 xray 自己）占用时，直接关掉这个可选节点并提示，而不是让安装带着坏配置继续。
+_port_taken_by_other() {   # $1 = tcp|udp，$2 = 端口
+  local flag=-ltnpH
+  [[ "$1" == udp ]] && flag=-lunpH
+  ss "$flag" "sport = :$2" 2>/dev/null | grep -v '"xray"' | grep -q .
+}
+if [[ "${FEATURE_HY2_OBFS:-false}" == true ]] && _port_taken_by_other udp "$HY2_PORT"; then
+  warn "UDP ${HY2_PORT} 已被其他进程占用，已关闭 Hysteria2-Obfs 节点（占用者：$(ss -lunpH "sport = :${HY2_PORT}" 2>/dev/null | grep -o 'users:(([^)]*' | head -1)）。腾出端口后可用 xh hy2obfs on 开启"
+  FEATURE_HY2_OBFS=false
+fi
+if [[ "${FEATURE_H2_DIRECT:-false}" == true ]] && _port_taken_by_other tcp "$H2_PORT"; then
+  warn "TCP ${H2_PORT} 已被其他进程占用，已关闭 h2-direct 节点。腾出端口后可用 xh h2direct on 开启"
+  FEATURE_H2_DIRECT=false
+fi
+
 XRAY_H3_DIRECT_INBOUND=""
 XRAY_H2_DIRECT_INBOUND=""
 XRAY_HY2_INBOUND=""
@@ -463,9 +480,13 @@ if [[ "${FEATURE_BLOCK_CN:-false}" == true ]]; then
 fi
 
 info "写入 /usr/local/etc/xray/config.json ..."
+# 包成函数：10-service-check.sh 里校验失败时，要在关掉可选入站后用同样的模板重新生成
+write_xray_config() {
 cat > /usr/local/etc/xray/config.json << XRAYEOF
 @@include templates/xray-config.json.tmpl
 XRAYEOF
+}
+write_xray_config
 
 # 节点状态：供管理命令 xh 读取（info / sub / status / uninstall）
 info "写入 ${NODE_ENV_FILE} ..."
