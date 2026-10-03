@@ -99,13 +99,14 @@ http {
 
     ssl_session_cache          shared:SSL:16m;
     ssl_session_timeout        1h;
-    ssl_session_tickets        on;
-    # 只谈 TLS 1.3。本项目所有节点的客户端（Xray / hysteria / 浏览器）都是 1.3；
-    # 留着 1.2 只会让 Reality 借用的 ServerHello 有降级到 1.2 的可能。
-    ssl_protocols              TLSv1.3;
+    # 按用户要求：关闭 session tickets，协议放宽到 TLS1.3 + TLS1.2（TLS1.2 用下面的 ssl_ciphers）。
+    # 注意：关 tickets 后 ssl_early_data（0-RTT）无会话可恢复，实际不再生效。
+    ssl_session_tickets        off;
+    ssl_protocols              TLSv1.3 TLSv1.2;
+    ssl_ciphers                TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers  on;
     ssl_early_data             on;
-    # TLSv1.3 不看 ssl_ciphers（那是 1.2 及以下的旋钮），要指定 1.3 的套件
-    # 必须走 ssl_conf_command Ciphersuites；ssl_prefer_server_ciphers 在 1.3 下同样无作用。
+    # TLS1.3 套件走 ssl_conf_command Ciphersuites（ssl_ciphers 只管 1.2 及以下）。
     ssl_conf_command           Ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;
     # Let's Encrypt 自 2025 年起不再提供 OCSP，本项目签发的证书里没有 OCSP
     # responder URL（openssl x509 -noout -ocsp_uri 输出为空），开着 stapling
@@ -209,10 +210,7 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
             grpc_pass grpc://xray_xhttp;
             # 下行吞吐：grpc_buffer_size 调大至 1024k，减少 HTTP/2 切片与系统调用开销
             grpc_buffer_size 1024k;
-            # 禁用反向代理缓冲与请求缓冲，保持端到端流式透传
-            proxy_buffering         off;
-            proxy_request_buffering off;
-            add_header X-Accel-Buffering "no" always;
+            # 按用户要求：不再显式关闭缓冲（去掉 proxy_buffering / proxy_request_buffering off 与 X-Accel-Buffering）
             # XHTTP 是长连接：Nginx 默认 60s 读写超时会直接切断上下行，必须放大
             grpc_socket_keepalive on;
             grpc_read_timeout     1h;

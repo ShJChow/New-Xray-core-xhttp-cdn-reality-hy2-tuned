@@ -290,6 +290,7 @@ flowchart TD
 | **默认关闭 nginx 访问日志与 Xray 访问日志** | v4.9.59 | 此前 nginx 的 `access_log` 在 http 层默认开启，会把访客 IP、订阅 token 路径与 UA 写进 `access.log`（仅个别 location 单独 `off`）。现 http 层全局 `access_log off`，nginx `error_log` 由 `notice` 改为 `error`，Xray 写 `"access": "none"` 与 `loglevel: error`。**仅新装生效**；已安装机器需手改 `/etc/nginx/nginx.conf` 与 `/usr/local/etc/xray/config.json`（`nginx -t` / `xray -test` 通过后再重载），且旧的 `access.log` 不会被清理。不涉及任何传输参数。 |
 | **下行腿与服务端 mode 统一为 stream-up** | v4.9.60 | 按用户要求，Reality/CDN 分离节点的 `downloadSettings` 下行腿（含 dual-cdn / dual-ip / quic-h3 扩展）与服务端 xhttpSettings 的 `mode` 由 `auto` 改为 `stream-up`，与上行腿一致，消除两腿混用。**未实测**（沿用 v4.9.58 的取舍，若上传/下载卡住，把对应 `mode` 改回 `auto` 即可）。已安装机器需把 `/usr/local/etc/xray/config.json` 中的 `"mode": "auto"` 手改后 `xray -test` 再重启；扩展脚本里节点链接本身的上行 `mode=auto` 未改。 |
 | **所有节点上行 / 下行 mode 统一为 stream-up** | v4.9.61 | 把 `src/11-client-config.sh` 中 CDN 分离节点下行的 `xhttpSettings`，以及 dual-cdn / dual-ip / quic-h3 / common-nodes 扩展里节点链接和 Mihomo 片段残留的 `mode=auto` 全部改为 `stream-up`；至此脚本中不再有 `auto`。**未实测**，卡住时把对应节点的 `mode` 改回 `auto` 即可（服务端无需改动）。 |
+| **nginx 放宽 TLS 并关闭 session tickets，回源不再显式关缓冲** | v4.9.62 | 按用户要求：`ssl_protocols` 由仅 TLS1.3 改为 `TLSv1.3 TLSv1.2`（附 TLS1.2 `ssl_ciphers`），`ssl_session_tickets` 由 `on` 改为 `off`；XHTTP 回源 location 去掉 `proxy_buffering off` / `proxy_request_buffering off` / `X-Accel-Buffering`（`grpc_pass` 本就不吃 `proxy_*` 缓冲指令，实际行为基本不变）。副作用：关 tickets 后 `ssl_early_data`（0-RTT）无会话可恢复，不再生效；开 TLS1.2 会放宽原先的降级防护。已安装机器需手改 `/etc/nginx/nginx.conf`，`nginx -t` 后重载。**未实测**。 |
 
 ---
 
