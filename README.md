@@ -134,54 +134,6 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 > **CDN 域名开 Cloudflare 代理（橙云）时强烈建议追加 `CF_Token="<API Token>"`**（权限：Zone.Zone 读 + Zone.DNS 编辑）：证书改用 DNS-01 签发与续期，不占 80 端口、续期不停 nginx。不传则为 standalone（HTTP-01），CDN 走代理后 60 天续期必败；已安装的机器执行 `CF_Token=<API Token> xh cert dnscf` 切换，`xh cert show` / `xh diag` 可查看续期方式。脚本内部默认值已涵盖 `FALLBACK_MODE=proxy`、`FEATURE_AUTO_TUNING=true`、`FEATURE_XPADDING=true`、`FEATURE_H3_DIRECT=true`、`FEATURE_CDN_H2=true`、`FEATURE_CDN_H3=true`、`FEATURE_REALITY_UP_CDN_DOWN=true` 等优化配置，绝大多数场景无需重复传入。
 
 
-#### 方案 B：自定义端口与路径模板（密码由脚本全自动生成 SHA256 高熵密钥，无需手动指定）
-```bash
-sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned/releases/latest/download/install.sh) \
-  AUTO=1 \
-  REALITY_DOMAIN="reality.example.com" \
-  CDN_DOMAIN="cdn.example.com" \
-  H3_PORT=8446 \
-  H2_PORT=8445 \
-  HY2_PORT=8443 \
-  XHTTP_PATH="/$(openssl rand -hex 4)" \
-  NODE_TAG="node-01"
-```
-
-#### 全量环境变量配置矩阵速查表
-
-| 环境变量 | 适用类型 | 默认值 | 说明与工程建议 |
-| :--- | :---: | :---: | :--- |
-| `AUTO` | 基础控制 | `0` | 设为 `1` 开启零交互全自动无人值守安装。 |
-| `REALITY_DOMAIN` | 核心必填 | — | **直连 / Reality 域名**。Cloudflare 中设为 **仅 DNS（灰色云朵）**。 |
-| `CDN_DOMAIN` | 核心必填 | — | **CDN 代理域名**。Cloudflare 中设为 **已代理（橙色小黄云）**。 |
-| `IP_CHOICE` | 网络协议 | `1` | `1` 优先 IPv4，`2` 优先 IPv6。 |
-| `NODE_TAG` | 节点标识 | `vps` | 节点名称后缀（如 `hk-oracle`、`us-lax`），便于客户端策略组区分。 |
-| `FALLBACK_MODE` | 伪装模式 | `proxy` | `proxy`（反代真实高校网站）或 `static`（本地网页）。 |
-| `REALITY_FALLBACK_ORIGIN` | 伪装源站 | `https://www.sjsu.edu` | Reality 握手失败/主动探测回落的合法目标网站。 |
-| `CDN_FALLBACK_ORIGIN` | 伪装源站 | `https://www.harvard.edu`| CDN 路径未匹配时的伪装目标网站。 |
-| `FEATURE_AUTO_TUNING` | 系统优化 | `true` | 自动开启 BBR+fq、64MB Socket 缓冲区、1048576 句柄等系统级调优。 |
-| `FEATURE_XPADDING` | 流量混淆 | `true` | 启用 XHTTP 流量填充混淆（`xPaddingObfsMode`），破坏 CDN 侧长度指纹。 |
-| `FEATURE_CDN_ECH` | 实验特性 | `false` | Cloudflare ECH 加密 SNI 开关。未在 CF 控制台开启 ECH 时务必保持 `false`。 |
-| `FEATURE_CDN_H2` | 协议开关 | `true` | 开启经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2（默认开启）。 |
-| `FEATURE_CDN_H3` | 协议开关 | `true` | 开启经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3（默认开启）。 |
-| `FEATURE_H3_DIRECT` | 协议开关 | `true` | 开启直连 HTTP/3 (QUIC) 节点（监听 UDP `H3_PORT`，默认开启）。 |
-| `FEATURE_H2_DIRECT` | 协议开关 | `false` | 开启直连 HTTP/2 (TCP) 节点（监听 TCP `H2_PORT`，默认关闭）。 |
-| `FEATURE_REALITY_UP_CDN_DOWN` | 协议开关 | `true` | 开启上下行分离节点（上行 Reality 直连 / 下行 CDN，默认开启）。 |
-| `FEATURE_HY2` | 协议开关 | `false` | Hysteria2 总开关（UDP 443，默认不装，装好后可通过 `xh hy2 on` 开启）。 |
-| `FEATURE_HY2_OBFS` | 协议开关 | `false` | Hysteria2 Salamander 混淆节点（UDP 8443，需先开 Hysteria2，默认关闭）。 |
-| `XRAY_DEFAULT_VERSION` | 内核版本 | `26.3.27` | 默认安装的 Xray-core 官方稳定正式版本，兼容全平台第三方客户端。 |
-| `FEATURE_AUTOUPDATE` | 运维管理 | `true` | 开启每周定期自动升级 Xray-core（自检不通过自动回滚）。 |
-| `FEATURE_KEEPALIVE` | 进程自愈 | `true` | 开启服务守护进程保活与自动拉起。 |
-| `FEATURE_BRUTAL` | 拥塞控制 | `true` | 开启 TCP Brutal (HyNetworks/tcp-brutal) 极速拥塞控制。 |
-| `BRUTAL_DEFAULT_MBPS` | 默认带宽 | `auto` (95% 本机速率) | TCP Brutal 默认全局下发速率（Mbps，留空或 `auto` 则自动探测本机/网卡最大速率并设为其 95%）。 |
-| `REALITY_MIN_CLIENT_VER` | 客户端兼容 | `1.8.0` | Reality 最低客户端版本控制（别名：`MINVERSION` / `MIN_CLIENT_VER`）。设为 `1.8.0` 兼容 mihomo / Clash Meta / sing-box；设为 `default` 或 `none` 回到 Xray 内核默认版本（严格模式）。 |
-| `H3_PORT` | 端口定义 | `8446` | HTTP/3 直连 UDP 端口（需云防火墙开放）。 |
-| `H2_PORT` | 端口定义 | `8445` | HTTP/2 直连 TCP 端口（需云防火墙开放）。 |
-| `HY2_PORT` | 端口定义 | `8443` | Hysteria2 直连 UDP 端口（需云防火墙开放）。 |
-| `XHTTP_PATH` | 路由路径 | 随机生成 | XHTTP 请求匹配路径（如 `/4ac061df`）。 |
-| `HY2_PASSWORD` | 认证密码 | 自动生成 (SHA256 hex) | Hysteria2 节点连接密码（未指定时自动生成 32 字节 / 64 字符 SHA256 高熵密钥）。 |
-| `OBFS_PASSWORD` | 混淆密码 | 自动生成 (SHA256 hex) | Salamander 混淆密码（未指定时自动生成 32 字节 / 64 字符 SHA256 高熵密钥）。 |
-
 ---
 
 ## 三、常驻管理命令 `xh`
