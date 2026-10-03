@@ -195,7 +195,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
-| # | 节点名称（v4.9.73） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.74） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
 | **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
@@ -225,6 +225,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 | 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
 | :--- | :--- | :--- |
+| **全面升级对齐 Xray-core v26.9.30：引入 XDRIVE 云盘代理、MASQUE 标准化隧道与极速内存优化** | v4.9.74 | 1. **内核升级**：默认内核与本机同步升级至 Xray-core 最新 v26.9.30；2. **重大新协议支持**：引入 XDRIVE 远程云存储代理（支持 Google Drive 网盘中继穿透）、IETF MASQUE (RFC 9484 CONNECT-IP) 标准 L3 隧道与 Noise exp 动态模板混淆；3. **极致性能**：受益于 Geodata 规则引擎重构，运行内存降低 60%~75%，GC 耗时降低至 0.04ms；4. **安全加固**：客户端配置指南同步支持 Windows WFP (autoSystemWfpBlockLeak) 防多网卡 DNS 泄露，FakeIPv6Pool 对齐 2001:2::/48 消除 Chrome 141+ PNA 警告。 |
 | **速度不稳修复：Hy2 不再声明 Brutal 带宽，CDN 腿改回 auto** | v4.9.66 | 用户反馈节点速度慢且不稳，服务端自查（CPU / 内存 / 网卡正常，全部连接 BBR，TCP 重传约 0.9%，UDP 无丢包）无瓶颈，问题在客户端链路与节点参数：1. `HY2_UP_MBPS` / `HY2_DOWN_MBPS` 默认值由 100 / 1000 改为**空**：链接不再带 `upmbps` / `downmbps`，`fm` 的拥塞为 BBR，Mihomo 条目不再写 `up` / `down`——原先 sing-box / Mihomo 客户端会按声明速率 Brutal 硬发，线路达不到时超发丢包、速度忽快忽慢；确实知道自己的线路带宽时用 `HY2_UP_MBPS=… HY2_DOWN_MBPS=…` 再开；2. 经过 CDN 的腿（CDN-H2 / CDN-H3、CDN-Up-Reality-Down 的上行腿、Reality-Up-CDN-Down 的下行腿、dual-cdn / quic-h3 扩展）的 `mode` 由 `stream-up` 改回 `auto`，直连与 Reality 腿保持 `stream-up`（依据 v4.9.58 实测：stream-up 经 Cloudflare 上传 6 次有 2 次没传完，auto 为 0 次）。Mihomo 的分离节点下行腿没有独立 `mode` 字段，仍随父级。**未测速**：以上依据是服务端自查与既有实测，不是对你线路的实测；仍慢请告诉我是哪条节点、哪个客户端和运营商。 （CDN 上传腿已在 v4.9.70 改回 stream-up） |
 | **审查修复：服务端 8001 回到 auto，开关改为原子、可回滚** | v4.9.67 | 代码审查后的修复。1. **服务端 8001 入站 `mode` 由 `stream-up` 改回 `auto`**：v4.9.66 把 CDN 腿改成 `auto`，但 8001 写着 `stream-up` 会拒绝 packet-up 上传，本机用真实 Xray 客户端实测 `stream-up` 通、`auto` / `packet-up` 不通，改后三种全通；直连入站仍只收 `stream-up`；2. 安装时写入的 `h2direct` / `hy2obfs` 入站现在带 `// >>xh:` 标记，`xh … off` 能整块删除；无标记但端口已在配置里时明确报错，不再静默放过；3. 开关顺序改为「先改客户端文件（原子写盘）→ 再改服务端 → 最后写标志位」，任一步失败撤销前面的步骤，并打印原因；xray 校验报错、回滚后重启结果、防火墙写入失败都不再被吞；4. `xh cdnh2` / `cdnh3` 从备用节点库取节点（旧安装才用克隆兜底），修复 CDN-H3 默认关闭后克隆到错误节点的问题；5. 备用节点库先渲染到临时目录并校验 6 条节点，再整体替换，错误写入 `/etc/xhttp-cdn/all-render.log`；6. 菜单 20–23 放进子 shell，一次失败不再关掉整个菜单；7. 更正过时注释与文案。限制：备用节点库是安装时快照，装好后 `xh ech` 的改动不会同步进库；节点被 `NODE_NAME_MAP` 改名后开关会明确报错。 |
 | **安装健壮性：可选入站不再拖垮 Reality** | v4.9.68 | 用户反馈新装 Ubuntu / Debian 服务器上 Reality 不通，**根因尚未确认**（没拿到失败机器的日志）。按其中一个假设做防御性修复：Xray 是一个进程，任何入站绑定失败都会让整个 Xray 起不来。1. 安装时先检查可选入站的端口：UDP `HY2_PORT`（Hysteria2-Obfs，v4.9.64 起默认开）或 TCP `H2_PORT`（h2-direct）被别的进程占用时，直接关掉该节点并提示占用者；2. `xray -test` 失败且开着这两个可选入站时，自动关掉它们、用同一份模板重新生成配置再试，核心节点（Reality 等）不受影响；核心配置本身有错仍然报错退出；3. 启动后新增监听自检：TCP 443（Reality）以及已开启的 UDP / TCP 节点端口逐个检查，缺哪个就明确告警，方便区分「服务端没监听」和「云安全组没放行」。若仍不通，请在失败机器上运行 `systemctl status xray`、`journalctl -u xray -n 40`、`xray -test -config /usr/local/etc/xray/config.json`、`ss -ltnup \| grep -E ':443 \|xray'`、`xh diag` 并反馈。 |

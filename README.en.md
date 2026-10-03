@@ -131,7 +131,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | `FEATURE_HY2_OBFS` | `false` | Hysteria2 Salamander obfs node (needs Hysteria2 first, default off; enable via `xh hy2 obfs on`). |
 | `HY2_PORT` | `random` | Hysteria2-Obfs node UDP port (random port in 10000-65000, customizable). |
 | `HY2_H3_PORT` | `random` | Hysteria2 direct node UDP port (random port in 10000-65000, customizable). |
-| `XRAY_DEFAULT_VERSION` | `26.3.27` | Default official stable Xray-core version, matching the host running environment. |
+| `XRAY_DEFAULT_VERSION` | `26.9.30` | Default Xray-core release version, supporting XDRIVE, MASQUE and performance optimizations. |
 | `FEATURE_BRUTAL` | `true` | Enables TCP Brutal congestion control (95% host speed). |
 | `REALITY_MIN_CLIENT_VER` | `1.8.0` | Minimum client version compatibility (`1.8.0` for Mihomo/Clash/sing-box). |
 
@@ -235,7 +235,7 @@ flowchart TD
     end
 ```
 
-| # | Node Name (v4.9.73) | Transport | Topology | Highlights |
+| # | Node Name (v4.9.74) | Transport | Topology | Highlights |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | Via CDN TCP 443 | TCP node through Cloudflare, fallback when UDP is throttled / blocked |
 | **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | Via CDN UDP 443 | QUIC to the Cloudflare origin |
@@ -265,6 +265,7 @@ After dozens of iterative rounds across high-latency cross-Pacific topologies (1
 
 | Area | Versions | Technical Strategy & Tuning Findings |
 | :--- | :--- | :--- |
+| **Comprehensive Upgrade to Xray-core v26.9.30: XDRIVE Cloud Storage Proxy, MASQUE & Radical Memory Optimization** | v4.9.74 | 1. **Core Upgrade**: Default core and host updated to Xray-core latest release v26.9.30; 2. **Cutting-Edge Protocol Support**: Introduced XDRIVE transport for extreme IP whitelist bypass via Google Drive relays, standard IETF MASQUE (RFC 9484 CONNECT-IP) L3 tunneling, and Finalmask Noise dynamic expression template obfuscation; 3. **High Performance**: Geodata MPH matcher refactored with 60%–75% reduction in runtime memory usage and GC latency down to 0.04ms; 4. **Hardened Security**: Integrated Windows WFP kernel anti-leak protection (`autoSystemWfpBlockLeak`) against multi-adapter DNS leaks, aligned FakeIPv6Pool with RFC 5180 `2001:2::/48` to suppress Chrome 141+ PNA warnings. |
 | **Official Stable Core Invariant** | v4.9.8–v4.9.18 | Strictly locked to `releases/latest` (v26.3.27), eliminating pre-release MLKEM768 handshake failures; sanitized subscriptions for third-party clients. |
 | **Split-Routing Topology** | v4.9.19–v4.9.29 | Deployed Reality-Up-CDN-Down (0-RTT direct up + CDN full speed down) and CDN-Up-Reality-Down; solved Mihomo shallow copy bug; enabled vlessenc on 8001 against CDN eavesdropping. |
 | **Network & Flow Optimization** | v4.8.x–v4.9.30 | Coordinated BBRv3 with TCP Brutal (locked to 3800 Mbps); maintained **64MB** socket buffer ceiling; RPS/RFS multi-queue softirq balancing; TLS 1.3, TFO, and ECH/ECN integration. |

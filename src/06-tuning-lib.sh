@@ -628,6 +628,7 @@ EOF
   echo -e "${GREEN}[+] 客户端软件建议:${NC}"
   echo "  - 优先选择支持 Wintun 驱动的客户端（如 Clash Verge Rev / Sing-box / Mihomo Party / v2rayN）"
   echo "  - TUN 协议栈建议选 Mixed 或 System（避开 gVisor 用户态单核瓶颈）"
+  echo "  - Windows 原生 WFP 防泄露（Xray v26.9.30+ 可在 TUN 开启 autoSystemWfpBlockLeak: [\"dns\", \"misconfigtun\"] 阻断多网卡 DNS 泄露）"
   echo ""
 }
 
@@ -709,7 +710,7 @@ show_sb_tuning() {
   echo -e "${CYAN}======================================================${NC}"
   echo -e "${CYAN}   sing-box 客户端 5 节点核心加速关键配置 (1000M 版)    ${NC}"
   echo -e "${CYAN}======================================================${NC}"
-  echo "  - FakeIP 零延迟解析:   fakeip.enabled: true, independent_cache: true"
+  echo "  - FakeIP 零延迟解析:   fakeip.enabled: true, independent_cache: true (IPv6 池: 2001:2::/48 避开 Chrome 141+ PNA 警告)"
   echo "  - Hysteria2 带宽:      默认不声明（BBR）；确知线路带宽时再设 up_mbps / down_mbps"
   echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
   echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"

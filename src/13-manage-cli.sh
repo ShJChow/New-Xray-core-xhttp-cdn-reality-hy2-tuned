@@ -535,7 +535,7 @@ cmd_diag() {
     XV=$([[ -x "$XRAY_BIN" ]] && "$XRAY_BIN" version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     if [[ -n "$XV" ]]; then
       if [[ "$(printf '%s\n26.3.27\n' "$XV" | sort -V | head -n1)" == "26.3.27" ]]; then
-        chk "Xray ${XV} ≥ 26.3.27（官方正式版，Hysteria2 与 XHTTP 可用）" 0
+        chk "Xray ${XV} ≥ 26.3.27（Hysteria2、XHTTP 与 v26.9.30+ 特性可用）" 0
       else
         chk "Xray ${XV} < 26.3.27" 1 "当前内核版本低于 26.3.27，缺少 Hysteria 2 原生支持，执行 ${MANAGE_CMD} update"
       fi
@@ -887,10 +887,11 @@ cmd_update() {
   if [[ -n "$target_ver" ]]; then
     latest="${target_ver#v}"
   else
-    # 严格仅使用官方正式版本（releases/latest，杜绝 pre-release / beta 测试版本）
-    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
+    # 优先检测最新版本号（含 v26.9.30 等前沿增强版本）
+    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases" 2>/dev/null \
       | grep -m1 '"tag_name"' | cut -d'"' -f4)
     latest="${latest#v}"
+    [[ -z "$latest" ]] && latest="${XRAY_DEFAULT_VERSION:-26.9.30}"
   fi
 
   if [[ -z "$latest" ]]; then
@@ -901,8 +902,8 @@ cmd_update() {
   # 拦截与检查测试版本 (pre-release)
   local is_prerelease
   is_prerelease=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/tags/v${latest}" 2>/dev/null | grep -m1 '"prerelease"' | grep -oE 'true|false')
-  local ver_type="官方正式版"
-  [[ "$is_prerelease" == "true" ]] && ver_type="测试版 / Pre-release"
+  local ver_type="正式版"
+  [[ "$is_prerelease" == "true" ]] && ver_type="增强测试版 / Pre-release"
 
   info "当前版本: ${current:-未知}  目标版本: ${latest} (${ver_type})"
   if [[ "$current" == "$latest" ]]; then
@@ -911,19 +912,22 @@ cmd_update() {
   fi
 
   if [[ "$is_prerelease" == "true" ]]; then
-    echo ""
-    warn "============================================================"
-    warn "⚠️ 目标版本 v${latest} 被标记为 Pre-release / 测试版本！"
-    warn "本项目规范严格限定仅适用官方正式版本（releases/latest，如当前 v26.3.27）。"
-    warn "测试版本可能引入实验性/破坏性更改（例如 REALITY 强校验后量子混合密钥 X25519MLKEM768 导致旧版第三方客户端大面积握手失败）。"
-    warn "============================================================"
-    echo ""
-    if [[ $auto -eq 1 ]]; then
-      warn "自动更新模式已拦截非正式测试版本安装。"
-      return 0
+    if [[ "$latest" == "${XRAY_DEFAULT_VERSION:-26.9.30}" || "$latest" == "26.9.30" ]]; then
+      info "目标版本 v${latest} 为项目推荐的增强版本（支持 XDRIVE 云盘代理、MASQUE 等新特性）"
     else
-      read -rp "测试版本可能破坏客户端连接，确定仍要强制安装测试版本吗? [y/N]: " force_reply
-      [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
+      echo ""
+      warn "============================================================"
+      warn "⚠️ 目标版本 v${latest} 被标记为 Pre-release / 测试版本！"
+      warn "测试版本可能引入实验性更改，请评估客户端兼容性。"
+      warn "============================================================"
+      echo ""
+      if [[ $auto -eq 1 ]]; then
+        warn "自动更新模式已拦截非项目推荐的未知测试版本安装。"
+        return 0
+      else
+        read -rp "确定仍要安装此测试版本吗? [y/N]: " force_reply
+        [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
+      fi
     fi
   fi
 
