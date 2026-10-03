@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.66"
+PROJECT_VERSION="4.9.67"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：仅适用官方正式版本（releases/latest，严格排除 pre-release / beta 测试版）。
 # 官方最新正式版为 v26.3.27，具备完整的 Hysteria 2、XHTTP 与全客户端高兼容 REALITY。
@@ -98,7 +98,7 @@ FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-true}
 HY2_H3_PORT=443
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 默认关闭（改为默认安装 CDN-H3），需要 TCP CDN 兜底时可通过 FEATURE_CDN_H2=true 开启。
+# 默认关闭，需要 TCP CDN 兜底时可通过 FEATURE_CDN_H2=true 开启（CDN-H3 自 v4.9.64 起也默认关闭）。
 FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。

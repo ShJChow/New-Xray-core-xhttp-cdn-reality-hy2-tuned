@@ -82,7 +82,7 @@ rm -f /etc/xhttp-cdn/dual-cdn-domains /etc/xhttp-cdn/dual-ip-domains 2>/dev/null
 #   hMaxReusableSecs: 1800-3000 → 定期切换主连接消除特征
 #   hKeepAlivePeriod: 0    → h3 取 quic-go 默认、h2 取 Chrome 默认
 # ---------- XHTTP packet-up 的最小 POST 间隔（v4.9.1） ----------
-# CDN 两条节点必须走 packet-up（见下方 stream-up 的实测反证），packet-up 把上行
+# 经 CDN 的节点用 mode=auto（TLS 下 auto 选 packet-up；见下方 stream-up 的实测反证），packet-up 把上行
 # 切成一串 POST，两次 POST 之间有一个最小间隔。这个间隔就是 CDN 节点延迟的**主项**，
 # 不是 Cloudflare 边缘慢。实测（经 CF，socks 打 gstatic/generate_204，各 9 个样本）：
 #
@@ -112,10 +112,10 @@ XHTTP_SC_MIN_POSTS_MS=${XHTTP_SC_MIN_POSTS_MS:-10}
 #
 # 没有哪个值两头都赢：调高后快上行翻倍，但慢上行掉 25~35%（超发把自己的上行队列灌满，
 # 上传期间同线路并行 ping 也更高）；不声明在「慢上行 + 丢包」下跌到 13。
-# 默认保持 100：国内家宽上行多在 30~100 Mbps，100 离主流最近。上行快（≥300）的用户应设成
-# 接近自己真实上行的值：HY2_UP_MBPS=300 bash install.sh；或在客户端里直接改节点的上行带宽。
+# （上表是 v4.9.24 旧默认 100/1000 的取舍依据，已被 v4.9.66 取代，保留作历史数据。）
 # v4.9.66：默认不再声明带宽（客户端用 BBR）。声明后 sing-box / Mihomo 客户端会按该速率 Brutal 硬发，
 # 线路实际达不到时超发丢包，速度忽快忽慢。确实知道自己的线路带宽时再设：HY2_UP_MBPS=300 HY2_DOWN_MBPS=500 bash install.sh
+# 只设一端时，Mihomo 条目里另一端回落 100 / 1000 Mbps。
 HY2_UP_MBPS=${HY2_UP_MBPS:-}
 HY2_DOWN_MBPS=${HY2_DOWN_MBPS:-}
 if [[ -n "${HY2_UP_MBPS}${HY2_DOWN_MBPS}" ]]; then
@@ -262,15 +262,12 @@ fi
 #   h3-direct auto/packet-up 69ms → stream-up 18ms
 # 吞吐不受影响（337 / 356 Mbps）。
 #
-# v4.9.58：按用户要求 CDN 节点（H2 / H3）及其余 auto 节点也统一为 stream-up。
-# v4.9.66：用户反馈速度不稳，CDN 经过的腿（CDN-H2/H3、CDN 上行腿、CDN 下行腿）改回 auto；
-#          直连与 Reality 腿保持 stream-up。依据：上面的实测里 stream-up 经 Cloudflare 上传 2/6 没传完（auto 0/6）。
-# 此前注释写「CDN 绝不能这样改：packet-up 存在的理由是 CDN 不支持流式请求体」。Cloudflare 开启 gRPC /
-# WebSockets 后实测（本机经 Cloudflare 回源，单次 20MB 上传）：stream-up 可用、下载不受影响，但 6 次上传中 2 次
-# 未完整传完（auto 为 0/6），H3 上传偏低且波动大（1.4–20 MB/s）。若在某些网络上传卡住，
-# 把该节点链接里的 mode=stream-up 改回 auto（或 packet-up）即可，服务端无需改动。
-# （更早的一次实测曾见 stream-up 经 Cloudflare 吞吐掉到 0、CDN-H3 超时，当时 Cloudflare 尚未开 gRPC / WebSockets；以上面的新结果为准。）
-# Reality 节点也不用改——它的 auto 本来就会选 stream-up（实测 18ms）。
+# 当前规则（v4.9.66）：直连腿与 Reality 腿用 stream-up；经 Cloudflare 的腿（CDN-H2 / CDN-H3、
+# CDN 上行腿、CDN 下行腿）用 auto。依据：Cloudflare 开启 gRPC / WebSockets 后实测（本机经 Cloudflare
+# 回源，单次 20MB 上传），stream-up 经 CF 6 次上传有 2 次没传完（auto 为 0/6），H3 上传偏低且波动大
+# （1.4–20 MB/s）。更早的一次实测还见过 stream-up 经 CF 吞吐掉到 0，当时 CF 尚未开 gRPC / WebSockets。
+# 服务端 8001 入站必须是 mode=auto：它同时接 nginx 回源（CDN 腿，auto 即 packet-up）与 Reality 回落，
+# 写成 stream-up 会拒绝 packet-up 的上传（实测 auto / packet-up 客户端全部不通）。直连入站只收 stream-up。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
   H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H3${NODE_SUFFIX}"
 else
@@ -448,15 +445,31 @@ chown "$(stat -c '%u:%g' "$USER_HOME")" \
 
 render_client_configs
 
-# 备用节点库：所有 FEATURE 都开时的完整产物（子 shell 渲染，不影响本次安装的变量与文件）
-mkdir -p /etc/xhttp-cdn/all
-(
-  USER_HOME=/etc/xhttp-cdn/all
+# 备用节点库：所有 FEATURE 都开时的完整产物。
+# 先渲染到 all.new，检查 6 条备用节点都在，再整体换到 all/；失败时保留旧库，错误写进日志，不吞掉。
+rm -rf /etc/xhttp-cdn/all.new
+mkdir -p /etc/xhttp-cdn/all.new
+if (
+  set -e
+  USER_HOME=/etc/xhttp-cdn/all.new
   FEATURE_H3_DIRECT=true FEATURE_H2_DIRECT=true FEATURE_HY2=true FEATURE_HY2_H3=true FEATURE_HY2_OBFS=true
   FEATURE_CDN_H2=true FEATURE_CDN_H3=true FEATURE_PORT_HOPPING=false
   FEATURE_REALITY_UP_CDN_DOWN=true FEATURE_UP_CDN_DOWN_MIHOMO=true FEATURE_CDN_UP_REALITY_DOWN=true
   info() { :; }; warn() { :; }
   render_client_configs
-) >/dev/null 2>&1 || warn "备用节点库生成失败（不影响当前节点，xh 的备用节点开关将不可用）"
-chmod 700 /etc/xhttp-cdn/all 2>/dev/null || true
-chmod 600 /etc/xhttp-cdn/all/* 2>/dev/null || true
+) >"${STATE_DIR}/all-render.log" 2>&1 \
+  && for _n in VLESS-XHTTP-CDN-H2 VLESS-XHTTP-CDN-H3 VLESS-XHTTP-Direct-H2 Hysteria2-Obfs-Direct VLESS-Reality-Up-CDN-Down VLESS-CDN-Up-Reality-Down; do
+       grep -q "#${_n}" /etc/xhttp-cdn/all.new/client-config.txt || { echo "备用节点库缺少 ${_n}" >> "${STATE_DIR}/all-render.log"; false; }
+     done; then
+  # 保留旧库里的服务端入站文本（由 09 写入），换入新渲染的客户端文件
+  cp -a /etc/xhttp-cdn/all/inbound-*.json /etc/xhttp-cdn/all.new/ 2>/dev/null || true
+  rm -rf /etc/xhttp-cdn/all.old
+  [[ -d /etc/xhttp-cdn/all ]] && mv /etc/xhttp-cdn/all /etc/xhttp-cdn/all.old
+  mv /etc/xhttp-cdn/all.new /etc/xhttp-cdn/all
+  rm -rf /etc/xhttp-cdn/all.old
+  chmod 700 /etc/xhttp-cdn/all
+  chmod 600 /etc/xhttp-cdn/all/* 2>/dev/null || true
+else
+  rm -rf /etc/xhttp-cdn/all.new
+  warn "备用节点库生成失败（不影响当前节点；xh 的备用节点开关可能不可用）。原因见 ${STATE_DIR}/all-render.log"
+fi

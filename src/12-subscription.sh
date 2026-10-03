@@ -54,7 +54,8 @@ if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
 fi
 
 # v2rayN TUN 优化订阅（排除在 TUN 模式下会导致 UDP 53 DNS 丢包超时的纯 CDN 节点；
-# 默认 CDN 节点 VLESS-XHTTP-CDN-H3 例外，保留——TUN 下需把 CDN 域名加进直连列表，见 client-config-v2rayn-tun.txt）
+# CDN-H3（xh cdnh3 on 开启后）例外，保留——TUN 下需把 CDN 域名加进直连列表，见 client-config-v2rayn-tun.txt。
+# 注意：默认节点 VLESS-Reality-Up-CDN-Down 名字里带 -CDN-，会被这条过滤掉，TUN 订阅默认没有 CDN 节点）
 awk '!/-CDN-|-cdn-/ || /#VLESS-XHTTP-CDN-H3/' "$USER_HOME/client-config.txt" > "$SUB_DIR/v2rayn-tun-raw.txt" || true
 if [[ -s "$SUB_DIR/v2rayn-tun-raw.txt" ]]; then
   base64 "$SUB_DIR/v2rayn-tun-raw.txt" | tr -d '\n' > "$SUB_DIR/v2rayn-tun.txt"

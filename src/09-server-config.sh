@@ -276,7 +276,8 @@ H2EOF
 }
 
 if [[ "$FEATURE_H2_DIRECT" == true ]]; then
-  XRAY_H2_DIRECT_INBOUND=$(xray_h2_direct_inbound)
+  # 带 xh 开关使用的成对标记，xh h2direct off 才能整块删除安装时写入的入站
+  XRAY_H2_DIRECT_INBOUND=$(printf '\n        // >>xh:h2direct\n%s\n        // <<xh:h2direct' "$(xray_h2_direct_inbound)")
   info "已启用 h2-direct 直连节点: TCP ${H2_PORT}"
 fi
 
@@ -355,7 +356,7 @@ HY2EOF
 
 if [[ "$FEATURE_HY2" == true ]]; then
   if [[ "${FEATURE_HY2_OBFS:-false}" == true ]]; then
-  XRAY_HY2_INBOUND=$(xray_hy2_obfs_inbound)
+  XRAY_HY2_INBOUND=$(printf '\n        // >>xh:hy2obfs\n%s\n        // <<xh:hy2obfs' "$(xray_hy2_obfs_inbound)")
   info "已启用 Hysteria2-obfs 节点: UDP ${HY2_PORT}（Salamander 混淆，FEATURE_HY2_OBFS=true）"
   fi
 

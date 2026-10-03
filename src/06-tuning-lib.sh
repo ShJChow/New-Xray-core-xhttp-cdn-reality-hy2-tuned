@@ -710,7 +710,7 @@ show_sb_tuning() {
   echo -e "${CYAN}   sing-box 客户端 5 节点核心加速关键配置 (1000M 版)    ${NC}"
   echo -e "${CYAN}======================================================${NC}"
   echo "  - FakeIP 零延迟解析:   fakeip.enabled: true, independent_cache: true"
-  echo "  - Hysteria2 带宽校准:  up_mbps: 100, down_mbps: 1000"
+  echo "  - Hysteria2 带宽:      默认不声明（BBR）；确知线路带宽时再设 up_mbps / down_mbps"
   echo "  - TCP 快速握手 (TFO):  tcp_fast_open: true (VLESS / Naive / SS)"
   echo "  - Vision 零拷贝流控:   flow: xtls-rprx-vision, packet_encoding: xudp"
   echo "  - TUN 网卡极速优化:    mtu: 1480, stack: mixed, endpoint_independent_nat: true"

@@ -312,7 +312,7 @@ cmd_resub() {
     # v4.9.49：剔除 v2rayN 专用的 fm（finalmask JSON）参数，小火箭解析不了复杂 URI
     grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "${home}/client-config.txt" | sed -E 's/&fm=[^&#]*//' || true
     if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
-      echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+      echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=auto#VLESS-XHTTP-CDN-H2"
     fi
   } > "${subdir}/shadowrocket-raw.txt"
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
@@ -712,7 +712,7 @@ cmd_diag() {
   echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
   echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
-  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H3 经 Cloudflare CDN 转发${NC}"
+  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H3（默认关闭，xh cdnh3 on 开启后）经 Cloudflare CDN 转发${NC}"
   echo "  走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
   echo "  若所处网络环境对 UDP 443 存在限速或丢包，可通过 FEATURE_CDN_H2=true 启用 TCP/h2 备用节点。"
   echo ""
@@ -1460,6 +1460,13 @@ for home in user_homes:
 
 sync_client_configs_cdnh2() {
   local enable="$1"
+  # 优先从备用节点库取节点行与 Mihomo 条目（和全新安装逐字一致）。没有库的旧安装才走下面的克隆兜底。
+  if [[ -f "${ALL_STORE_DIR}/client-config.txt" ]]; then
+    local _act=off; [[ "$enable" == true ]] && _act=on
+    backup_node_sync_files "VLESS-XHTTP-CDN-H2" "$_act" || warn "VLESS-XHTTP-CDN-H2 的客户端文件同步未完成（原因见上）"
+    cmd_resub
+    return 0
+  fi
   python3 -c "
 import os, sys, re, yaml, copy
 
@@ -1592,6 +1599,13 @@ cmd_cdnh2() {
 
 sync_client_configs_cdnh3() {
   local enable="$1"
+  # 优先从备用节点库取节点行与 Mihomo 条目（和全新安装逐字一致）。没有库的旧安装才走下面的克隆兜底。
+  if [[ -f "${ALL_STORE_DIR}/client-config.txt" ]]; then
+    local _act=off; [[ "$enable" == true ]] && _act=on
+    backup_node_sync_files "VLESS-XHTTP-CDN-H3" "$_act" || warn "VLESS-XHTTP-CDN-H3 的客户端文件同步未完成（原因见上）"
+    cmd_resub
+    return 0
+  fi
   python3 -c "
 import os, sys, re, yaml, copy
 
@@ -2109,18 +2123,29 @@ cmd_uninstall() {
 # 备用节点库 /etc/xhttp-cdn/all/ 由安装脚本在「全部备用节点开启」的参数下渲染一遍得到
 # （见 11-client-config.sh、09-server-config.sh）。开关只从库里取节点行 / Mihomo 条目 /
 # 服务端入站文本，不在这里重新拼装，所以和全新安装逐字一致。
+# 限制：库是安装时的快照。装好后用 xh ech 改过的 ECH 设置不会同步进库；节点被 NODE_NAME_MAP
+# 改过名时，按默认名匹配会找不到，开关会明确报错而不是静默跳过。
 ALL_STORE_DIR="/etc/xhttp-cdn/all"
 
+backup_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+
 backup_store_check() {
-  [[ -f "${ALL_STORE_DIR}/client-config.txt" ]] || fail "缺少备用节点库 ${ALL_STORE_DIR}（本机由旧版安装脚本部署）。需用最新安装命令重新部署一次才有这些开关。"
+  [[ -f "${ALL_STORE_DIR}/client-config.txt" ]] || fail "缺少备用节点库 ${ALL_STORE_DIR}（本机由旧版安装脚本部署，或安装时生成失败，见 ${STATE_DIR}/all-render.log）。需用最新安装命令重新部署一次才有这些开关。"
 }
 
-# 把一条备用节点加进 / 移出本机的 client-config.txt 与两份 Mihomo yaml。
+# 把一条节点加进 / 移出本机的 client-config.txt 与两份 Mihomo yaml。
 # $1 = 节点名（链接 # 后面的名字，不含 NODE_SUFFIX），$2 = on|off
+# 先在内存里算好所有文件的新内容，全部成功才写盘（逐个 tmp + rename）。失败返回非零，不留半改状态。
+# 返回 0 = 已处理，2 = 节点库里没有该节点（on）或本机没有该节点（off）。
 backup_node_sync_files() {
-  python3 - "$ALL_STORE_DIR" "$1" "$2" "${USER_HOME:-/home/ubuntu}" /home/ubuntu /home/opc /root <<'SYNCPY' || warn "同步客户端文件时出错（节点库缺该节点？）"
+  python3 - "$ALL_STORE_DIR" "$1" "$2" "${USER_HOME:-/home/ubuntu}" /home/ubuntu /home/opc /root <<'SYNCPY'
 import copy, os, sys
-import yaml
+
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write('缺少 python3-yaml，无法同步 Mihomo 配置\n')
+    sys.exit(1)
 
 store, name, act = sys.argv[1:4]
 homes = sys.argv[4:]
@@ -2140,81 +2165,115 @@ def insert_pos(all_items, idx, live_keys, key):
             return live_keys.index(k) + 1
     return 0
 
+pending = []      # (路径, 新内容)
+found_any = False
 seen = set()
-for home in homes:
-    if not home or home in seen or not os.path.isdir(home):
-        continue
-    seen.add(home)
-
-    tf = os.path.join(home, 'client-config.txt')
-    sf = os.path.join(store, 'client-config.txt')
-    if os.path.isfile(tf) and os.path.isfile(sf):
-        all_lines = [l.strip() for l in open(sf, encoding='utf-8') if l.strip()]
-        live = [l.strip() for l in open(tf, encoding='utf-8') if l.strip()]
-        has = any(match(l) for l in live)
-        if enable and not has:
-            src = [l for l in all_lines if match(l)]
-            if not src:
-                sys.stderr.write('节点库里没有 %s\n' % name)
-                sys.exit(2)
-            pos = insert_pos(all_lines, all_lines.index(src[0]), [frag(l) for l in live], frag)
-            live.insert(pos, src[0])
-            open(tf, 'w', encoding='utf-8').write('\n'.join(live) + '\n')
-        elif not enable and has:
-            live = [l for l in live if not match(l)]
-            open(tf, 'w', encoding='utf-8').write('\n'.join(live) + '\n')
-
-    for fname in ('client-config-mihomo-nodes.yaml', 'client-config-mihomo-full.yaml'):
-        lf = os.path.join(home, fname)
-        sf = os.path.join(store, fname)
-        if not (os.path.isfile(lf) and os.path.isfile(sf)):
+try:
+    for home in homes:
+        if not home or home in seen or not os.path.isdir(home):
             continue
-        live = yaml.safe_load(open(lf, encoding='utf-8'))
-        ref = yaml.safe_load(open(sf, encoding='utf-8'))
-        if not isinstance(live, dict) or not isinstance(ref, dict):
-            continue
-        lp = live.setdefault('proxies', [])
-        rp = ref.get('proxies', [])
-        pm = lambda p: str(p.get('name', '')).startswith(name)
-        has = any(pm(p) for p in lp)
-        changed = False
-        if enable and not has:
-            src = [p for p in rp if pm(p)]
-            if not src:
+        seen.add(home)
+
+        tf = os.path.join(home, 'client-config.txt')
+        sf = os.path.join(store, 'client-config.txt')
+        if os.path.isfile(tf) and os.path.isfile(sf):
+            all_lines = [l.strip() for l in open(sf, encoding='utf-8') if l.strip()]
+            live = [l.strip() for l in open(tf, encoding='utf-8') if l.strip()]
+            has = any(match(l) for l in live)
+            if enable:
+                src = [l for l in all_lines if match(l)]
+                if not src:
+                    sys.stderr.write('节点库里没有 %s（节点被改过名？）\n' % name)
+                    sys.exit(2)
+                found_any = True
+                if not has:
+                    pos = insert_pos(all_lines, all_lines.index(src[0]), [frag(l) for l in live], frag)
+                    live.insert(pos, src[0])
+                    pending.append((tf, '\n'.join(live) + '\n'))
+            else:
+                if has:
+                    found_any = True
+                    live = [l for l in live if not match(l)]
+                    pending.append((tf, '\n'.join(live) + '\n'))
+
+        for fname in ('client-config-mihomo-nodes.yaml', 'client-config-mihomo-full.yaml'):
+            lf = os.path.join(home, fname)
+            sf = os.path.join(store, fname)
+            if not (os.path.isfile(lf) and os.path.isfile(sf)):
                 continue
-            p = copy.deepcopy(src[0])
-            names = [x.get('name') for x in lp]
-            lp.insert(insert_pos(rp, rp.index(src[0]), names, lambda x: x.get('name')), p)
-            ref_groups = {g.get('name'): g for g in (ref.get('proxy-groups') or []) if isinstance(g, dict)}
-            for g in (live.get('proxy-groups') or []):
-                r = ref_groups.get(g.get('name'))
-                if r and isinstance(r.get('proxies'), list) and isinstance(g.get('proxies'), list) and p['name'] in r['proxies']:
-                    if p['name'] not in g['proxies']:
-                        i = r['proxies'].index(p['name'])
-                        g['proxies'].insert(insert_pos(r['proxies'], i, g['proxies'], lambda x: x), p['name'])
-            changed = True
-        elif not enable and has:
-            gone = [p.get('name') for p in lp if pm(p)]
-            live['proxies'] = [p for p in lp if not pm(p)]
-            for g in (live.get('proxy-groups') or []):
-                if isinstance(g.get('proxies'), list):
-                    g['proxies'] = [n for n in g['proxies'] if n not in gone]
-            changed = True
-        if changed:
-            with open(lf, 'w', encoding='utf-8') as f:
-                yaml.dump(live, f, allow_unicode=True, sort_keys=False)
+            live = yaml.safe_load(open(lf, encoding='utf-8'))
+            ref = yaml.safe_load(open(sf, encoding='utf-8'))
+            if not isinstance(live, dict) or not isinstance(ref, dict):
+                raise ValueError('%s 不是有效的 Mihomo 配置' % lf)
+            lp = live.setdefault('proxies', [])
+            rp = ref.get('proxies', [])
+            pm = lambda p: str(p.get('name', '')).startswith(name)
+            has = any(pm(p) for p in lp)
+            changed = False
+            if enable and not has:
+                src = [p for p in rp if pm(p)]
+                if not src:
+                    sys.stderr.write('Mihomo 节点库里没有 %s\n' % name)
+                    sys.exit(2)
+                p = copy.deepcopy(src[0])
+                names = [x.get('name') for x in lp]
+                lp.insert(insert_pos(rp, rp.index(src[0]), names, lambda x: x.get('name')), p)
+                ref_groups = {g.get('name'): g for g in (ref.get('proxy-groups') or []) if isinstance(g, dict)}
+                for g in (live.get('proxy-groups') or []):
+                    r = ref_groups.get(g.get('name'))
+                    if r and isinstance(r.get('proxies'), list) and isinstance(g.get('proxies'), list) and p['name'] in r['proxies']:
+                        if p['name'] not in g['proxies']:
+                            i = r['proxies'].index(p['name'])
+                            g['proxies'].insert(insert_pos(r['proxies'], i, g['proxies'], lambda x: x), p['name'])
+                changed = True
+            elif not enable and has:
+                gone = [p.get('name') for p in lp if pm(p)]
+                live['proxies'] = [p for p in lp if not pm(p)]
+                for g in (live.get('proxy-groups') or []):
+                    if isinstance(g.get('proxies'), list):
+                        g['proxies'] = [n for n in g['proxies'] if n not in gone]
+                changed = True
+            if changed:
+                pending.append((lf, yaml.dump(live, allow_unicode=True, sort_keys=False)))
+except SystemExit:
+    raise
+except Exception as e:
+    sys.stderr.write('同步客户端文件失败：%s\n' % e)
+    sys.exit(1)
+
+if not enable and not found_any and not pending:
+    sys.stderr.write('本机的客户端文件里没有 %s，无需移除\n' % name)
+    sys.exit(2)
+
+try:
+    for path, content in pending:
+        tmp = path + '.xh-new'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(content)
+        st = os.stat(path)
+        os.chmod(tmp, st.st_mode & 0o7777)
+        try:
+            os.chown(tmp, st.st_uid, st.st_gid)
+        except PermissionError:
+            pass
+        os.replace(tmp, path)
+except Exception as e:
+    sys.stderr.write('写入客户端文件失败：%s\n' % e)
+    sys.exit(1)
 SYNCPY
 }
 
 # 往 / 从线上 Xray 配置里加一条服务端入站。入站文本来自节点库，用成对的 // 注释标记包起来，
-# 关闭时按标记整块删掉，配置字节级还原。$1 = h2direct|hy2obfs，$2 = on|off
+# 关闭时按标记整块删掉，配置字节级还原。安装脚本（09）也用同样的标记写入这两条入站。
+# $1 = h2direct|hy2obfs，$2 = on|off，$3 = 端口（off 时用来发现「没有标记但端口已在配置里」的情况）
+# 返回 0 = 已改并重启成功，3 = 无需改动，其余 = 失败（已回滚，原因已打印）。
 backup_inbound_edit() {
-  local key="$1" act="$2" tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak"   # 临时文件必须以 .json 结尾
-  [[ -f "$XRAY_CONF" ]] || fail "未找到 Xray 配置文件: $XRAY_CONF"
-  python3 - "$XRAY_CONF" "$tmp" "${ALL_STORE_DIR}/inbound-${key}.json" "$key" "$act" <<'INBPY' || fail "改写配置失败，未做任何修改"
-import sys
+  local key="$1" act="$2" port="$3" tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak" rc err   # 临时文件必须以 .json 结尾
+  [[ -f "$XRAY_CONF" ]] || { backup_error "未找到 Xray 配置文件: $XRAY_CONF"; return 1; }
+  python3 - "$XRAY_CONF" "$tmp" "${ALL_STORE_DIR}/inbound-${key}.json" "$key" "$act" "$port" <<'INBPY'
+import re, sys
 
-src, dst, store, key, act = sys.argv[1:6]
+src, dst, store, key, act, port = sys.argv[1:7]
 s = open(src, encoding='utf-8').read()
 begin = '        // >>xh:' + key
 end = '        // <<xh:' + key
@@ -2261,12 +2320,24 @@ def inbounds_close(s):
         i += 1
     return -1
 
+def strip_comments(t):
+    return re.sub(r'(?m)^\s*//.*$', '', t)
+
 if act == 'off':
+    if not has:
+        if re.search(r'"port"\s*:\s*%s\b' % re.escape(port), strip_comments(s)):
+            sys.stderr.write('配置里有端口 %s 的入站，但没有 xh 标记（不是由 xh 开关写入）。请手动删除该入站后再关闭。\n' % port)
+            sys.exit(4)
+        sys.exit(3)
+    a = s.index('\n' + begin)
+    b = s.index(end, a) + len(end)
+    s = s[:a] + s[b:]
+else:
     if has:
-        a = s.index('\n' + begin)
-        b = s.index(end, a) + len(end)
-        s = s[:a] + s[b:]
-elif not has:
+        sys.exit(3)
+    if re.search(r'"port"\s*:\s*%s\b' % re.escape(port), strip_comments(s)):
+        sys.stderr.write('配置里已经有端口 %s 的入站（不是由 xh 开关写入），不重复添加。\n' % port)
+        sys.exit(4)
     text = open(store, encoding='utf-8').read().rstrip('\n')
     pos = inbounds_close(s)
     if pos < 0:
@@ -2277,37 +2348,50 @@ elif not has:
     s = s[:pos] + '\n' + begin + '\n' + text + '\n' + end + s[pos:]
 open(dst, 'w', encoding='utf-8').write(s)
 INBPY
-  if ! "$XRAY_BIN" -test -format json -config "$tmp" >/dev/null 2>&1; then
-    rm -f "$tmp"; fail "Xray 配置校验失败，已放弃，未做任何修改"
+  rc=$?
+  [[ $rc -eq 3 ]] && return 3
+  if [[ $rc -ne 0 ]]; then rm -f "$tmp"; backup_error "改写配置失败（代码 ${rc}），未做任何修改"; return 1; fi
+  if ! err=$("$XRAY_BIN" -test -format json -config "$tmp" 2>&1); then
+    rm -f "$tmp"; backup_error "Xray 配置校验失败，已放弃，未做任何修改。最后几行输出："; echo "$err" | tail -n 5 >&2; return 1
   fi
   cp -a "$XRAY_CONF" "$bak"
-  mv -f "$tmp" "$XRAY_CONF"; chmod 600 "$XRAY_CONF" 2>/dev/null || true
+  chown --reference="$XRAY_CONF" "$tmp" 2>/dev/null || true
+  chmod --reference="$XRAY_CONF" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$XRAY_CONF" || { backup_error "无法替换 $XRAY_CONF"; return 1; }
   if ! svc restart xray; then
-    cp -a "$bak" "$XRAY_CONF"; svc restart xray >/dev/null 2>&1 || true
-    fail "xray 重启失败，已回滚到修改前的配置"
+    cp -a "$bak" "$XRAY_CONF"
+    if svc restart xray >/dev/null 2>&1; then
+      backup_error "xray 重启失败，已回滚到修改前的配置并重新启动"
+    else
+      backup_error "xray 重启失败，回滚后也无法启动！请立即检查：journalctl -u xray -n 30"
+    fi
+    return 1
   fi
+  return 0
 }
 
 # 放行端口（只开不关：关闭节点时保留规则，和安装脚本一致）。$1 = tcp|udp，$2 = 端口，$3 = 是否加 QUIC 握手限速
+# 有规则没写进去时打印警告，不再把失败当成功。
 backup_open_port() {
-  local proto="$1" port="$2" qdos="${3:-}" ipt
+  local proto="$1" port="$2" qdos="${3:-}" ipt failed=0
   for ipt in iptables ip6tables; do
     command -v "$ipt" >/dev/null 2>&1 || continue
-    "$ipt" -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || "$ipt" -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || true
+    "$ipt" -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || "$ipt" -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || failed=1
     if [[ -n "$qdos" ]]; then
       "$ipt" -C INPUT -p udp --dport "$port" -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name "hy_qdos_${port}" -j DROP 2>/dev/null || \
-        "$ipt" -I INPUT 1 -p udp --dport "$port" -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name "hy_qdos_${port}" -j DROP 2>/dev/null || true
+        "$ipt" -I INPUT 1 -p udp --dport "$port" -m conntrack --ctstate NEW -m hashlimit --hashlimit-above 50/sec --hashlimit-burst 100 --hashlimit-mode srcip --hashlimit-name "hy_qdos_${port}" -j DROP 2>/dev/null || failed=1
     fi
   done
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
-    ufw allow "${port}/${proto}" >/dev/null 2>&1 || true
+    ufw allow "${port}/${proto}" >/dev/null 2>&1 || failed=1
   fi
   if command -v netfilter-persistent >/dev/null 2>&1; then
-    netfilter-persistent save >/dev/null 2>&1 || true
+    netfilter-persistent save >/dev/null 2>&1 || failed=1
   elif command -v iptables-save >/dev/null 2>&1 && [[ -d /etc/iptables ]]; then
-    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || failed=1
+    ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || failed=1
   fi
+  [[ $failed -eq 0 ]] || warn "端口 ${proto^^} ${port} 的防火墙规则没有全部写入或保存，请手动检查：iptables -S INPUT | grep ${port}"
 }
 
 backup_port_busy() {   # $1 = tcp|udp，$2 = 端口
@@ -2319,8 +2403,9 @@ backup_port_busy() {   # $1 = tcp|udp，$2 = 端口
 }
 
 # 需要服务端入站的两条：h2direct（TCP H2_PORT）与 hy2obfs（UDP HY2_PORT）。$1 = key，$2 = show|on|off
+# 顺序：开启时先改客户端文件（可原子撤销），再改服务端，最后写标志位；任何一步失败都撤销前面的步骤。
 cmd_backup_server_node() {
-  local key="$1" action="${2:-show}" flag name label proto port cur
+  local key="$1" action="${2:-show}" flag name label proto port cur rc
   case "$key" in
     h2direct) flag=FEATURE_H2_DIRECT; name="VLESS-XHTTP-Direct-H2"; label="XHTTP-Direct-H2（TCP 直连，h3-direct 的孪生体）"; proto=tcp; port="${H2_PORT:-8445}" ;;
     hy2obfs)  flag=FEATURE_HY2_OBFS;  name="Hysteria2-Obfs-Direct"; label="Hysteria2-Obfs-Direct（salamander 混淆）";       proto=udp; port="${HY2_PORT:-8443}" ;;
@@ -2342,6 +2427,7 @@ cmd_backup_server_node() {
     on)
       [[ "$cur" == true ]] && { info "${label} 已经是开启状态"; return 0; }
       backup_store_check
+      [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
       [[ -s "${ALL_STORE_DIR}/inbound-${key}.json" ]] || fail "备用节点库缺少 inbound-${key}.json，需用最新安装命令重新部署"
       [[ -s /etc/ssl/private/fullchain.cer ]] || fail "未找到证书 /etc/ssl/private/fullchain.cer，无法开启直连类节点"
       if [[ "$key" == hy2obfs ]]; then
@@ -2350,21 +2436,32 @@ cmd_backup_server_node() {
       fi
       backup_port_busy "$proto" "$port" && fail "${proto^^} ${port} 已被其他进程占用，未做任何修改"
       info "正在开启 ${label} ..."
-      backup_inbound_edit "$key" on
-      update_node_env "$flag" "true"
+      backup_node_sync_files "$name" on || fail "更新客户端文件失败，未改动服务端（原因见上）"
+      backup_inbound_edit "$key" on "$port"; rc=$?
+      if [[ $rc -ne 0 && $rc -ne 3 ]]; then
+        backup_node_sync_files "$name" off >/dev/null 2>&1 || true
+        fail "服务端入站写入失败，已撤销客户端文件改动"
+      fi
+      if ! update_node_env "$flag" "true" || ! grep -qE "^${flag}='?true'?\$" "$NODE_ENV_FILE"; then
+        backup_inbound_edit "$key" off "$port" >/dev/null 2>&1 || true
+        backup_node_sync_files "$name" off >/dev/null 2>&1 || true
+        fail "无法写入 ${NODE_ENV_FILE}，已撤销本次改动"
+      fi
       export "$flag"=true
       if [[ "$key" == hy2obfs ]]; then backup_open_port udp "$port" qdos; else backup_open_port "$proto" "$port"; fi
-      backup_node_sync_files "$name" on
       info "${label} 已开启（${proto^^} ${port}）。云厂商安全组 / 安全列表需自行放行该端口。"
       cmd_resub
       ;;
     off)
       [[ "$cur" == true ]] || { info "${label} 本来就是关闭状态"; return 0; }
+      [[ "$key" != hy2obfs || "${FEATURE_PORT_HOPPING:-false}" != true ]] || fail "本机开着端口跳跃，关闭混淆节点会留下跳跃规则，请先手动处理 FEATURE_PORT_HOPPING"
+      backup_store_check
       info "正在关闭 ${label} ..."
-      backup_inbound_edit "$key" off
+      backup_inbound_edit "$key" off "$port"; rc=$?
+      [[ $rc -eq 0 || $rc -eq 3 ]] || fail "移除服务端入站失败（原因见上），未改动客户端文件和标志位"
+      backup_node_sync_files "$name" off || warn "服务端入站已移除，但客户端文件没有同步（原因见上）。请手动检查 client-config.txt 与订阅"
       update_node_env "$flag" "false"
       export "$flag"=false
-      backup_node_sync_files "$name" off
       info "${label} 已关闭"
       cmd_resub
       ;;
@@ -2397,21 +2494,23 @@ cmd_split() {
     show|status) cmd_split show ;;
     on)
       backup_store_check
+      [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
       [[ -n "${CDN_DOMAIN:-}" ]] || fail "未配置 CDN 域名，分离节点没有 CDN 腿可用"
       info "正在开启 ${label} ..."
+      backup_node_sync_files "$name" on || fail "更新客户端文件失败，未做任何修改（原因见上）"
       update_node_env "$flag" "true"
       export "$flag"=true
       if [[ "$which" == reality-up ]]; then update_node_env FEATURE_UP_CDN_DOWN_MIHOMO true; fi
-      backup_node_sync_files "$name" on
       info "${label} 已开启"
       cmd_resub
       ;;
     off)
+      backup_store_check
       info "正在关闭 ${label} ..."
+      backup_node_sync_files "$name" off || warn "客户端文件里没有该节点或同步失败（原因见上），仍按关闭处理标志位"
       update_node_env "$flag" "false"
       export "$flag"=false
       if [[ "$which" == reality-up ]]; then update_node_env FEATURE_UP_CDN_DOWN_MIHOMO false; fi
-      backup_node_sync_files "$name" off
       info "${label} 已关闭"
       cmd_resub
       ;;
@@ -2469,10 +2568,10 @@ cmd_menu() {
       17) read -rp "  show / on / off: " a; cmd_cdnh3 "${a:-show}" ;;
       18) read -rp "  show / cn on|off / ads on|off: " a; cmd_block ${a:-show} ;;
       19) read -rp "  show / on [毫秒] / off: " a; cmd_timediff ${a:-show} ;;
-      20) read -rp "  show / on / off: " a; cmd_h2direct "${a:-show}" ;;
-      21) read -rp "  show / on / off: " a; cmd_hy2obfs "${a:-show}" ;;
-      22) read -rp "  show / on / off: " a; cmd_split reality-up "${a:-show}" ;;
-      23) read -rp "  show / on / off: " a; cmd_split cdn-up "${a:-show}" ;;
+      20) read -rp "  show / on / off: " a; ( cmd_h2direct "${a:-show}" ) ;;
+      21) read -rp "  show / on / off: " a; ( cmd_hy2obfs "${a:-show}" ) ;;
+      22) read -rp "  show / on / off: " a; ( cmd_split reality-up "${a:-show}" ) ;;
+      23) read -rp "  show / on / off: " a; ( cmd_split cdn-up "${a:-show}" ) ;;
       24) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
