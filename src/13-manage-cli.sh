@@ -750,7 +750,7 @@ cmd_diag() {
   echo "    Hysteria2 通、h3 不通  ⇒ UDP 通路没问题，问题在 nginx QUIC 这一层"
   echo "    Hysteria2 也不通       ⇒ UDP 到本机的路被挡，先查安全组再查本机防火墙"
   echo ""
-  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H3（默认关闭，xh cdnh3 on 开启后）经 Cloudflare CDN 转发${NC}"
+  echo -e "${YELLOW}  节点 VLESS-XHTTP-CDN-H3（默认开启，xh cdnh3 off 可关闭）经 Cloudflare CDN 转发${NC}"
   echo "  走 QUIC/UDP 443，依赖：① Cloudflare 区域开启 HTTP/3  ② 客户端网络允许 UDP 443 出站。"
   echo "  若所处网络环境对 UDP 443 存在限速或丢包，可通过 FEATURE_CDN_H2=true 启用 TCP/h2 备用节点。"
   echo ""
@@ -1613,7 +1613,7 @@ cmd_cdnh2() {
       fi
       echo ""
       echo -e "说明："
-      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，经 CDN 的 TCP(h2) 节点，默认开启；不需要时 xh cdnh2 off。"
+      echo -e "  • 走 TCP 443 的 VLESS-XHTTP-CDN-H2 节点，经 CDN 的 TCP(h2) 备用节点，默认关闭；UDP 被限速 / 封锁时用 xh cdnh2 on 开启。"
       echo -e "  • 快捷命令:"
       echo -e "      ${MANAGE_CMD} cdnh2 on       # 开启 CDN TCP(h2) 节点并同步更新订阅"
       echo -e "      ${MANAGE_CMD} cdnh2 off      # 关闭 CDN TCP(h2) 节点并恢复精简订阅"
@@ -3239,7 +3239,7 @@ cmd_menu() {
     echo " 13) Reality 兼容模式 / minversion (minClientVer)"
     echo " 14) CDN ECH 加密 SNI 开关 (show / on / off)"
     echo " 15) TCP ECN 拥塞通知开关 (show / on / off)"
-    echo " 16) CDN TCP(h2) 节点开关，默认开启 (show / on / off)"
+    echo " 16) 备用节点 CDN TCP(h2)，默认关闭 (show / on / off)"
     echo " 17) CDN QUIC(h3) 节点开关，默认开启 (show / on / off)"
     echo " 18) 出站分流开关 屏蔽回国 IP / 广告域名 (show / cn on|off / ads on|off)"
     echo " 19) Reality 时间差校验 maxTimeDiff (show / on [毫秒] / off)"
@@ -3248,7 +3248,7 @@ cmd_menu() {
     echo " 22) MASQUE 标准 L3 隧道 (show / on / off)"
     echo " 23) XDRIVE 网盘穿透代理 (show / setup / on / off)"
     echo " 24) Finalmask Noise exp 动态混淆 (show / on / off / set)"
-    echo " 25) 上行 Reality / 下行 CDN 分离节点，默认开启 (show / on / off)"
+    echo " 25) 备用节点 上行 Reality / 下行 CDN，默认关闭 (show / on / off)"
     echo " 26) 备用节点 上行 CDN / 下行 Reality (show / on / off)"
     echo " 27) 重新生成全量订阅 (resub)"
     echo " 28) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
@@ -3362,15 +3362,15 @@ xray-xhttp 管理命令
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
   xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
-  xh cdnh2 [show|on|off]            CDN TCP(h2) 节点开关与订阅同步
+  xh cdnh2 [show|on|off]            CDN TCP(h2) 备用节点开关与订阅同步（默认关闭）
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认开启）
   xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口
-  xh hy2 [show|on|off]              Hysteria2 直连节点开关（随机高 UDP 端口，默认不装），关闭时连同混淆节点一起移除
+  xh hy2 [show|on|off]              Hysteria2 直连节点开关（随机高 UDP 端口，默认安装），关闭时连同混淆节点一起移除
   xh hy2 obfs [show|on|off]         Hysteria2 混淆节点（salamander 混淆，需先开 hy2；别名: xh hy2obfs）
   xh masque [show|on|off]           MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP, UDP/TCP 8447)
   xh xdrive [show|setup|on|off]     XDRIVE 网盘穿透代理 (Google Drive 中继，零公网 IP 穿透)
   xh noise [show|on|off|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
-  xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；reality-up 默认开启，cdn-up 备用）
+  xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；两条都是默认关闭的备用节点）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
   xh tuning [show|on|off|client|win|mac|linux|sb]  系统流控调优 / Windows与macOS客户端与sing-box加速

@@ -200,23 +200,24 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
-| # | 节点名称（v4.9.75） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.78） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | 经 Cloudflare 的 TCP 节点，UDP 被限速 / 封锁时的兜底 |
-| **2** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
-| **3** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
-| **4** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
-| **5** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
-| **6** | `VLESS-Reality-Up-CDN-Down` | XHTTP 上下行分离 | 上行 Reality 直连 / 下行经 CDN | 纯客户端链接，不动服务端 |
+| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
+| **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
+| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 随机高 UDP 端口 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **4** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | 直连 随机高 UDP 端口 | 混淆版，QUIC 被深度识别时使用 |
+| **5** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
+| **6** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 
-> 默认不装、按需用 `xh` 开启的备用与新特性节点：
-> - `Hysteria2-H3-Direct`（`xh hy2 on`，随机高 UDP 端口）
-> - `Hysteria2-Obfs-Direct`（`xh hy2 obfs on`，需先开 Hysteria2）
+> 默认不装、按需用 `xh` 开启的备用与新特性节点（xh 菜单里都有对应项）：
+> - `VLESS-XHTTP-CDN-H2`（`xh cdnh2 on`，经 CDN 的 TCP 兜底，UDP 被限速 / 封锁时用）
+> - `VLESS-Reality-Up-CDN-Down`（`xh split reality-up on`，上行 Reality、下行经 CDN，纯客户端链接）
+> - `VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`，上行经 CDN、下行 Reality）
+> - `VLESS-XHTTP-Direct-H2`（`xh h2direct on`，Direct-H3 的 TCP 孪生体）
 > - `MASQUE-CONNECT-IP`（`xh masque on`，IETF RFC 9484 标准 L3 隧道）
 > - `XDRIVE-Google-Drive`（`xh xdrive setup` / `xh xdrive on`，利用 Google Drive 网盘穿透无公网 IP / 白名单封锁）
 > - `Finalmask Noise exp`（`xh noise on`，基于 `<b hex><r N><t><c><rd N>` 动态表达式混淆）
-> - `VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`）
-> - `VLESS-XHTTP-Direct-H2`（`xh h2direct on`）
+> - Hysteria2 默认已装；不需要时 `xh hy2 off`（连同混淆节点一起移除），只关混淆用 `xh hy2 obfs off`。
 
 ---
 
@@ -231,12 +232,13 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.77)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.78)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
 | 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
 | :--- | :--- | :--- |
+| **默认节点集对齐本机当前设置，其余节点作为备用集成到 xh 菜单** | v4.9.78 | 按用户要求，安装命令默认的节点集改为本机当前在用的 6 条：CDN-H3、Direct-H3、Hysteria2-H3、Hysteria2-Obfs、Reality-Vision、Reality-XHTTP。变化：`FEATURE_HY2` 与 `FEATURE_HY2_OBFS` 重新默认 `true`（Hysteria2 端口仍是随机高端口）；`FEATURE_CDN_H2` 与 `FEATURE_REALITY_UP_CDN_DOWN` 改为默认 `false`，与 `CDN-Up-Reality-Down`、`Direct-H2`、`MASQUE`、`XDRIVE`、`Noise exp` 一起作为备用，xh 菜单里都有对应项（16 CDN-H2、20 Direct-H2、21 Hysteria2、22 MASQUE、23 XDRIVE、24 Noise、25 / 26 上下行分离）。同步修正安装器 profile、node.env 兜底值、xh 菜单 / 帮助里「默认开启 / 备用」的措辞与 README 节点表。**只影响新装机器**；已安装机器的节点集不变。本机 `node.env` 本来就是这个状态，无需改动。**未纳入默认的非节点设置**：本机当前还开着 Finalmask Noise exp（`FEATURE_NOISE_EXP`）与屏蔽回国 IP / 广告域名（`FEATURE_BLOCK_CN` / `FEATURE_BLOCK_ADS`），它们是链路 / 出站策略而不是节点，新装仍默认关闭，需要时用 `xh noise on`、`xh block`。 |
 | **小火箭订阅：Reality 节点 type=raw 改成 type=tcp** | v4.9.77 | 用户反馈 Reality 节点在最新版 v2rayN 能通、在小火箭不通。Reality-Vision 链接里写的是 `type=raw`（Xray 对 TCP 的新叫法，v2rayN 认），小火箭的链接解析只认 `type=tcp`，不认识 `raw` 时节点连不上；对 Xray 内核两者等价。现在 `shadowrocket.txt` 专属订阅（`xh resub` 与安装时生成）里把 `type=raw` 改成 `type=tcp`，并去掉纯客户端参数 `spx`（连同原有的 `fm`）。**v2rayN / Mihomo 订阅不变。** **这是对根因的推断，没有在小火箭上实测**（本机没有 iOS 环境）：如果仍不通，请反馈小火箭的版本、连接日志里的报错文字，以及在服务器上执行 `journalctl -u xray -n 40` 的结果（IP、域名、密钥换成占位符）。已知无关项：服务端 `minClientVer` 本机显式为 1.8.0，不会拒绝小火箭。 |
 | **按 Xray 26.9.30 微调：H3 接收窗口、CDN 腿 maxConnections、Xray 原生 TUN 配置、TUN 订阅含 CDN 节点** | v4.9.76 | 读了 26.3.27→26.9.30 的 277 条提交，只改有实测依据的项。1. **XHTTP/3 链接加 `fm` 放大 QUIC 接收窗口**（Direct-H3、CDN-H3）：流 4MB/32MB、连接 8MB/64MB。netns + netem（RTT 160ms、下行 1% 丢包、限速 300Mbit）下载 40MB，每组 3 轮：默认窗口 109–119 Mbps（5 次），8MB/16MB 127，16MB/32MB 168，**32MB/64MB 196–215**；RTT 60ms / 0.5% 丢包时各档都是 264–270 Mbps，没有差别。只放大客户端（接收方），服务端不放大；Direct-H3 实测，CDN-H3 的 QUIC 是客户端到 Cloudflare 边缘，无法用 netem 复现，未单独测。2. **`quicParams.bbrProfile`（conservative / standard / aggressive）对 XHTTP/3 没有可测差别**（同条件 109–119 Mbps，无丢包时三档都是 223 Mbps），所以不设。3. **CDN 腿的 xmux 改用 `maxConnections: 3`**（26.9.x 客户端的默认值，不能与 `maxConcurrency` 同时出现）：本机经 Cloudflare 回连，8 路并行下载每组 2 轮，h2 下 413 / 426 Mbps（3 / 6）对 344 / 359 Mbps（`maxConcurrency` 16-32），h3 下 391 / 394 对 358 / 373 Mbps；上传方向波动太大，没有结论。只用于 CDN 腿，直连与 Reality 腿不变。4. **新增 Xray 原生 TUN 配置** `xray-tun-{windows,linux,macos}.json`（订阅目录，`xh resub` 与安装时生成）：`autoSystemRoutingTable` + `autoOutboundsInterface: auto`（Xray 自己的出站绑物理网卡，不再回环，不必手工给服务器地址加直连）、Windows 加 `autoSystemWfpBlockLeak`、observatory + leastPing 自动择优、CN 与内网直连。Linux 版在 netns 里实测：TUN 与路由自动建好，6 个 vless 节点都存活，非 CN 目标经代理、CN 目标直连，DNS 正常；**Windows / macOS 只做了 `xray run -test` 配置校验，没有真机运行。** 5. **v2rayN TUN 订阅（`v2rayn-tun.txt`）不再排除 CDN 节点**（旧规则是为旧版 TUN 的 DNS 丢包写的），**没有在 v2rayN 上实测**；若 TUN 下 CDN 节点 DNS 超时，把 CDN 域名加进 v2rayN 直连规则。6. `xh tuning` 优先读 `/sys/module/tcp_bbr/version` 识别 BBR 版本（本机 BBRv3 内核显示 `v3`）。**注意 Xray 26.9.30 的变化**：freedom 出站默认拒绝私网 / 回环目标，需要在 `finalRules` 里写 `allow` 才能放行（本项目线上配置已有显式 `finalRules`）。 |
 | **全面升级对齐 Xray-core v26.9.30：引入 XDRIVE 云盘代理、MASQUE 标准化隧道、Noise 动态表达式混淆与 30 项对称管理菜单** | v4.9.75 | 1. **内核与协议升级**：锁定 Xray-core 最新正式/预发版 v26.9.30；2. **MASQUE 标准 L3 隧道**：引入标准 IETF RFC 9484 (CONNECT-IP) / RFC 8441 Extended CONNECT，支持 FullCone UDP 与内部虚拟网卡池（`10.13.0.1/24`、`fd13::1/64`），提供 `xh masque [show\|on\|off]` 管理与自检；3. **XDRIVE 网盘穿透代理**：原生集成 Google Drive 云存储中转传输层，无需公网 IP 即可突破极端 IP 白名单封锁，提供 `xh xdrive [show\|setup\|on\|off]` 交互式配置与客户端 outbound 导出；4. **Finalmask Noise 动态模板混淆**：支持 `type: "exp"` 动态表达式混淆（`<b hex>`、`<r N>`、`<t>`、`<c>`、`<rd N>` 等），提供 `xh noise [show\|on\|off\|set]` 动态注入与热重载；5. **xh 交互菜单重构**：扩展并严格对齐为 30 项完美对称布局（左 1-15、右 16-30，退出 0），全量 CLI 矩阵同步更新；6. **防泄漏与兼容性**：客户端模板全面对齐 Windows WFP 级防泄漏 (`autoSystemWfpBlockLeak`) 与 Linux `autoSystemDnsToGateway`，FakeDNS IPv6 网段更新为 RFC 5180 `2001:2::/48` 避开 Chrome 141+ PNA 弹窗。 |

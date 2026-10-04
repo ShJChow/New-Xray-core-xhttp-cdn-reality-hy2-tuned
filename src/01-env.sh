@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.77"
+PROJECT_VERSION="4.9.78"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：升级至最新稳定/前沿版 v26.9.30（具备 XDRIVE 云盘代理、MASQUE、Finalmask Noise exp、WFP 防泄露等特性）。
 XRAY_DEFAULT_VERSION="26.9.30"
@@ -83,24 +83,24 @@ AUTO=${AUTO:-0}
 #   5. VLESS-Reality-XHTTP-Direct  直连 TCP 443，XHTTP 上下行不分离
 #
 FEATURE_H3_DIRECT=${FEATURE_H3_DIRECT:-true}
-# v4.9.71 起 Hysteria2 默认不装（FEATURE_HY2 默认 false），需要时 FEATURE_HY2=true 安装，或装好后 xh hy2 on。
-FEATURE_HY2=${FEATURE_HY2:-false}
+# v4.9.78 起 Hysteria2 重新默认安装（与本机当前节点集一致）；不需要时 FEATURE_HY2=false，或装好后 xh hy2 off。
+FEATURE_HY2=${FEATURE_HY2:-true}
 # FEATURE_HY2_H3（v4.9.26）：在 UDP 443 上再开一条**不加混淆**的 Hysteria2（Hysteria2-H3-Direct），
 # 流量形态就是一个普通网站的 HTTP/3，是 UDP 里最不容易被运营商按端口/特征 QoS 的样子。
 # 依附于 FEATURE_HY2（共用认证密码与证书）；UDP 443 被占用时自动关闭。v4.9.28 起为 Xray 唯一的 Hysteria2 节点。
 FEATURE_HY2_H3=${FEATURE_HY2_H3:-true}
-# FEATURE_HY2_OBFS（v4.9.28）：salamander 混淆的 Hysteria2-Obfs-Direct。v4.9.71 起默认关闭（依附于 Hysteria2 总开关）。
-# 需要时：FEATURE_HY2=true FEATURE_HY2_OBFS=true bash install.sh，或装好后 xh hy2 on 再 xh hy2 obfs on。
+# FEATURE_HY2_OBFS（v4.9.28）：salamander 混淆的 Hysteria2-Obfs-Direct。v4.9.78 起默认开启（依附于 Hysteria2 总开关）。
+# 不需要时：FEATURE_HY2_OBFS=false bash install.sh，或装好后 xh hy2 obfs off。
 # FEATURE_HY2 仍是 Hysteria2 的总开关（内核版本不够、缺证书时两条一起关）。
-FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-false}
+FEATURE_HY2_OBFS=${FEATURE_HY2_OBFS:-true}
 # v4.9.73: Hysteria2 改为默认随机高端口（避免固定端口被运营商 QoS / 探测阻断）。
 # 允许环境变量显式指定，未指定时由 05-base-env.sh 自动生成随机可用端口。
 HY2_H3_PORT=${HY2_H3_PORT:-}
 HY2_PORT=${HY2_PORT:-}
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# v4.9.71 起默认开启（CDN-H2 与 CDN-H3 两条 CDN 节点都默认安装）；不需要时 FEATURE_CDN_H2=false 或装好后 xh cdnh2 off。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
+# v4.9.78 起默认关闭（备用节点，TCP CDN 兜底）；需要时 FEATURE_CDN_H2=true 或装好后 xh cdnh2 on。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
 # v4.9.71 起默认开启；不需要时 FEATURE_CDN_H3=false 或装好后 xh cdnh3 off。
@@ -125,8 +125,8 @@ FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
 
 # FEATURE_REALITY_UP_CDN_DOWN（v4.9.64 起默认开启）：上下行分离节点
 # VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN H2 443）。
-# 不需要时 FEATURE_REALITY_UP_CDN_DOWN=false，或装好后 xh split reality-up off。
-FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-true}
+# v4.9.78 起默认关闭（备用节点）；需要时 FEATURE_REALITY_UP_CDN_DOWN=true，或装好后 xh split reality-up on。
+FEATURE_REALITY_UP_CDN_DOWN=${FEATURE_REALITY_UP_CDN_DOWN:-false}
 FEATURE_UP_CDN_DOWN_MIHOMO=${FEATURE_UP_CDN_DOWN_MIHOMO:-${FEATURE_REALITY_UP_CDN_DOWN}}
 
 # FEATURE_CDN_UP_REALITY_DOWN（v4.9.29 新增，v4.9.36 默认关闭）：反向的上下行分离节点
