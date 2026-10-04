@@ -232,12 +232,13 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.84)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
 | 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
 | :--- | :--- | :--- |
+| **v5.0.0 正式版：默认节点集对齐本机、Reality 兼容模式默认关闭** | v5.0.0 | 本版把 v4.9.83 与 v4.9.84 的变化定为 5.0 基线，除版本号外没有新的功能改动。**默认节点（6 条）**：CDN-H2、Direct-H3、Direct-H2、Hysteria2-H3、Hysteria2-Obfs、Reality-XHTTP；备用节点（CDN-H3、Reality-Vision、Up-CDN-Down、CDN-Up-Reality-Down、MASQUE、XDRIVE、Noise）在 xh 菜单里开关。**Reality**：默认不写 `minClientVer`，使用 Xray 26.9.x 内核默认值（26.3.27），低于它的客户端内核需要升级；要兼容老客户端用 `xh minversion 1.8.0`。默认 Xray 内核 26.9.30。 |
 | **Reality 兼容模式默认关闭，全部用最新版 Xray 配置** | v4.9.84 | 用户反馈兼容模式效果不好，要求放弃并统一用最新版 Xray 的配置。`REALITY_MIN_CLIENT_VER` 默认由 `1.8.0` 改为 `default`：服务端不写 `minClientVer`，用 Xray 26.9.x 内核默认值（26.3.27）。本机已执行 `xh minversion default`。需要老客户端（小火箭、sing-box、Mihomo、旧内核）时仍可 `xh minversion 1.8.0` 开启。**注意**：低于 26.3.27 的 Reality 客户端会被拒绝，请升级客户端内核。 |
 | **默认节点集再次对齐本机当前设置** | v4.9.83 | 按用户要求，安装命令默认节点集 = 本机当前在用的 6 条：CDN-H2、Direct-H3、Direct-H2、Hysteria2-H3、Hysteria2-Obfs、Reality-XHTTP。变化：`FEATURE_CDN_H2` 默认 `true`、`FEATURE_H2_DIRECT` 默认 `true`；`FEATURE_CDN_H3` 默认 `false`、`FEATURE_REALITY_VISION` 默认 `false`（`FEATURE_REALITY_XHTTP` 仍为 `true`）。CDN-H3 与 Reality-Vision 成为备用节点，用 `xh cdnh3 on`、`xh reality vision on` 开启；xh 菜单 16 / 17 / 20 与 `xh help` 的「默认 / 备用」文字同步。逐项核对：源码默认值与本机 `node.env` 的节点开关一致。非节点设置（Noise、拦截规则）不在此范围，保持原默认。 |
 | **Reality 节点集成到 xh 菜单：`xh reality`（菜单 30，卸载顺延为 31）** | v4.9.82 | 按用户要求，把当前 Xray 的全部 Reality 节点纳入 xh 菜单管理：`xh reality show` 列出三条 Reality 节点（Vision、XHTTP、Up-CDN-Down）的状态与参数（SNI、serverNames、shortId 已隐藏、`minClientVer`、`maxTimeDiff`）；`xh reality vision on\|off`、`xh reality xhttp on\|off` 在 443 的 Reality 入站里增删对应一项并同步订阅，`xh reality updown on\|off` 转给 `xh split reality-up`。**开关原理**：443 入站（含到本机 nginx 的 target，CDN 回源要靠它）始终保留；Vision 对应 `clients` 里的 UUID1 项，XHTTP 对应 `fallbacks` 里指向 8001 的那一项。在测试实例上实测：Vision 关 → Vision 客户端不通、XHTTP 客户端仍通；XHTTP 关 → Vision 客户端仍通、XHTTP 客户端不通。新增 `FEATURE_REALITY_VISION` / `FEATURE_REALITY_XHTTP`（默认都开，安装时也生效），入站里的两项带 `// >>xh:` 标记；已安装的老机器配置没有标记，关闭时按结构找到并删除，开启时写成带标记的块。验证：安装模板四种开关组合都过 `xray run -test`，默认渲染与旧模板只多标记注释；对本机配置副本做 关 / 开 / 再关 的往返，结构正确、重复开关返回「无需改动」；订阅文件（`client-config.txt`、两份 Mihomo yaml、「直连择优」组）关 / 开往返与基线字节一致。**注意**：开关会重启 xray，客户端需更新订阅并重连；两条都关时 443 上不再有可用的 Reality 节点（CDN 回源不受影响）。`xh reality show` 在 `minClientVer` 未设置时给出提示：Xray 26.9.x 默认 26.3.27，会拒绝老客户端。 |
