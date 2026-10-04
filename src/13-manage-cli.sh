@@ -3097,6 +3097,65 @@ fi)
 HY2H3EOF
 }
 
+# 让客户端链接里的 Hysteria2 fm 参数与 Noise 开关一致：开启时在 quicParams 之后的 udp 数组最前面放 noise 项，
+# 关闭时去掉；保留已有的 salamander 项与 quicParams，其余链接一行不动。改 client-config.txt 与备用节点库里的那份。
+# 此前 xh noise on/off/set 只改了服务端入站与备用节点库的入站文本，链接没跟着变，开关和链接就不一致。
+sync_noise_links() {
+  local home="" candidate files=() f
+  if [[ -n "${USER_HOME:-}" && -f "${USER_HOME}/client-config.txt" ]]; then
+    home="$USER_HOME"
+  else
+    for candidate in /home/ubuntu /home/opc /root; do
+      [[ -f "${candidate}/client-config.txt" ]] && { home="$candidate"; break; }
+    done
+  fi
+  [[ -n "$home" ]] && files+=("${home}/client-config.txt")
+  [[ -f "${ALL_STORE_DIR}/client-config.txt" ]] && files+=("${ALL_STORE_DIR}/client-config.txt")
+  [[ ${#files[@]} -gt 0 ]] || { warn "没找到 client-config.txt，链接未同步"; return 0; }
+  for f in "${files[@]}"; do
+    python3 - "$f" "${FEATURE_NOISE_EXP:-false}" "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}" "${NOISE_EXP_DELAY:-10-50}" <<'NLPY' || warn "同步 ${f} 里的 Noise 链接参数失败"
+import json, os, re, sys
+from urllib.parse import quote, unquote
+
+path, enabled, packet, delay = sys.argv[1:5]
+enabled = (enabled == 'true')
+text = open(path, encoding='utf-8').read()
+out = []
+changed = False
+for line in text.split('\n'):
+    if line.startswith('hysteria2://') and '&fm=' in line:
+        m = re.search(r'&fm=([^&#]*)', line)
+        try:
+            fm = json.loads(unquote(m.group(1)))
+        except ValueError:
+            out.append(line); continue
+        udp = [x for x in fm.get('udp', []) if x.get('type') != 'noise']
+        if enabled:
+            udp.insert(0, {"type": "noise", "settings": {"noise": [{"type": "exp", "packet": packet, "delay": delay}]}})
+        new = {"quicParams": fm.get("quicParams", {})}
+        if udp:
+            new["udp"] = udp
+        enc = quote(json.dumps(new, separators=(',', ':'), ensure_ascii=False), safe='')
+        line2 = line[:m.start(1)] + enc + line[m.end(1):]
+        if line2 != line:
+            changed = True
+        line = line2
+    out.append(line)
+if changed:
+    tmp = path + '.xh-new'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(out))
+    st = os.stat(path)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    try:
+        os.chown(tmp, st.st_uid, st.st_gid)
+    except PermissionError:
+        pass
+    os.replace(tmp, path)
+NLPY
+  done
+}
+
 sync_noise_live_config() {
   local tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak"
   [[ -f "$XRAY_CONF" ]] || return 0
@@ -3173,6 +3232,7 @@ cmd_noise() {
       echo -e "    ${MANAGE_CMD} noise on                 # 开启 Noise 动态混淆"
       echo -e "    ${MANAGE_CMD} noise off                # 关闭 Noise 动态混淆"
       echo -e "    ${MANAGE_CMD} noise set \"<exp>\" [延时]  # 自定义混淆模板与延时"
+      echo -e "    ${MANAGE_CMD} noise sync               # 只按当前开关把客户端链接对齐（不重启 Xray）"
       echo ""
       ;;
     on)
@@ -3187,6 +3247,7 @@ cmd_noise() {
       render_hy2_h3_inbound   > "${ALL_STORE_DIR}/inbound-hy2h3.json"
       chmod 600 "${ALL_STORE_DIR}"/inbound-hy2*.json 2>/dev/null || true
       sync_noise_live_config
+      sync_noise_links
       info "Noise 动态混淆已开启！"
       cmd_resub
       ;;
@@ -3201,6 +3262,7 @@ cmd_noise() {
       render_hy2_h3_inbound   > "${ALL_STORE_DIR}/inbound-hy2h3.json"
       chmod 600 "${ALL_STORE_DIR}"/inbound-hy2*.json 2>/dev/null || true
       sync_noise_live_config
+      sync_noise_links
       info "Noise 动态混淆已关闭"
       cmd_resub
       ;;
@@ -3221,11 +3283,18 @@ cmd_noise() {
       if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then
         sync_noise_live_config
       fi
+      sync_noise_links
       info "Noise 混淆模板已更新！"
       cmd_resub
       ;;
+    sync)
+      # 只按当前开关把客户端链接的 fm 对齐（不动服务端、不重启 Xray）
+      sync_noise_links
+      info "已按当前 Noise 开关（${cur}）同步客户端链接"
+      cmd_resub
+      ;;
     *)
-      echo "用法: ${MANAGE_CMD} noise [show|on|off|set <packet> [delay]]"
+      echo "用法: ${MANAGE_CMD} noise [show|on|off|sync|set <packet> [delay]]"
       ;;
   esac
 }
@@ -3426,7 +3495,7 @@ xray-xhttp 管理命令
   xh hy2 obfs [show|on|off]         Hysteria2 混淆节点（salamander 混淆，需先开 hy2；别名: xh hy2obfs）
   xh masque [show|on|off]           MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP, UDP/TCP 8447)
   xh xdrive [show|setup|on|off]     XDRIVE 网盘穿透代理 (Google Drive 中继，零公网 IP 穿透)
-  xh noise [show|on|off|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
+  xh noise [show|on|off|sync|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
   xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；两条都是默认关闭的备用节点）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）
