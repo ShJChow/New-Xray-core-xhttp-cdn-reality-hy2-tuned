@@ -73,7 +73,7 @@
                     "shortIds": [
                         "${SHORT_ID}"
                     ]${REALITY_MAX_TIME_DIFF_JSON}${REALITY_MIN_CLIENT_VER_JSON}
-                    // minClientVer：客户端最低版本控制（默认 1.8.0 兼容 mihomo/Clash/sing-box）。
+                    // minClientVer：客户端最低版本控制（默认不写，用最新 Xray 内核默认值；兼容老客户端用 xh minversion 1.8.0）。
                     // 可通过环境变量 REALITY_MIN_CLIENT_VER 或 xh minversion 管理。
                     // 若设为 none 或 default 则不包含该行，使用 Xray-core 内核默认版本（严格模式）。
                 }${REALITY_SOCKOPT_JSON}

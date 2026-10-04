@@ -1316,7 +1316,7 @@ cmd_minversion() {
       echo -e "  • 开启兼容（1.8.0）：支持 mihomo、Clash Meta、sing-box 等非 Xray 官方客户端正常握手。"
       echo -e "  • 关闭兼容（off / default）：恢复内核最新默认限制，非同代 Xray 客户端将握手失败。"
       echo -e "  • 快捷命令:"
-      echo -e "      ${MANAGE_CMD} minversion on [版本号]     # 开启兼容模式（默认 1.8.0）"
+      echo -e "      ${MANAGE_CMD} minversion on [版本号]     # 开启兼容模式（1.8.0，默认关闭）"
       echo -e "      ${MANAGE_CMD} minversion off            # 切换为严格模式（内核默认）"
       echo -e "      ${MANAGE_CMD} minversion set <版本号>   # 指定具体最低版本"
       echo ""
@@ -3741,7 +3741,7 @@ xray-xhttp 管理命令
   xh log [xray|nginx] [行数]
   xh start | stop | restart
   xh update [<ver>] [--auto] 更新或指定 Xray-core 版本（自检失败自动回滚）
-  xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认 1.8.0 兼容 mihomo/Clash)
+  xh minversion [show|on|off|<ver>] Reality 客户端最低版本控制 (默认关闭，用最新 Xray 默认值；on = 1.8.0 兼容 mihomo/Clash)
   xh ech [show|on|off]              Cloudflare CDN ECH (加密 SNI) 开关与订阅同步
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）

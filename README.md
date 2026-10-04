@@ -179,7 +179,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | | `xh uninstall` | 30 | 彻底卸载全部组件并清理配置 |
 | **网络与流控** | `xh tuning [show\|on\|off\|win\|mac\|linux\|sb]` | 7 | 系统级 BBR+fq 流控调优 / 输出多平台客户端调优指令 |
 | | `xh brutal [show\|on\|off\|speed]` | 8 | TCP Brutal 极速拥塞控制 / 调节速率 |
-| | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality 客户端最低版本限制（默认 1.8.0 兼容 Clash/sing-box） |
+| | `xh minversion [show\|on\|off\|<ver>]` | 13 | Reality 客户端最低版本限制（默认关闭，用最新 Xray 默认值；`on` = 1.8.0 兼容 Clash/sing-box） |
 | | `xh ech [show\|on\|off]` | 14 | Cloudflare CDN ECH (加密 SNI) 开关与订阅同步 |
 | | `xh ecn [show\|on\|off]` | 15 | TCP ECN (显式拥塞通知) 开关与状态查看 |
 | | `xh block [show\|cn on\|off\|ads on\|off]` | 18 | 出站屏蔽回国 IP / 广告域名 |
@@ -232,12 +232,13 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.83)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.84)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
 | 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
 | :--- | :--- | :--- |
+| **Reality 兼容模式默认关闭，全部用最新版 Xray 配置** | v4.9.84 | 用户反馈兼容模式效果不好，要求放弃并统一用最新版 Xray 的配置。`REALITY_MIN_CLIENT_VER` 默认由 `1.8.0` 改为 `default`：服务端不写 `minClientVer`，用 Xray 26.9.x 内核默认值（26.3.27）。本机已执行 `xh minversion default`。需要老客户端（小火箭、sing-box、Mihomo、旧内核）时仍可 `xh minversion 1.8.0` 开启。**注意**：低于 26.3.27 的 Reality 客户端会被拒绝，请升级客户端内核。 |
 | **默认节点集再次对齐本机当前设置** | v4.9.83 | 按用户要求，安装命令默认节点集 = 本机当前在用的 6 条：CDN-H2、Direct-H3、Direct-H2、Hysteria2-H3、Hysteria2-Obfs、Reality-XHTTP。变化：`FEATURE_CDN_H2` 默认 `true`、`FEATURE_H2_DIRECT` 默认 `true`；`FEATURE_CDN_H3` 默认 `false`、`FEATURE_REALITY_VISION` 默认 `false`（`FEATURE_REALITY_XHTTP` 仍为 `true`）。CDN-H3 与 Reality-Vision 成为备用节点，用 `xh cdnh3 on`、`xh reality vision on` 开启；xh 菜单 16 / 17 / 20 与 `xh help` 的「默认 / 备用」文字同步。逐项核对：源码默认值与本机 `node.env` 的节点开关一致。非节点设置（Noise、拦截规则）不在此范围，保持原默认。 |
 | **Reality 节点集成到 xh 菜单：`xh reality`（菜单 30，卸载顺延为 31）** | v4.9.82 | 按用户要求，把当前 Xray 的全部 Reality 节点纳入 xh 菜单管理：`xh reality show` 列出三条 Reality 节点（Vision、XHTTP、Up-CDN-Down）的状态与参数（SNI、serverNames、shortId 已隐藏、`minClientVer`、`maxTimeDiff`）；`xh reality vision on\|off`、`xh reality xhttp on\|off` 在 443 的 Reality 入站里增删对应一项并同步订阅，`xh reality updown on\|off` 转给 `xh split reality-up`。**开关原理**：443 入站（含到本机 nginx 的 target，CDN 回源要靠它）始终保留；Vision 对应 `clients` 里的 UUID1 项，XHTTP 对应 `fallbacks` 里指向 8001 的那一项。在测试实例上实测：Vision 关 → Vision 客户端不通、XHTTP 客户端仍通；XHTTP 关 → Vision 客户端仍通、XHTTP 客户端不通。新增 `FEATURE_REALITY_VISION` / `FEATURE_REALITY_XHTTP`（默认都开，安装时也生效），入站里的两项带 `// >>xh:` 标记；已安装的老机器配置没有标记，关闭时按结构找到并删除，开启时写成带标记的块。验证：安装模板四种开关组合都过 `xray run -test`，默认渲染与旧模板只多标记注释；对本机配置副本做 关 / 开 / 再关 的往返，结构正确、重复开关返回「无需改动」；订阅文件（`client-config.txt`、两份 Mihomo yaml、「直连择优」组）关 / 开往返与基线字节一致。**注意**：开关会重启 xray，客户端需更新订阅并重连；两条都关时 443 上不再有可用的 Reality 节点（CDN 回源不受影响）。`xh reality show` 在 `minClientVer` 未设置时给出提示：Xray 26.9.x 默认 26.3.27，会拒绝老客户端。 |
 | **Hysteria2 链接默认不带 noise：旧内核解析不了 `noise.exp`** | v4.9.81 | 用户反馈 Hysteria2 节点在 v2rayN 里「运行内核失败」。原因：v4.9.80 让链接 `fm` 里带上了 Noise 的 `exp` 项，这个类型是 Xray 26.9.30 才有的；用 26.3.27、26.7.28、26.9.9 三个内核实测，带 noise 的配置全部 `failed to build outbound config`，去掉 noise 后全部通过，而 v2rayN 自带的内核比 26.9.30 老。现在新增开关 `FEATURE_NOISE_LINKS`（默认 `false`）：**服务端入站的 noise 保持不变**（它只是发送方行为，老客户端不受影响），链接里默认不再带 noise；确认所有客户端内核都 >= 26.9.30 后再 `xh noise links on`。本机已执行 `xh noise links off`：订阅里 Hysteria2 链接不再带 noise，没有重启 Xray；用三个旧内核对当前全部 7 条链接做配置解析都通过，用真实链接复测两条 Hysteria2 都通（约 0.05–0.08 秒）。另外核对了 vless 五条链接（含 H3 链接里放大的 QUIC 接收窗口）在这三个旧内核上也都能解析。 |
