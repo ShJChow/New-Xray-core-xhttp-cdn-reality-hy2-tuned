@@ -3319,6 +3319,243 @@ cmd_noise() {
   esac
 }
 
+# ==================================================
+# Reality 节点管理（xh reality）：Vision / XHTTP 两个直连节点的服务端 + 订阅开关，上下行分离节点转给 xh split
+# ==================================================
+# 443 的 Reality 入站始终保留（CDN 域名的回源要靠它的 target）；开关只增删入站里的两项：
+#   vision：clients 里的 UUID1 + flow（xh:realityvision 标记块）
+#   xhttp ：fallbacks 里指向 8001 的那一项（xh:realityxhttp 标记块）
+# 已安装的老机器配置里没有标记：关闭时按结构找到那一项直接删掉，开启时再写成带标记的块。
+# 返回 0 = 已改并重启成功，3 = 无需改动，其余 = 失败（已回滚，原因已打印）。
+reality_server_edit() {
+  local key="$1" act="$2" tmp="${XRAY_CONF%.json}.bk-tmp.json" bak="${XRAY_CONF}.bk.bak" rc err
+  [[ -f "$XRAY_CONF" ]] || { backup_error "未找到 Xray 配置文件: $XRAY_CONF"; return 1; }
+  python3 - "$XRAY_CONF" "$tmp" "$key" "$act" "${UUID1:-}" "${VISION_FLOW:-xtls-rprx-vision}" <<'RSPY'
+import re, sys
+
+src, dst, key, act, uuid1, flow = sys.argv[1:7]
+s = open(src, encoding='utf-8').read()
+tag = 'reality' + key
+begin = '        // >>xh:' + tag
+end = '        // <<xh:' + tag
+if key == 'vision':
+    arr = '"clients"'
+    if not uuid1:
+        sys.stderr.write('node.env 里没有 UUID1\n'); sys.exit(1)
+    obj = ('                    {\n'
+           '                        "id": "%s",\n'
+           '                        "level": 0,\n'
+           '                        "flow": "%s"\n'
+           '                    }') % (uuid1, flow)
+    ident = uuid1
+else:
+    arr = '"fallbacks"'
+    obj = ('                    {\n'
+           '                        "dest": "127.0.0.1:8001",\n'
+           '                        "xver": 0\n'
+           '                    }')
+    ident = '127.0.0.1:8001'
+
+def skip_ws_comments(t, i):
+    n = len(t)
+    while i < n:
+        if t[i] in ' \t\r\n':
+            i += 1
+        elif t.startswith('//', i):
+            while i < n and t[i] != '\n':
+                i += 1
+        elif t.startswith('/*', i):
+            i = t.index('*/', i) + 2
+        else:
+            break
+    return i
+
+def match_close(t, i):
+    """t[i] 是 { 或 [，返回与之配对的 } / ] 的下标（跳过字符串与注释）。"""
+    n, depth = len(t), 0
+    while i < n:
+        c = t[i]
+        if c == '"':
+            i += 1
+            while i < n and t[i] != '"':
+                i += 2 if t[i] == '\\' else 1
+        elif t.startswith('//', i):
+            while i < n and t[i] != '\n':
+                i += 1
+            continue
+        elif t.startswith('/*', i):
+            i = t.index('*/', i) + 2
+            continue
+        elif c in '{[':
+            depth += 1
+        elif c in '}]':
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+# 443 Reality 入站是 inbounds 里的第一项：取全文第一个 "clients" / "fallbacks" 数组
+m = re.search(arr + r'\s*:\s*\[', s)
+if not m:
+    sys.stderr.write('没找到 %s 数组\n' % arr); sys.exit(1)
+lb = m.end() - 1
+rb = match_close(s, lb)
+inner = s[lb + 1:rb]
+has_marker = ('// >>xh:' + tag) in inner
+has_obj = ident in inner
+
+if act == 'off':
+    if not has_obj:
+        sys.exit(3)
+    if has_marker:
+        a = inner.index('\n' + begin)
+        b = inner.index(end, a) + len(end)
+        inner2 = inner[:a] + inner[b:]
+    else:
+        # 没有标记（老机器）：删掉数组里含 ident 的那个对象
+        i = skip_ws_comments(inner, 0)
+        removed = False
+        while i < len(inner) and inner[i] == '{':
+            j = match_close(inner, i)
+            if ident in inner[i:j + 1]:
+                k = i
+                while k > 0 and inner[k - 1] in ' \t':
+                    k -= 1
+                if k > 0 and inner[k - 1] == '\n':
+                    k -= 1
+                e = j + 1
+                if e < len(inner) and inner[e] == ',':
+                    e += 1
+                inner2 = inner[:k] + inner[e:]
+                removed = True
+                break
+            i = skip_ws_comments(inner, j + 1)
+            if i < len(inner) and inner[i] == ',':
+                i = skip_ws_comments(inner, i + 1)
+        if not removed:
+            sys.stderr.write('没找到可删除的 %s 项\n' % ident); sys.exit(1)
+else:
+    if has_obj:
+        sys.exit(3)
+    if inner.strip():
+        sys.stderr.write('%s 数组里已有其他内容，不自动插入\n' % arr); sys.exit(1)
+    inner2 = '\n' + begin + '\n' + obj + '\n' + end + inner
+s = s[:lb + 1] + inner2 + s[rb:]
+open(dst, 'w', encoding='utf-8').write(s)
+RSPY
+  rc=$?
+  [[ $rc -eq 3 ]] && return 3
+  if [[ $rc -ne 0 ]]; then rm -f "$tmp"; backup_error "改写配置失败（代码 ${rc}），未做任何修改"; return 1; fi
+  if ! err=$("$XRAY_BIN" -test -format json -config "$tmp" 2>&1); then
+    rm -f "$tmp"; backup_error "Xray 配置校验失败，已放弃，未做任何修改。最后几行输出："; echo "$err" | tail -n 5 >&2; return 1
+  fi
+  cp -a "$XRAY_CONF" "$bak"
+  chown --reference="$XRAY_CONF" "$tmp" 2>/dev/null || true
+  chmod --reference="$XRAY_CONF" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$XRAY_CONF" || { backup_error "无法替换 $XRAY_CONF"; return 1; }
+  if ! svc restart xray; then
+    cp -a "$bak" "$XRAY_CONF"
+    if svc restart xray >/dev/null 2>&1; then
+      backup_error "xray 重启失败，已回滚到修改前的配置并重新启动"
+    else
+      backup_error "xray 重启失败，回滚后也无法启动！请立即检查：journalctl -u xray -n 30"
+    fi
+    return 1
+  fi
+  return 0
+}
+
+# 单个 Reality 节点开关。$1 = vision|xhttp，$2 = on|off
+# 顺序同其它备用节点：开启时先改订阅文件（原子），再改服务端，最后写标志位；任何一步失败都撤销前面的步骤。
+reality_toggle() {
+  local key="$1" act="$2" flag name label cur rc
+  case "$key" in
+    vision) flag=FEATURE_REALITY_VISION; name="VLESS-Reality-Vision-Direct"; label="Reality-Vision-Direct（xtls-rprx-vision）" ;;
+    xhttp)  flag=FEATURE_REALITY_XHTTP;  name="VLESS-Reality-XHTTP-Direct";  label="Reality-XHTTP-Direct（XHTTP + vlessenc）" ;;
+  esac
+  cur="${!flag:-true}"
+  backup_store_check
+  [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存开关状态"
+  if [[ "$act" == on ]]; then
+    [[ "$cur" == true ]] && { info "${label} 已经是开启状态"; return 0; }
+    info "正在开启 ${label} ..."
+    backup_node_sync_files "$name" on || fail "更新订阅文件失败，未改动服务端（原因见上）"
+    reality_server_edit "$key" on; rc=$?
+    if [[ $rc -ne 0 && $rc -ne 3 ]]; then
+      backup_node_sync_files "$name" off >/dev/null 2>&1 || true
+      fail "服务端写入失败，已撤销订阅文件改动"
+    fi
+    if ! update_node_env "$flag" "true" || ! grep -qE "^${flag}='?true'?\$" "$NODE_ENV_FILE"; then
+      reality_server_edit "$key" off >/dev/null 2>&1 || true
+      backup_node_sync_files "$name" off >/dev/null 2>&1 || true
+      fail "无法写入 ${NODE_ENV_FILE}，已撤销本次改动"
+    fi
+    export "$flag"=true
+    info "${label} 已开启。xray 已重启，客户端需要更新订阅并重新连接。"
+  else
+    [[ "$cur" == true ]] || { info "${label} 本来就是关闭状态"; return 0; }
+    # 两个 Reality 节点都关掉时，443 上只剩 CDN 回源的壳：允许，但要说一声
+    local other_flag other_cur
+    [[ "$key" == vision ]] && other_flag=FEATURE_REALITY_XHTTP || other_flag=FEATURE_REALITY_VISION
+    other_cur="${!other_flag:-true}"
+    [[ "$other_cur" == true ]] || warn "另一个 Reality 节点已经关了：关掉这个以后，443 上不再有可用的 Reality 节点（CDN 回源不受影响）"
+    info "正在关闭 ${label} ..."
+    reality_server_edit "$key" off; rc=$?
+    [[ $rc -eq 0 || $rc -eq 3 ]] || fail "移除服务端项失败（原因见上），未改动订阅文件和标志位"
+    backup_node_sync_files "$name" off || warn "服务端项已移除，但订阅文件没有同步（原因见上）。请手动检查 client-config.txt 与订阅"
+    update_node_env "$flag" "false"
+    export "$flag"=false
+    info "${label} 已关闭。xray 已重启，客户端需要更新订阅。"
+  fi
+  cmd_resub
+}
+
+cmd_reality() {
+  local what="${1:-show}" act="${2:-show}" v x u sid minv mtd
+  case "$what" in
+    show|status)
+      v="${FEATURE_REALITY_VISION:-true}"; x="${FEATURE_REALITY_XHTTP:-true}"; u="${FEATURE_REALITY_UP_CDN_DOWN:-false}"
+      sid="${SHORT_ID:-}"; [[ -n "$sid" ]] && sid="${sid:0:2}$(printf '%*s' $(( ${#sid} > 2 ? ${#sid} - 2 : 0 )) '' | tr ' ' '*')"
+      minv=$(grep -o '"minClientVer"[[:space:]]*:[[:space:]]*"[^"]*"' "$XRAY_CONF" 2>/dev/null | head -1 | sed -E 's/.*"([^"]*)"$/\1/')
+      mtd=$(grep -o '"maxTimeDiff"[[:space:]]*:[[:space:]]*[0-9]*' "$XRAY_CONF" 2>/dev/null | head -1 | grep -o '[0-9]*$')
+      echo ""
+      echo -e "${CYAN}=== Reality 节点 ===${NC}"
+      printf '  %-30s %s\n' "VLESS-Reality-Vision-Direct" "$([[ "$v" == true ]] && echo -e "${GREEN}已开启${NC}" || echo -e "${YELLOW}未开启${NC}")  TCP 443  xtls-rprx-vision      ${MANAGE_CMD} reality vision on|off"
+      printf '  %-30s %s\n' "VLESS-Reality-XHTTP-Direct" "$([[ "$x" == true ]] && echo -e "${GREEN}已开启${NC}" || echo -e "${YELLOW}未开启${NC}")  TCP 443  XHTTP + vlessenc       ${MANAGE_CMD} reality xhttp on|off"
+      printf '  %-30s %s\n' "VLESS-Reality-Up-CDN-Down" "$([[ "$u" == true ]] && echo -e "${GREEN}已开启${NC}" || echo -e "${YELLOW}未开启${NC}")  上行 Reality / 下行 CDN   ${MANAGE_CMD} reality updown on|off"
+      echo ""
+      echo -e "  伪装目标 target:   127.0.0.1:8003（本机 nginx，证书域名 ${REALITY_DOMAIN:-?}）"
+      echo -e "  serverNames:       ${REALITY_DOMAIN:-?}、${CDN_DOMAIN:-?}"
+      echo -e "  shortId:           ${sid:-?}（已隐藏）"
+      if [[ -n "$minv" ]]; then
+        echo -e "  minClientVer:      ${minv}    （${MANAGE_CMD} minversion）"
+      else
+        echo -e "  minClientVer:      ${YELLOW}未设置${NC}    （${MANAGE_CMD} minversion）"
+        echo -e "    ${YELLOW}注意：Xray 26.9.x 的默认值是 26.3.27，Shadowrocket / sing-box / Mihomo / 老版本内核的 Reality 连接可能被拒；${NC}"
+        echo -e "    ${YELLOW}需要兼容这些客户端时执行 ${MANAGE_CMD} minversion 1.8.0（会重启 xray）。${NC}"
+      fi
+      echo -e "  maxTimeDiff:       ${mtd:+${mtd} ms}${mtd:-未设置}    （${MANAGE_CMD} timediff）"
+      echo -e "  说明: 443 入站始终保留（CDN 域名的回源要靠它）；vision / xhttp 开关会增删入站里对应的一项并重启 xray。"
+      echo ""
+      ;;
+    vision|xhttp)
+      case "$act" in
+        on|off) reality_toggle "$what" "$act" ;;
+        show|status|"") cmd_reality show ;;
+        *) echo "用法: ${MANAGE_CMD} reality ${what} [on|off]" ;;
+      esac
+      ;;
+    updown|split)
+      case "$act" in
+        on|off) cmd_split reality-up "$act" ;;
+        *) cmd_split reality-up show ;;
+      esac
+      ;;
+    *) echo "用法: ${MANAGE_CMD} reality [show | vision on|off | xhttp on|off | updown on|off]" ;;
+  esac
+}
+
 # 上下行分离两条（纯客户端链接，不动服务端）
 cmd_split() {
   local which="${1:-show}" action="${2:-show}" flag name label
@@ -3398,7 +3635,8 @@ cmd_menu() {
     echo " 27) 重新生成全量订阅 (resub)"
     echo " 28) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
     echo " 29) Nginx 版本检查与升级 (nginx: show / check / update)"
-    echo " 30) 卸载"
+    echo " 30) Reality 节点管理 (show / vision on|off / xhttp on|off / updown on|off)"
+    echo " 31) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -3481,7 +3719,8 @@ cmd_menu() {
       27) cmd_resub ;;
       28) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
       29) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
-      30) cmd_uninstall; break ;;
+      30) read -rp "  show / vision on|off / xhttp on|off / updown on|off: " a; ( cmd_reality ${a:-show} ) ;;
+      31) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -3524,6 +3763,7 @@ xray-xhttp 管理命令
   xh keepalive [on|off|show]
   xh autoupdate [on|off|show]       每周日 04:00 自动更新 Xray-core，并检查 nginx / tcp-brutal 新版本（只提醒）
   xh guard              健康检查并拉起异常服务（cron 调用）
+  xh reality [show|vision on|off|xhttp on|off|updown on|off]  Reality 节点管理（Vision / XHTTP 增删服务端项并重启 xray；updown 为纯客户端链接）
   xh uninstall          卸载全部组件
   xh version
 USAGEEOF
@@ -3581,6 +3821,7 @@ case "${1:-menu}" in
   xdrive)     shift; cmd_xdrive "$@" ;;
   noise)      shift; cmd_noise "$@" ;;
   split)      shift; cmd_split "$@" ;;
+  reality)    shift; cmd_reality "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;

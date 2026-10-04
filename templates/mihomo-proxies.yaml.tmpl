@@ -151,6 +151,7 @@ proxies:
   #>>FEATURE_HY2_OBFS
 
   # ---------- TCP 兜底（UDP/QUIC 被封时使用）----------
+  #<<FEATURE_REALITY_VISION
   - name: VLESS-Reality-Vision-Direct${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
@@ -171,7 +172,9 @@ proxies:
     reality-opts:
       public-key: ${PUBLIC_KEY}
       short-id: ${SHORT_ID}
+  #>>FEATURE_REALITY_VISION
 
+  #<<FEATURE_REALITY_XHTTP
   - name: VLESS-Reality-XHTTP-Direct${NODE_SUFFIX}
     type: vless
     server: ${VPS_IP}
@@ -199,6 +202,7 @@ proxies:
         c-max-reuse-times: "0"
         h-max-request-times: "600-900"
         h-max-reusable-secs: "1800-3000"${MIHOMO_REUSE_KEEPALIVE_XHTTP}
+  #>>FEATURE_REALITY_XHTTP
 
   #<<FEATURE_UP_CDN_DOWN_MIHOMO
   - name: VLESS-Reality-Up-CDN-Down${NODE_SUFFIX}

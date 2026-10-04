@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.81"
+PROJECT_VERSION="4.9.82"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：升级至最新稳定/前沿版 v26.9.30（具备 XDRIVE 云盘代理、MASQUE、Finalmask Noise exp、WFP 防泄露等特性）。
 XRAY_DEFAULT_VERSION="26.9.30"
@@ -180,6 +180,11 @@ FEATURE_NOISE_EXP=${FEATURE_NOISE_EXP:-false}
 # 老客户端不受影响；但链接里的 noise.exp 在 Xray < 26.9.30 的客户端内核里无法解析，v2rayN 会报「运行内核失败」。
 # 确认所有客户端内核都 >= 26.9.30 后再开：xh noise links on。
 FEATURE_NOISE_LINKS=${FEATURE_NOISE_LINKS:-false}
+
+# FEATURE_REALITY_VISION / FEATURE_REALITY_XHTTP（v4.9.82，默认都开）：Reality 443 入站上的两个直连节点。
+# 关闭 = 服务端去掉对应的 clients 项 / fallback 项并从订阅里移除节点；装好后用 xh reality vision|xhttp on|off 切换。
+FEATURE_REALITY_VISION=${FEATURE_REALITY_VISION:-true}
+FEATURE_REALITY_XHTTP=${FEATURE_REALITY_XHTTP:-true}
 NOISE_EXP_PACKET=${NOISE_EXP_PACKET:-"<b 16030100><r 32><t><c><rd 8>"}
 NOISE_EXP_DELAY=${NOISE_EXP_DELAY:-"10-50"}
 

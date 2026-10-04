@@ -168,6 +168,19 @@ if [[ "${FEATURE_H2_DIRECT:-false}" == true ]] && _port_taken_by_other tcp "$H2_
   FEATURE_H2_DIRECT=false
 fi
 
+# Reality 入站 443 上的两个节点（带 xh 标记，xh reality vision|xhttp on|off 按标记整块增删）：
+#   Reality-Vision-Direct：clients 里的 UUID1 + xtls-rprx-vision；去掉它，Vision 客户端即被拒绝（clients 留空，fallback 照常）。
+#   Reality-XHTTP-Direct ：fallbacks 里指向 8001 的那一项（UUID2 + vlessenc 的 XHTTP 入站）；去掉它，Reality 上的 XHTTP 客户端即被拒绝。
+# 443 入站本身（含到本机 nginx 的 target）始终保留：CDN 域名的回源也要靠它。
+REALITY_VISION_CLIENT_JSON=""
+REALITY_XHTTP_FALLBACK_JSON=""
+if [[ "${FEATURE_REALITY_VISION:-true}" == true ]]; then
+  printf -v REALITY_VISION_CLIENT_JSON '\n        // >>xh:realityvision\n                    {\n                        "id": "%s",\n                        "level": 0,\n                        "flow": "%s"\n                    }\n        // <<xh:realityvision' "${UUID1}" "${VISION_FLOW:-xtls-rprx-vision}"
+fi
+if [[ "${FEATURE_REALITY_XHTTP:-true}" == true ]]; then
+  REALITY_XHTTP_FALLBACK_JSON=$'\n        // >>xh:realityxhttp\n                    {\n                        "dest": "127.0.0.1:8001",\n                        "xver": 0\n                    }\n        // <<xh:realityxhttp'
+fi
+
 XRAY_H3_DIRECT_INBOUND=""
 XRAY_H2_DIRECT_INBOUND=""
 XRAY_HY2_INBOUND=""
@@ -682,6 +695,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'XDRIVE_REFRESH_TOKEN=%q\n'   "${XDRIVE_REFRESH_TOKEN:-}"
   printf 'FEATURE_NOISE_EXP=%q\n'      "${FEATURE_NOISE_EXP:-false}"
   printf 'FEATURE_NOISE_LINKS=%q\n'    "${FEATURE_NOISE_LINKS:-false}"
+  printf 'FEATURE_REALITY_VISION=%q\n'  "${FEATURE_REALITY_VISION:-true}"
+  printf 'FEATURE_REALITY_XHTTP=%q\n'   "${FEATURE_REALITY_XHTTP:-true}"
   printf 'NOISE_EXP_PACKET=%q\n'       "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
   printf 'NOISE_EXP_DELAY=%q\n'        "${NOISE_EXP_DELAY:-10-50}"
   if [[ "$FEATURE_XPADDING" == true ]]; then

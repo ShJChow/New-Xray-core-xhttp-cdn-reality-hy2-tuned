@@ -389,6 +389,9 @@ cat > "$USER_HOME/client-config.txt" << CLIENTEOF
 CLIENTEOF
 # 删掉 CDN 节点关闭后留下的空行，保证 client-config.txt 每行都是一条可用节点
 sed -i '/^[[:space:]]*$/d' "$USER_HOME/client-config.txt"
+# Reality 两个直连节点的行写在模板里（不是变量），关闭时按节点名删行
+[[ "${FEATURE_REALITY_VISION:-true}" == true ]] || sed -i '/#VLESS-Reality-Vision-Direct/d' "$USER_HOME/client-config.txt"
+[[ "${FEATURE_REALITY_XHTTP:-true}" == true ]] || sed -i '/#VLESS-Reality-XHTTP-Direct/d' "$USER_HOME/client-config.txt"
 
 # v2rayN TUN 绕行清单。**不能并进 client-config.txt**——那份文件会被整体
 # base64 成 v2rayN 订阅（12-subscription.sh:18），混入非节点行会污染订阅。
@@ -425,7 +428,7 @@ MIHOMOEOF
 prune_mihomo_features() {
   local file="$1" feat
   [[ -f "$file" ]] || return 0
-  for feat in FEATURE_CDN_H2 FEATURE_CDN_H3 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO FEATURE_CDN_UP_REALITY_DOWN; do
+  for feat in FEATURE_REALITY_VISION FEATURE_REALITY_XHTTP FEATURE_CDN_H2 FEATURE_CDN_H3 FEATURE_H3_DIRECT FEATURE_H2_DIRECT FEATURE_HY2 FEATURE_HY2_H3 FEATURE_HY2_OBFS FEATURE_UP_CDN_DOWN_MIHOMO FEATURE_CDN_UP_REALITY_DOWN; do
     if [[ "${!feat}" == true ]]; then
       sed -i "/^[[:space:]]*#<<${feat}\$/d; /^[[:space:]]*#>>${feat}\$/d" "$file"
     else
@@ -492,7 +495,7 @@ if (
   USER_HOME=/etc/xhttp-cdn/all.new
   FEATURE_H3_DIRECT=true FEATURE_H2_DIRECT=true FEATURE_HY2=true FEATURE_HY2_H3=true FEATURE_HY2_OBFS=true
   FEATURE_CDN_H2=true FEATURE_CDN_H3=true FEATURE_PORT_HOPPING=false
-  FEATURE_REALITY_UP_CDN_DOWN=true FEATURE_UP_CDN_DOWN_MIHOMO=true FEATURE_CDN_UP_REALITY_DOWN=true
+  FEATURE_REALITY_UP_CDN_DOWN=true FEATURE_UP_CDN_DOWN_MIHOMO=true FEATURE_CDN_UP_REALITY_DOWN=true FEATURE_REALITY_VISION=true FEATURE_REALITY_XHTTP=true
   FEATURE_MASQUE=true
   info() { :; }; warn() { :; }
   render_client_configs
