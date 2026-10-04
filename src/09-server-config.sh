@@ -163,7 +163,7 @@ if [[ "${FEATURE_HY2_OBFS:-false}" == true ]] && _port_taken_by_other udp "$HY2_
   warn "UDP ${HY2_PORT} 已被其他进程占用，已关闭 Hysteria2-Obfs 节点（占用者：$(ss -lunpH "sport = :${HY2_PORT}" 2>/dev/null | grep -o 'users:(([^)]*' | head -1)）。腾出端口后可用 xh hy2obfs on 开启"
   FEATURE_HY2_OBFS=false
 fi
-if [[ "${FEATURE_H2_DIRECT:-false}" == true ]] && _port_taken_by_other tcp "$H2_PORT"; then
+if [[ "${FEATURE_H2_DIRECT:-true}" == true ]] && _port_taken_by_other tcp "$H2_PORT"; then
   warn "TCP ${H2_PORT} 已被其他进程占用，已关闭 h2-direct 节点。腾出端口后可用 xh h2direct on 开启"
   FEATURE_H2_DIRECT=false
 fi
@@ -174,7 +174,7 @@ fi
 # 443 入站本身（含到本机 nginx 的 target）始终保留：CDN 域名的回源也要靠它。
 REALITY_VISION_CLIENT_JSON=""
 REALITY_XHTTP_FALLBACK_JSON=""
-if [[ "${FEATURE_REALITY_VISION:-true}" == true ]]; then
+if [[ "${FEATURE_REALITY_VISION:-false}" == true ]]; then
   printf -v REALITY_VISION_CLIENT_JSON '\n        // >>xh:realityvision\n                    {\n                        "id": "%s",\n                        "level": 0,\n                        "flow": "%s"\n                    }\n        // <<xh:realityvision' "${UUID1}" "${VISION_FLOW:-xtls-rprx-vision}"
 fi
 if [[ "${FEATURE_REALITY_XHTTP:-true}" == true ]]; then
@@ -674,8 +674,8 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'VPS_IP_URI=%q\n'          "${VPS_IP_URI:-$VPS_IP}"
   printf 'FEATURE_XPADDING=%q\n'  "$FEATURE_XPADDING"
   printf 'FEATURE_XHTTP_VLESSENC=%q\n' "${FEATURE_XHTTP_VLESSENC:-true}"
-  printf 'FEATURE_CDN_H2=%q\n'    "${FEATURE_CDN_H2:-false}"
-  printf 'FEATURE_CDN_H3=%q\n'    "${FEATURE_CDN_H3:-true}"
+  printf 'FEATURE_CDN_H2=%q\n'    "${FEATURE_CDN_H2:-true}"
+  printf 'FEATURE_CDN_H3=%q\n'    "${FEATURE_CDN_H3:-false}"
   printf 'FEATURE_BLOCK_CN=%q\n'  "${FEATURE_BLOCK_CN:-false}"
   printf 'FEATURE_BLOCK_ADS=%q\n' "${FEATURE_BLOCK_ADS:-false}"
   printf 'FEATURE_REALITY_UP_CDN_DOWN=%q\n' "${FEATURE_REALITY_UP_CDN_DOWN:-false}"
@@ -695,7 +695,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'XDRIVE_REFRESH_TOKEN=%q\n'   "${XDRIVE_REFRESH_TOKEN:-}"
   printf 'FEATURE_NOISE_EXP=%q\n'      "${FEATURE_NOISE_EXP:-false}"
   printf 'FEATURE_NOISE_LINKS=%q\n'    "${FEATURE_NOISE_LINKS:-false}"
-  printf 'FEATURE_REALITY_VISION=%q\n'  "${FEATURE_REALITY_VISION:-true}"
+  printf 'FEATURE_REALITY_VISION=%q\n'  "${FEATURE_REALITY_VISION:-false}"
   printf 'FEATURE_REALITY_XHTTP=%q\n'   "${FEATURE_REALITY_XHTTP:-true}"
   printf 'NOISE_EXP_PACKET=%q\n'       "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
   printf 'NOISE_EXP_DELAY=%q\n'        "${NOISE_EXP_DELAY:-10-50}"

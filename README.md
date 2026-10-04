@@ -143,7 +143,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
   2) 查看节点参数与客户端配置      17) CDN QUIC(h3) 节点开关
   3) 查看订阅链接与二维码        18) 出站分流 (屏蔽回国 IP / 广告域名)
   4) 重启服务                  19) Reality 时间差校验 (maxTimeDiff)
-  5) 查看日志 (xray)            20) 备用节点 XHTTP-Direct-H2 (TCP 直连)
+  5) 查看日志 (xray)            20) XHTTP-Direct-H2 (TCP 直连)
   6) 更新 Xray-core            21) Hysteria2 节点与混淆管理 (hy2)
   7) 系统层调优 (show/on/off)   22) MASQUE 标准 L3 隧道 (masque)
   8) TCP Brutal 极速加速        23) XDRIVE 网盘穿透代理 (xdrive)
@@ -187,7 +187,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 | | `xh noise [show\|on\|off\|set <exp>]` | 24 | Finalmask Noise exp 动态混淆（AWG 模板标签，抗 DPI 审查） |
 | **节点开关** | `xh cdnh2 [show\|on\|off]` | 16 | 开启 / 关闭 CDN TCP(h2) 节点 |
 | | `xh cdnh3 [show\|on\|off]` | 17 | 开启 / 关闭 CDN QUIC(h3) 节点 |
-| | `xh h2direct [show\|on\|off]` | 20 | 开启 / 关闭备用直连 TCP 节点 (XHTTP-Direct-H2) |
+| | `xh h2direct [show\|on\|off]` | 20 | 开启 / 关闭直连 TCP 节点 (XHTTP-Direct-H2，默认开启) |
 | | `xh hy2 [show\|on\|off]` | 21 | Hysteria2 直连节点总开关（随机高 UDP 端口，默认不装） |
 | | `xh hy2 obfs [show\|on\|off]` | 21 | 开启 / 关闭 Hysteria2-Obfs 混淆节点（别名 `xh hy2obfs`） |
 | | `xh masque [show\|on\|off]` | 22 | 开启 / 关闭 MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP, UDP 随机高端口) |
@@ -200,20 +200,20 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
-| # | 节点名称（v4.9.78） | 传输协议 | 路由链路 | 核心特性 |
+| # | 节点名称（v4.9.83） | 传输协议 | 路由链路 | 核心特性 |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `VLESS-XHTTP-CDN-H3` | XHTTP (h3/QUIC) + vlessenc | 经 CDN UDP 443 | QUIC 经 Cloudflare 回源 |
+| **1** | `VLESS-XHTTP-CDN-H2` | XHTTP (h2) + vlessenc | 经 CDN TCP 443 | TCP 经 Cloudflare 回源 |
 | **2** | `VLESS-XHTTP-Direct-H3` | XHTTP (QUIC) + vlessenc | 直连 UDP 8446 | 直连 QUIC，`mode=stream-up` |
-| **3** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 随机高 UDP 端口 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
-| **4** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | 直连 随机高 UDP 端口 | 混淆版，QUIC 被深度识别时使用 |
-| **5** | `VLESS-Reality-Vision-Direct` | VLESS-Reality | 直连 TCP 443 | **xtls-rprx-vision 零拷贝**，单流极速 |
+| **3** | `VLESS-XHTTP-Direct-H2` | XHTTP (h2) + vlessenc | 直连 TCP 8445 | Direct-H3 的 TCP 孪生体 |
+| **4** | `Hysteria2-H3-Direct` | Hysteria 2 | 直连 随机高 UDP 端口 | 标准 HTTP/3 形态，实测下行最快（v4.9.26） |
+| **5** | `Hysteria2-Obfs-Direct` | Hysteria 2 + salamander | 直连 随机高 UDP 端口 | 混淆版，QUIC 被深度识别时使用 |
 | **6** | `VLESS-Reality-XHTTP-Direct` | XHTTP-Reality + vlessenc | 直连 TCP 443 | Reality 伪装 + XHTTP 填充混淆 |
 
 > 默认不装、按需用 `xh` 开启的备用与新特性节点（xh 菜单里都有对应项）：
-> - `VLESS-XHTTP-CDN-H2`（`xh cdnh2 on`，经 CDN 的 TCP 兜底，UDP 被限速 / 封锁时用）
+> - `VLESS-XHTTP-CDN-H3`（`xh cdnh3 on`，经 CDN 的 UDP 443 / QUIC）
+> - `VLESS-Reality-Vision-Direct`（`xh reality vision on`，xtls-rprx-vision 零拷贝，直连 TCP 443）
 > - `VLESS-Reality-Up-CDN-Down`（`xh split reality-up on`，上行 Reality、下行经 CDN，纯客户端链接）
 > - `VLESS-CDN-Up-Reality-Down`（`xh split cdn-up on`，上行经 CDN、下行 Reality）
-> - `VLESS-XHTTP-Direct-H2`（`xh h2direct on`，Direct-H3 的 TCP 孪生体）
 > - `MASQUE-CONNECT-IP`（`xh masque on`，IETF RFC 9484 标准 L3 隧道）
 > - `XDRIVE-Google-Drive`（`xh xdrive setup` / `xh xdrive on`，利用 Google Drive 网盘穿透无公网 IP / 白名单封锁）
 > - `Finalmask Noise exp`（`xh noise on`，基于 `<b hex><r N><t><c><rd N>` 动态表达式混淆）
@@ -232,12 +232,13 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.82)
+## 六、版本迭代与核心调优演进记录 (v4.8 - v4.9.83)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
 | 演进领域 | 涉及版本 | 核心技术方案与调优结论 |
 | :--- | :--- | :--- |
+| **默认节点集再次对齐本机当前设置** | v4.9.83 | 按用户要求，安装命令默认节点集 = 本机当前在用的 6 条：CDN-H2、Direct-H3、Direct-H2、Hysteria2-H3、Hysteria2-Obfs、Reality-XHTTP。变化：`FEATURE_CDN_H2` 默认 `true`、`FEATURE_H2_DIRECT` 默认 `true`；`FEATURE_CDN_H3` 默认 `false`、`FEATURE_REALITY_VISION` 默认 `false`（`FEATURE_REALITY_XHTTP` 仍为 `true`）。CDN-H3 与 Reality-Vision 成为备用节点，用 `xh cdnh3 on`、`xh reality vision on` 开启；xh 菜单 16 / 17 / 20 与 `xh help` 的「默认 / 备用」文字同步。逐项核对：源码默认值与本机 `node.env` 的节点开关一致。非节点设置（Noise、拦截规则）不在此范围，保持原默认。 |
 | **Reality 节点集成到 xh 菜单：`xh reality`（菜单 30，卸载顺延为 31）** | v4.9.82 | 按用户要求，把当前 Xray 的全部 Reality 节点纳入 xh 菜单管理：`xh reality show` 列出三条 Reality 节点（Vision、XHTTP、Up-CDN-Down）的状态与参数（SNI、serverNames、shortId 已隐藏、`minClientVer`、`maxTimeDiff`）；`xh reality vision on\|off`、`xh reality xhttp on\|off` 在 443 的 Reality 入站里增删对应一项并同步订阅，`xh reality updown on\|off` 转给 `xh split reality-up`。**开关原理**：443 入站（含到本机 nginx 的 target，CDN 回源要靠它）始终保留；Vision 对应 `clients` 里的 UUID1 项，XHTTP 对应 `fallbacks` 里指向 8001 的那一项。在测试实例上实测：Vision 关 → Vision 客户端不通、XHTTP 客户端仍通；XHTTP 关 → Vision 客户端仍通、XHTTP 客户端不通。新增 `FEATURE_REALITY_VISION` / `FEATURE_REALITY_XHTTP`（默认都开，安装时也生效），入站里的两项带 `// >>xh:` 标记；已安装的老机器配置没有标记，关闭时按结构找到并删除，开启时写成带标记的块。验证：安装模板四种开关组合都过 `xray run -test`，默认渲染与旧模板只多标记注释；对本机配置副本做 关 / 开 / 再关 的往返，结构正确、重复开关返回「无需改动」；订阅文件（`client-config.txt`、两份 Mihomo yaml、「直连择优」组）关 / 开往返与基线字节一致。**注意**：开关会重启 xray，客户端需更新订阅并重连；两条都关时 443 上不再有可用的 Reality 节点（CDN 回源不受影响）。`xh reality show` 在 `minClientVer` 未设置时给出提示：Xray 26.9.x 默认 26.3.27，会拒绝老客户端。 |
 | **Hysteria2 链接默认不带 noise：旧内核解析不了 `noise.exp`** | v4.9.81 | 用户反馈 Hysteria2 节点在 v2rayN 里「运行内核失败」。原因：v4.9.80 让链接 `fm` 里带上了 Noise 的 `exp` 项，这个类型是 Xray 26.9.30 才有的；用 26.3.27、26.7.28、26.9.9 三个内核实测，带 noise 的配置全部 `failed to build outbound config`，去掉 noise 后全部通过，而 v2rayN 自带的内核比 26.9.30 老。现在新增开关 `FEATURE_NOISE_LINKS`（默认 `false`）：**服务端入站的 noise 保持不变**（它只是发送方行为，老客户端不受影响），链接里默认不再带 noise；确认所有客户端内核都 >= 26.9.30 后再 `xh noise links on`。本机已执行 `xh noise links off`：订阅里 Hysteria2 链接不再带 noise，没有重启 Xray；用三个旧内核对当前全部 7 条链接做配置解析都通过，用真实链接复测两条 Hysteria2 都通（约 0.05–0.08 秒）。另外核对了 vless 五条链接（含 H3 链接里放大的 QUIC 接收窗口）在这三个旧内核上也都能解析。 |
 | **`xh noise` 现在同步客户端链接，新增 `xh noise sync`** | v4.9.80 | 此前 `xh noise on/off/set` 只改服务端 Hysteria2 入站和备用节点库里的入站文本，客户端 `client-config.txt` 里 Hysteria2 链接的 `fm` 参数没跟着变：开关写着开、链接里却没有 noise。现在开 / 关 / 改模板时会同步改 `client-config.txt` 与备用节点库里那份链接的 `fm`（在 `udp` 数组最前面放 `noise` 项，保留 `salamander` 与 `quicParams`，其余链接一行不动）；新增 `xh noise sync`，只按当前开关把链接对齐，不重启 Xray。输出与安装脚本渲染的 `fm` 逐字相同，关闭后回到原样。本机已执行：两条 Hysteria2 链接带上 noise，用真实链接复测都通（带 noise 约 0.10 秒、去掉 noise 约 0.07 秒，Noise 的 15–45ms 延迟会让握手慢几十毫秒）。Mihomo / 小火箭没有 finalmask，不受影响。同时把本机 `node.env` 里与实际不符的 `FEATURE_H2_DIRECT` 对齐成 `true`（Direct-H2 入站、订阅节点、Mihomo 条目本来就都在）。 |

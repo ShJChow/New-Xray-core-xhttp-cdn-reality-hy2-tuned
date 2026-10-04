@@ -390,7 +390,7 @@ CLIENTEOF
 # 删掉 CDN 节点关闭后留下的空行，保证 client-config.txt 每行都是一条可用节点
 sed -i '/^[[:space:]]*$/d' "$USER_HOME/client-config.txt"
 # Reality 两个直连节点的行写在模板里（不是变量），关闭时按节点名删行
-[[ "${FEATURE_REALITY_VISION:-true}" == true ]] || sed -i '/#VLESS-Reality-Vision-Direct/d' "$USER_HOME/client-config.txt"
+[[ "${FEATURE_REALITY_VISION:-false}" == true ]] || sed -i '/#VLESS-Reality-Vision-Direct/d' "$USER_HOME/client-config.txt"
 [[ "${FEATURE_REALITY_XHTTP:-true}" == true ]] || sed -i '/#VLESS-Reality-XHTTP-Direct/d' "$USER_HOME/client-config.txt"
 
 # v2rayN TUN 绕行清单。**不能并进 client-config.txt**——那份文件会被整体

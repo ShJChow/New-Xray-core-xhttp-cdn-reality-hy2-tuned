@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="4.9.82"
+PROJECT_VERSION="4.9.83"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：升级至最新稳定/前沿版 v26.9.30（具备 XDRIVE 云盘代理、MASQUE、Finalmask Noise exp、WFP 防泄露等特性）。
 XRAY_DEFAULT_VERSION="26.9.30"
@@ -99,12 +99,12 @@ HY2_H3_PORT=${HY2_H3_PORT:-}
 HY2_PORT=${HY2_PORT:-}
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# v4.9.78 起默认关闭（备用节点，TCP CDN 兜底）；需要时 FEATURE_CDN_H2=true 或装好后 xh cdnh2 on。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
+# v4.9.83 起默认开启（与本机当前节点一致，TCP 443 经 CDN）；不需要时 FEATURE_CDN_H2=false 或装好后 xh cdnh2 off。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
-# v4.9.71 起默认开启；不需要时 FEATURE_CDN_H3=false 或装好后 xh cdnh3 off。
-FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
+# v4.9.83 起默认关闭（备用节点，UDP 443 经 CDN）；需要时 FEATURE_CDN_H3=true 或装好后 xh cdnh3 on。
+FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
 
 # FEATURE_BLOCK_CN / FEATURE_BLOCK_ADS（v4.9.53，默认关闭）：出站屏蔽回国 IP（geoip:cn）/ 广告域名
 # （geosite:category-ads-all），参考 zxcvos/Xray-script 的可选规则。运行期用 xh block cn|ads on|off 切换。
@@ -120,8 +120,8 @@ REALITY_MAX_TIME_DIFF=${REALITY_MAX_TIME_DIFF:-}
 FEATURE_REALITY_SPX=${FEATURE_REALITY_SPX:-true}
 
 # FEATURE_H2_DIRECT（v4.7.0 新增）：h3-direct 的 TCP 孪生体（监听 TCP 8445）。
-# 默认关闭（保持 6 节点布局），需要时可通过 FEATURE_H2_DIRECT=true 开启。
-FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-false}
+# v4.9.83 起默认开启（TCP 直连节点 Direct-H2，监听 TCP 8445）；不需要时 FEATURE_H2_DIRECT=false 或装好后 xh h2direct off。
+FEATURE_H2_DIRECT=${FEATURE_H2_DIRECT:-true}
 
 # FEATURE_REALITY_UP_CDN_DOWN（v4.9.64 起默认开启）：上下行分离节点
 # VLESS-Reality-Up-CDN-Down（上行 Reality 直连 443 / 下行 CDN H2 443）。
@@ -181,9 +181,9 @@ FEATURE_NOISE_EXP=${FEATURE_NOISE_EXP:-false}
 # 确认所有客户端内核都 >= 26.9.30 后再开：xh noise links on。
 FEATURE_NOISE_LINKS=${FEATURE_NOISE_LINKS:-false}
 
-# FEATURE_REALITY_VISION / FEATURE_REALITY_XHTTP（v4.9.82，默认都开）：Reality 443 入站上的两个直连节点。
+# FEATURE_REALITY_VISION / FEATURE_REALITY_XHTTP（v4.9.82，Vision 默认关闭、XHTTP 默认开启，与本机当前节点一致）：Reality 443 入站上的两个直连节点。
 # 关闭 = 服务端去掉对应的 clients 项 / fallback 项并从订阅里移除节点；装好后用 xh reality vision|xhttp on|off 切换。
-FEATURE_REALITY_VISION=${FEATURE_REALITY_VISION:-true}
+FEATURE_REALITY_VISION=${FEATURE_REALITY_VISION:-false}
 FEATURE_REALITY_XHTTP=${FEATURE_REALITY_XHTTP:-true}
 NOISE_EXP_PACKET=${NOISE_EXP_PACKET:-"<b 16030100><r 32><t><c><rd 8>"}
 NOISE_EXP_DELAY=${NOISE_EXP_DELAY:-"10-50"}
