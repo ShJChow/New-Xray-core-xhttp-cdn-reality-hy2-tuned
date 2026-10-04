@@ -681,6 +681,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'XDRIVE_CLIENT_SECRET=%q\n'   "${XDRIVE_CLIENT_SECRET:-}"
   printf 'XDRIVE_REFRESH_TOKEN=%q\n'   "${XDRIVE_REFRESH_TOKEN:-}"
   printf 'FEATURE_NOISE_EXP=%q\n'      "${FEATURE_NOISE_EXP:-false}"
+  printf 'FEATURE_NOISE_LINKS=%q\n'    "${FEATURE_NOISE_LINKS:-false}"
   printf 'NOISE_EXP_PACKET=%q\n'       "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
   printf 'NOISE_EXP_DELAY=%q\n'        "${NOISE_EXP_DELAY:-10-50}"
   if [[ "$FEATURE_XPADDING" == true ]]; then

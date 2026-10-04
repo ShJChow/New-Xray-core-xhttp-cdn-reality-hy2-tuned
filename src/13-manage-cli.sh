@@ -3113,7 +3113,7 @@ sync_noise_links() {
   [[ -f "${ALL_STORE_DIR}/client-config.txt" ]] && files+=("${ALL_STORE_DIR}/client-config.txt")
   [[ ${#files[@]} -gt 0 ]] || { warn "没找到 client-config.txt，链接未同步"; return 0; }
   for f in "${files[@]}"; do
-    python3 - "$f" "${FEATURE_NOISE_EXP:-false}" "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}" "${NOISE_EXP_DELAY:-10-50}" <<'NLPY' || warn "同步 ${f} 里的 Noise 链接参数失败"
+    python3 - "$f" "$([[ "${FEATURE_NOISE_EXP:-false}" == true && "${FEATURE_NOISE_LINKS:-false}" == true ]] && echo true || echo false)" "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}" "${NOISE_EXP_DELAY:-10-50}" <<'NLPY' || warn "同步 ${f} 里的 Noise 链接参数失败"
 import json, os, re, sys
 from urllib.parse import quote, unquote
 
@@ -3233,6 +3233,7 @@ cmd_noise() {
       echo -e "    ${MANAGE_CMD} noise off                # 关闭 Noise 动态混淆"
       echo -e "    ${MANAGE_CMD} noise set \"<exp>\" [延时]  # 自定义混淆模板与延时"
       echo -e "    ${MANAGE_CMD} noise sync               # 只按当前开关把客户端链接对齐（不重启 Xray）"
+      echo -e "    ${MANAGE_CMD} noise links on|off       # 链接里是否带 noise（默认不带；需要客户端内核 >= 26.9.30）"
       echo ""
       ;;
     on)
@@ -3287,6 +3288,25 @@ cmd_noise() {
       info "Noise 混淆模板已更新！"
       cmd_resub
       ;;
+    links)
+      # 链接里是否带 noise：服务端 noise 开着也可以不带（老客户端不受影响）。noise.exp 需要客户端内核 >= 26.9.30。
+      case "${2:-show}" in
+        show|status)
+          echo -e "  链接里带 noise:       $([[ "${FEATURE_NOISE_LINKS:-false}" == true ]] && echo "${GREEN}是${NC}" || echo "${YELLOW}否（默认，兼容老内核）${NC}")"
+          echo -e "  ${MANAGE_CMD} noise links on|off   # 需要客户端内核 >= 26.9.30，否则 v2rayN 会报「运行内核失败」"
+          ;;
+        on)
+          [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存状态"
+          warn "链接里的 noise.exp 需要客户端 Xray 内核 >= 26.9.30；v2rayN 自带内核更老时 Hysteria2 节点会「运行内核失败」"
+          update_node_env FEATURE_NOISE_LINKS true; export FEATURE_NOISE_LINKS=true
+          sync_noise_links; info "已让 Hysteria2 链接带上 noise"; cmd_resub ;;
+        off)
+          [[ -f "$NODE_ENV_FILE" ]] || fail "未找到 ${NODE_ENV_FILE}，无法保存状态"
+          update_node_env FEATURE_NOISE_LINKS false; export FEATURE_NOISE_LINKS=false
+          sync_noise_links; info "已去掉 Hysteria2 链接里的 noise（服务端 noise 不变，不重启 Xray）"; cmd_resub ;;
+        *) echo "用法: ${MANAGE_CMD} noise links [show|on|off]" ;;
+      esac
+      ;;
     sync)
       # 只按当前开关把客户端链接的 fm 对齐（不动服务端、不重启 Xray）
       sync_noise_links
@@ -3294,7 +3314,7 @@ cmd_noise() {
       cmd_resub
       ;;
     *)
-      echo "用法: ${MANAGE_CMD} noise [show|on|off|sync|set <packet> [delay]]"
+      echo "用法: ${MANAGE_CMD} noise [show|on|off|links|sync|set <packet> [delay]]"
       ;;
   esac
 }
@@ -3495,7 +3515,7 @@ xray-xhttp 管理命令
   xh hy2 obfs [show|on|off]         Hysteria2 混淆节点（salamander 混淆，需先开 hy2；别名: xh hy2obfs）
   xh masque [show|on|off]           MASQUE 标准 L3 隧道 (RFC 9484 CONNECT-IP, UDP/TCP 8447)
   xh xdrive [show|setup|on|off]     XDRIVE 网盘穿透代理 (Google Drive 中继，零公网 IP 穿透)
-  xh noise [show|on|off|sync|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
+  xh noise [show|on|off|links|sync|set <exp>]  Finalmask Noise exp 动态混淆 (抗 DPI 模板标签)
   xh split [show|reality-up on|off|cdn-up on|off]  上下行分离两条（纯客户端链接；两条都是默认关闭的备用节点）
   xh block [show|cn on|off|ads on|off]  出站屏蔽回国 IP / 广告域名（默认关闭）
   xh timediff [show|on [毫秒]|off]  Reality maxTimeDiff 时间差校验（默认关闭）

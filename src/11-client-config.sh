@@ -339,7 +339,9 @@ hy2_client_fm_param() {
   [[ -n "$mport" ]] && qp+=",\"udpHop\":{\"ports\":\"${mport//:/-}\",\"interval\":\"30\"}"
   qp+=',"keepAlivePeriod":10'
   local noise_item=""
-  if [[ "${FEATURE_NOISE_EXP:-false}" == true ]]; then
+  # 链接里的 noise 项只在 FEATURE_NOISE_LINKS=true 时写：noise 的 exp 类型是 Xray 26.9.30 才有的，
+  # 26.3.27 / 26.7.28 / 26.9.9 的客户端内核解析到它会「failed to build outbound config」，v2rayN 报「运行内核失败」。
+  if [[ "${FEATURE_NOISE_EXP:-false}" == true && "${FEATURE_NOISE_LINKS:-false}" == true ]]; then
     noise_item="{\"type\":\"noise\",\"settings\":{\"noise\":[{\"type\":\"exp\",\"packet\":\"${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}\",\"delay\":\"${NOISE_EXP_DELAY:-10-50}\"}]}}"
   fi
   if [[ -n "$obfs" ]]; then
