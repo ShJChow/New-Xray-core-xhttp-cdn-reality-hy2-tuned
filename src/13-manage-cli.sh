@@ -1932,12 +1932,68 @@ nginx_verify_pgp() {
   return $ok
 }
 
+# nginx 只接受 HTTP/2（请求层）：开 = 在两个真实 server 块里写入 xh-h2only 标记块，关 = 整块删除。
+# nginx 的 ALPN 握手里始终会列出 http/1.1，没有指令可以去掉；这里是对 HTTP/1.x 请求直接 return 444。
+# 例外：/sub/ 订阅页与 /.well-known/（部分订阅客户端只会 HTTP/1.1）。
+# 注意：经 Cloudflare 回源时 CF 对普通页面可能用 HTTP/1.1，打开 h2only 后用浏览器访问 CDN 域名首页会看到 CF 的 52x 错误页；
+# xhttp / gRPC 流量本来就是 HTTP/2，不受影响。
+nginx_h2only() {
+  local act="${1:-show}" conf="/etc/nginx/nginx.conf" cur=off tmp bak
+  [[ -f "$conf" ]] || fail "未找到 ${conf}"
+  grep -q '# >>xh-h2only' "$conf" && cur=on
+  case "$act" in
+    show|status)
+      echo -e "${CYAN}=== nginx 只接受 HTTP/2 ===${NC}"
+      [[ "$cur" == on ]] && echo -e "  当前状态:  ${GREEN}已开启${NC}（HTTP/1.x 请求被断开，/sub/ 例外）" || echo -e "  当前状态:  ${YELLOW}未开启${NC}"
+      echo -e "  ${MANAGE_CMD} nginx h2only on|off"
+      return 0 ;;
+    on|off) ;;
+    *) echo "用法: ${MANAGE_CMD} nginx h2only [show|on|off]"; return 1 ;;
+  esac
+  [[ "$cur" == "$act" ]] && { info "nginx h2only 本来就是 ${act}"; return 0; }
+  tmp="${conf}.h2only-tmp"; bak="${conf}.h2only.bak"
+  python3 - "$conf" "$tmp" "$act" <<'H2PY' || { rm -f "$tmp"; fail "改写 nginx 配置失败，未做任何修改"; }
+import re, sys
+src, dst, act = sys.argv[1:4]
+s = open(src, encoding='utf-8').read()
+BLOCK = (
+    '        # >>xh-h2only\n'
+    '        # 只接受 HTTP/2：HTTP/1.x 请求直接断开。/sub/ 与 /.well-known/ 例外。xh nginx h2only off 可关闭。\n'
+    '        set $h2only 1;\n'
+    '        if ($server_protocol = "HTTP/2.0") { set $h2only 0; }\n'
+    '        if ($uri ~ "^/(sub|\\.well-known)/") { set $h2only 0; }\n'
+    '        if ($h2only) { return 444; }\n'
+    '        # <<xh-h2only\n')
+if act == 'off':
+    s, n = re.subn(r'[ \t]*# >>xh-h2only\n.*?# <<xh-h2only\n', '', s, flags=re.S)
+else:
+    line = '        http2        on;\n'
+    if s.count(line) < 1:
+        sys.stderr.write('没找到 http2 on 行（配置不是由本脚本生成？）\n'); sys.exit(1)
+    s = s.replace(line, line + BLOCK)
+open(dst, 'w', encoding='utf-8').write(s)
+H2PY
+  if ! nginx -t -c "$tmp" >/dev/null 2>&1; then
+    nginx -t -c "$tmp" 2>&1 | tail -3; rm -f "$tmp"; fail "nginx 配置校验失败，已放弃，未做任何修改"
+  fi
+  cp -a "$conf" "$bak"
+  chown --reference="$conf" "$tmp" 2>/dev/null || true; chmod --reference="$conf" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$conf"
+  if nginx -t >/dev/null 2>&1 && nginx -s reload 2>/dev/null; then
+    info "nginx h2only 已$([[ "$act" == on ]] && echo 开启 || echo 关闭)（nginx 已重载，Xray 没有重启，客户端不需要重连）"
+  else
+    cp -a "$bak" "$conf"; nginx -s reload 2>/dev/null || true
+    fail "nginx 重载失败，已回滚到修改前的配置"
+  fi
+}
+
 cmd_nginx() {
   local action="${1:-show}" a
   local bin cur latest
   bin=$(command -v nginx) || fail "未找到 nginx"
   cur=$("$bin" -v 2>&1 | sed -n 's|.*nginx/||p')
   case "$action" in
+    h2only) shift; nginx_h2only "$@"; return $? ;;
     show|status)
       latest=$(nginx_latest_mainline)
       echo "nginx 当前: ${cur}   mainline 最新: ${latest:-查询失败}"
@@ -3362,6 +3418,7 @@ xray-xhttp 管理命令
   xh ecn [show|on|off]              TCP ECN (显式拥塞通知) 开关与状态查看
   xh cert [show|dnscf]              证书续期方式查看 / 切换为 Cloudflare DNS-01（CDN 走代理时必需）
   xh nginx [show|check|update]      nginx 版本 / 检查新版 / 手动更新到最新 mainline（校验 PGP 签名，失败回滚）
+  xh nginx h2only [show|on|off]     nginx 只接受 HTTP/2（HTTP/1.x 请求断开，/sub/ 例外）
   xh cdnh2 [show|on|off]            CDN TCP(h2) 备用节点开关与订阅同步（默认关闭）
   xh cdnh3 [show|on|off]            CDN QUIC(h3) 节点开关与订阅同步（默认开启）
   xh h2direct [show|on|off]         备用节点 XHTTP-Direct-H2（TCP 直连），开启时加服务端入站并放行端口

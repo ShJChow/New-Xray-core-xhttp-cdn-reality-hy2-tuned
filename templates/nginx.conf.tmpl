@@ -147,6 +147,14 @@ http {
     server {
         listen       127.0.0.1:8003 ssl;
         http2        on;
+        # >>xh-h2only
+        # 只接受 HTTP/2：HTTP/1.x 请求直接断开（nginx 无法在 ALPN 层去掉 http/1.1，只能在请求层拒绝）。
+        # /sub/ 订阅页与 /.well-known/ 例外：部分订阅客户端只会 HTTP/1.1。xh nginx h2only off 可关闭。
+        set \$h2only 1;
+        if (\$server_protocol = "HTTP/2.0") { set \$h2only 0; }
+        if (\$uri ~ "^/(sub|\.well-known)/") { set \$h2only 0; }
+        if (\$h2only) { return 444; }
+        # <<xh-h2only
         server_name  ${REALITY_DOMAIN};
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
@@ -187,6 +195,14 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
     server {
         listen       127.0.0.1:8003 ssl;
         http2        on;
+        # >>xh-h2only
+        # 只接受 HTTP/2：HTTP/1.x 请求直接断开（nginx 无法在 ALPN 层去掉 http/1.1，只能在请求层拒绝）。
+        # /sub/ 订阅页与 /.well-known/ 例外：部分订阅客户端只会 HTTP/1.1。xh nginx h2only off 可关闭。
+        set \$h2only 1;
+        if (\$server_protocol = "HTTP/2.0") { set \$h2only 0; }
+        if (\$uri ~ "^/(sub|\.well-known)/") { set \$h2only 0; }
+        if (\$h2only) { return 444; }
+        # <<xh-h2only
         server_name  ${CDN_DOMAIN};
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
