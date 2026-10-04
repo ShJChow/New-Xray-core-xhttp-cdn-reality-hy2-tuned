@@ -54,7 +54,9 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   # v4.9.27：同时下发 Hysteria2-H3-Direct（UDP 443 无混淆）。小火箭原生支持 Hysteria2，
   # 此前只匹配带 Obfs 的那条，新节点在新装机器上会漏掉。
   # v4.9.49：Hy2-H3 链接带 v2rayN 的 fm（finalmask JSON）参数，小火箭解析不了复杂 URI，剔除
-  grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//' || true
+  # 小火箭专属：1) 去掉 fm（finalmask JSON）；2) type=raw 改成 type=tcp——raw 是 Xray 新叫法，小火箭只认 tcp，
+  # 不改时 Reality 节点在小火箭里连不上，而 v2rayN 正常（对 Xray 内核两者等价）；3) 去掉 spx（纯客户端参数，可省）。
+  grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//; s/&type=raw(&|#)/\&type=tcp\1/; s/&spx=[^&#]*//' || true
   # v4.9.29：8001 开了 vlessenc（FEATURE_XHTTP_VLESSENC）时小火箭连不上 CDN 节点，不再附带
   if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
     echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up#VLESS-XHTTP-CDN-H2"
