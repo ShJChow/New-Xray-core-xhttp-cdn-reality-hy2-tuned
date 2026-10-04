@@ -126,11 +126,25 @@ else
 fi
 
 XMUX_ENC="%22xmux%22%3A%7B%22maxConcurrency%22%3A%2216-32%22%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+# 经 CDN 的腿用 maxConnections=3（Xray v26.9.x 客户端的默认值），不用 maxConcurrency：两者不能同时出现。
+# 本机经 Cloudflare 回连测试（8 路并行下载，每组 2 轮）：h2 下 maxConnections 3 / 6 约 413 / 426 Mbps，
+# maxConcurrency 16-32 约 344–359 Mbps；h3 下 391 / 394 对 358 / 373 Mbps。只测了经 CDN 的 Xray 客户端，
+# 所以只用在 CDN 腿；直连与 Reality 腿仍用上面的 XMUX_ENC。上传方向波动太大，没有结论。
+XMUX_CDN_ENC="%22xmux%22%3A%7B%22maxConnections%22%3A3%2C%22cMaxReuseTimes%22%3A0%2C%22hMaxRequestTimes%22%3A%22600-900%22%2C%22hMaxReusableSecs%22%3A%221800-3000%22%2C%22hKeepAlivePeriod%22%3A0%7D"
+# XHTTP/3（Direct-H3、CDN-H3）下载方向吃的是**客户端**的 QUIC 接收窗口：长 RTT + 丢包时，默认窗口会把吞吐卡住。
+# 用链接的 fm（finalmask）参数把窗口放大：流 初始 4MB / 上限 32MB，连接 初始 8MB / 上限 64MB。
+# 实测（netns + netem，RTT 160ms、下行 1% 丢包、限速 300Mbit，Xray 26.9.30 客户端下载 40MB，每组 3 轮中位数）：
+#   默认窗口 109–119 Mbps（5 次）；8MB/16MB 127；16MB/32MB 168；32MB/64MB 196–215。
+#   RTT 60ms、0.5% 丢包时各档都是 264–270 Mbps，没有差别，所以窗口只是上限、不拖慢近距离线路。
+# 同一轮实测里 quicParams.bbrProfile（conservative / standard / aggressive）对 XHTTP/3 没有可测差别，所以不设。
+# 只放大客户端（接收方）窗口；服务端不放大，避免陌生客户端让服务端按每连接 64MB 缓冲。
+# 只测了 Direct-H3；CDN-H3 的 QUIC 是客户端到 Cloudflare 边缘，同样的窗口语义，但边缘一侧无法用 netem 复现，未单独测。
+XH3_FM_PARAM="&fm=$(rawurlencode '{"quicParams":{"initStreamReceiveWindow":4194304,"maxStreamReceiveWindow":33554432,"initConnectionReceiveWindow":8388608,"maxConnectionReceiveWindow":67108864}}')"
 
 if [[ "$FEATURE_XPADDING" == true ]]; then
   XPAD_FIELDS_ENC="%22xPaddingBytes%22%3A%22100-1000%22%2C%22xPaddingObfsMode%22%3Atrue%2C%22xPaddingMethod%22%3A%22${XHTTP_PADDING_METHOD}%22%2C%22xPaddingPlacement%22%3A%22${XHTTP_PADDING_PLACEMENT}%22%2C%22xPaddingHeader%22%3A%22${XHTTP_PADDING_HEADER}%22%2C%22xPaddingKey%22%3A%22${XHTTP_PADDING_KEY}%22"
   XPAD_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C${XMUX_ENC}%7D"
-  XPAD_CDN_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_CDN_ENC}%7D"
 
   MIHOMO_XPADDING_XHTTP_BLOCK=$(cat <<EOF
 
@@ -171,7 +185,7 @@ EOF
 else
   XPAD_FIELDS_ENC=""
   XPAD_EXTRA_ENC="%7B${XMUX_ENC}%7D"
-  XPAD_CDN_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D"
+  XPAD_CDN_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_CDN_ENC}%7D"
   MIHOMO_XPADDING_XHTTP_BLOCK=""
   MIHOMO_XPADDING_DOWNLOAD_BLOCK=""
   MIHOMO_SC_MIN_POSTS_BLOCK=""
@@ -185,11 +199,11 @@ else
   DOWNLOAD_TLS_ENC="%22tlsSettings%22%3A%7B%22serverName%22%3A%22${CDN_DOMAIN}%22%2C%22allowInsecure%22%3Afalse%2C%22alpn%22%3A%5B%22h2%22%5D%2C%22fingerprint%22%3A%22chrome%22%7D"
 fi
 if [[ "$FEATURE_XPADDING" == true ]]; then
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_CDN_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
   XPAD_SPLIT_EXTRA_ENC="%7B${XPAD_FIELDS_ENC}%2C%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 else
-  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%7D%7D"
+  DOWNLOAD_XHTTP_ENC="%22xhttpSettings%22%3A%7B%22host%22%3A%22${CDN_DOMAIN}%22%2C%22path%22%3A%22${XHTTP_PATH_ENC}%22%2C%22mode%22%3A%22auto%22%2C%22extra%22%3A%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_CDN_ENC}%7D%7D"
   DOWNLOAD_SETTINGS_ENC="%22downloadSettings%22%3A%7B%22address%22%3A%22${CDN_DOMAIN}%22%2C%22port%22%3A443%2C%22network%22%3A%22xhttp%22%2C%22security%22%3A%22tls%22%2C${DOWNLOAD_TLS_ENC}%2C${DOWNLOAD_XHTTP_ENC}%7D"
   XPAD_SPLIT_EXTRA_ENC="%7B%22scMinPostsIntervalMs%22%3A${XHTTP_SC_MIN_POSTS_MS}%2C${XMUX_ENC}%2C${DOWNLOAD_SETTINGS_ENC}%7D"
 fi
@@ -273,7 +287,7 @@ fi
 # 写成 stream-up 会拒绝 auto / packet-up 的上传（实测这两种客户端全部不通），用户把链接改回 auto 就会断。
 # 直连入站只收 stream-up。
 if [[ "$FEATURE_H3_DIRECT" == true ]]; then
-  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}#VLESS-XHTTP-Direct-H3${NODE_SUFFIX}"
+  H3_DIRECT_NODE_LINE="vless://${UUID2}@${VPS_IP_URI}:${H3_PORT}?encryption=${VLESSENC_ENCRYPTION}&security=tls&sni=${REALITY_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0&type=xhttp&path=${XHTTP_PATH}&mode=stream-up${XPAD_EXTRA_ENC:+&extra=${XPAD_EXTRA_ENC}}${XH3_FM_PARAM}#VLESS-XHTTP-Direct-H3${NODE_SUFFIX}"
 else
   H3_DIRECT_NODE_LINE=""
 fi
@@ -291,7 +305,7 @@ fi
 # HTTP/3（transport/xhttp/client.go:159），列表里多一个值就退回 TCP。
 # 默认关闭（v4.9.64；FEATURE_CDN_H3=true 或 xh cdnh3 on 开启）。
 if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
-  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
+  H3_CDN_NODE_LINE="vless://${UUID2}@${CDN_DOMAIN}:443?encryption=${XHTTP_ENCRYPTION}&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&insecure=0&allowInsecure=0${CDN_ECH_QUERY_ENC:+&ech=${CDN_ECH_QUERY_ENC}}&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up&extra=${XPAD_CDN_EXTRA_ENC}${XH3_FM_PARAM}#VLESS-XHTTP-CDN-H3${NODE_SUFFIX}"
 else
   H3_CDN_NODE_LINE=""
 fi

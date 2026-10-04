@@ -1,0 +1,149 @@
+import json, os, sys
+from urllib.parse import urlparse, parse_qs, unquote
+
+# 由 client-config.txt 里的 vless:// 节点生成 Xray 原生 TUN 客户端配置（Xray-core >= 26.9.30）。
+# 用法：xray-tun-gen <client-config.txt> <输出目录> <REALITY_DOMAIN> <CDN_DOMAIN> <VPS_IP>
+# 输出：xray-tun-windows.json / xray-tun-linux.json / xray-tun-macos.json
+#
+# TUN 入站关键项（来自 Xray 文档 inbounds/tun）：
+#   autoSystemRoutingTable  Xray 自己把 0.0.0.0/0 等路由加进系统路由表（Windows / macOS / Linux）
+#   autoOutboundsInterface  "auto"：Xray 的出站 socket 自动绑到物理网卡，自己发出的流量不会再被 TUN 捞回，
+#                           等于旧版需要手工配置的「节点 IP 直连 / 防回环」，不用再给服务器 IP 加直连路由
+#   autoSystemWfpBlockLeak  仅 Windows：用 WFP 过滤器封死 DNS 泄漏与 TUN 配置错误时的明文外泄
+# 另外：节点域名与 IP 仍写进 direct 规则，作为第二道保险（DNS 解析本身也不走 TUN）。
+
+src, outdir, reality_domain, cdn_domain, vps_ip = sys.argv[1:6]
+
+
+def first(q, k, d=""):
+    return q.get(k, [d])[0]
+
+
+def build_outbound(link):
+    u = urlparse(link)
+    if u.scheme != "vless":
+        return None
+    q = parse_qs(u.query, keep_blank_values=True)
+    name = unquote(u.fragment)
+    typ = first(q, "type", "tcp")
+    network = {"tcp": "raw", "raw": "raw", "xhttp": "xhttp"}.get(typ)
+    if network is None:
+        return None
+    sec = first(q, "security", "none")
+    ss = {"network": network, "security": sec}
+    if sec == "reality":
+        ss["realitySettings"] = {
+            "serverName": first(q, "sni"),
+            "fingerprint": first(q, "fp", "chrome"),
+            "publicKey": first(q, "pbk"),
+            "shortId": first(q, "sid"),
+            "spiderX": unquote(first(q, "spx")),
+        }
+    elif sec == "tls":
+        tls = {"serverName": first(q, "sni", u.hostname), "fingerprint": first(q, "fp", "chrome")}
+        if first(q, "alpn"):
+            tls["alpn"] = first(q, "alpn").split(",")
+        if first(q, "ech"):
+            tls["echConfigList"] = first(q, "ech")
+        ss["tlsSettings"] = tls
+    else:
+        return None
+    if first(q, "fm"):
+        try:
+            ss["finalmask"] = json.loads(first(q, "fm"))
+        except ValueError:
+            pass
+    if network == "xhttp":
+        xs = {"path": unquote(first(q, "path", "/")), "mode": first(q, "mode", "auto")}
+        if first(q, "host"):
+            xs["host"] = first(q, "host")
+        if first(q, "extra"):
+            xs["extra"] = json.loads(first(q, "extra"))
+        ss["xhttpSettings"] = xs
+    user = {"id": u.username, "encryption": first(q, "encryption", "none")}
+    if first(q, "flow"):
+        user["flow"] = first(q, "flow")
+    return {
+        "tag": name,
+        "protocol": "vless",
+        "settings": {"vnext": [{"address": u.hostname, "port": u.port or 443, "users": [user]}]},
+        "streamSettings": ss,
+    }
+
+
+outbounds = []
+for line in open(src, encoding="utf-8"):
+    line = line.strip()
+    if not line:
+        continue
+    ob = build_outbound(line)
+    if ob:
+        outbounds.append(ob)
+if not outbounds:
+    sys.stderr.write("没有可用的 vless:// 节点，未生成 Xray TUN 配置\n")
+    sys.exit(2)
+
+direct_domains = ["full:" + d for d in (reality_domain, cdn_domain) if d]
+direct_ips = ["geoip:private"]
+if vps_ip:
+    direct_ips.append(vps_ip)
+
+# TUN 入站按系统区别：只写该系统确实支持、且有意义的字段
+TUN = {
+    "linux": {"name": "xray-tun", "mtu": 1500, "gateway": ["198.18.0.1/16"],
+              "autoSystemRoutingTable": ["0.0.0.0/0"], "autoOutboundsInterface": "auto"},
+    "macos": {"mtu": 1500,
+              "autoSystemRoutingTable": ["0.0.0.0/0"], "autoOutboundsInterface": "auto"},
+    "windows": {"desc": "Wintun", "mtu": 1500, "gateway": ["10.0.0.1/16"], "dns": ["1.1.1.1", "8.8.8.8"],
+                "autoSystemRoutingTable": ["0.0.0.0/0"], "autoOutboundsInterface": "auto",
+                "autoSystemWfpBlockLeak": ["dns", "misconfigtun"]},
+}
+
+for osname, tun in TUN.items():
+    cfg = {
+        "log": {"loglevel": "warning"},
+        "dns": {
+            "servers": [
+                {"address": "223.5.5.5", "domains": ["geosite:cn"], "skipFallback": True},
+                "https://1.1.1.1/dns-query",
+                "https://8.8.8.8/dns-query",
+            ],
+            "queryStrategy": "UseIPv4",
+        },
+        "inbounds": [{
+            "tag": "tun-in",
+            "protocol": "tun",
+            "settings": tun,
+            "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"], "routeOnly": True},
+        }],
+        "outbounds": outbounds + [
+            {"tag": "direct", "protocol": "freedom"},
+            {"tag": "block", "protocol": "blackhole"},
+            {"tag": "dns-out", "protocol": "dns"},
+        ],
+        "observatory": {
+            "subjectSelector": ["VLESS-"],
+            "probeUrl": "https://www.gstatic.com/generate_204",
+            "probeInterval": "60s",
+            "enableConcurrency": True,
+        },
+        "routing": {
+            "domainStrategy": "IPIfNonMatch",
+            "balancers": [{"tag": "proxy", "selector": ["VLESS-"], "strategy": {"type": "leastPing"},
+                           "fallbackTag": outbounds[0]["tag"]}],
+            "rules": [
+                {"inboundTag": ["tun-in"], "port": "53", "outboundTag": "dns-out"},
+                {"domain": direct_domains, "outboundTag": "direct"},
+                {"ip": direct_ips, "outboundTag": "direct"},
+                {"domain": ["geosite:cn"], "outboundTag": "direct"},
+                {"ip": ["geoip:cn"], "outboundTag": "direct"},
+                {"network": "tcp,udp", "balancerTag": "proxy"},
+            ],
+        },
+    }
+    path = os.path.join(outdir, "xray-tun-%s.json" % osname)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)

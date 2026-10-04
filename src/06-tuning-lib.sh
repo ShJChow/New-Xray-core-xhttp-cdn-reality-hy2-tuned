@@ -820,6 +820,14 @@ detect_bbr_version() {
   avail=$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)
   case "$avail" in *bbr*) ;; *) echo "not-available"; return ;; esac
 
+  # 内核自己声明的版本最可靠：带 BBRv3 的内核（如 joeyblog 编译版）在 /sys/module/tcp_bbr/version 里写 3。
+  if [ -r /sys/module/tcp_bbr/version ]; then
+    case "$(cat /sys/module/tcp_bbr/version 2>/dev/null)" in
+      3) echo "v3"; return ;;
+      2) echo "v2"; return ;;
+    esac
+  fi
+
   if [ -r /proc/kallsyms ]; then
     if grep -qE ' bbr_(start_bw_probe_down|is_inflight_too_high|skb_marked_lost)$' /proc/kallsyms 2>/dev/null; then
       echo "v3"; return

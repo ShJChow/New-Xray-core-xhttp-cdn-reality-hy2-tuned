@@ -260,7 +260,8 @@ cmd_sub() {
   base="https://${REALITY_DOMAIN}/sub/${token}"
   echo -e "${CYAN}[+] 订阅链接${NC}"
   echo "  V2RayN (全量 base64):    ${base}/v2rayn.txt"
-  echo "  V2RayN (TUN 优化订阅):   ${base}/v2rayn-tun.txt"
+  echo "  V2RayN (TUN 订阅，全部节点): ${base}/v2rayn-tun.txt"
+  echo "  Xray 原生 TUN 配置:      ${base}/xray-tun-{windows,linux,macos}.json  (Xray-core >= 26.9.30)"
   echo "  Shadowrocket (小火箭专属): ${base}/shadowrocket.txt"
   echo "  明文节点（备选）:        ${base}/v2rayn-raw.txt"
   echo "  Mihomo 完整分流:         ${base}/mihomo-full.yaml"
@@ -275,6 +276,16 @@ cmd_sub() {
     echo -e "${YELLOW}[+] V2RayN 全量订阅二维码${NC}"
     qrencode -t ANSIUTF8 -m 1 "${base}/v2rayn.txt"
   fi
+}
+
+# 由 client-config.txt 生成 Xray 原生 TUN 客户端配置（Xray-core >= 26.9.30）：xray-tun-{windows,linux,macos}.json
+# 用法：xray_tun_variants <client-config.txt> <输出目录>
+xray_tun_variants() {
+  local src="$1" outdir="$2"
+  [[ -s "$src" ]] || return 0
+  python3 - "$src" "$outdir" "${REALITY_DOMAIN:-}" "${CDN_DOMAIN:-}" "${VPS_IP:-}" <<'XTUNPY' || warn "Xray TUN 配置生成失败（不影响其它订阅）"
+@@include templates/xray-tun-gen.py.tmpl
+XTUNPY
 }
 
 # 按客户端平台生成 TUN 自适应的 Mihomo 完整分流配置（mihomo-full-<平台>.yaml）。
@@ -321,7 +332,9 @@ cmd_resub() {
   [[ -f "${home}/client-config-mihomo-nodes.yaml" ]] && cp "${home}/client-config-mihomo-nodes.yaml" "${subdir}/mihomo-nodes.yaml"
   mihomo_tun_variants "${home}/client-config-mihomo-full.yaml" "${subdir}"
 
-  # 重新生成 Shadowrocket 专属与 v2rayN TUN 优化订阅
+  xray_tun_variants "${home}/client-config.txt" "${subdir}"
+
+  # 重新生成 Shadowrocket 专属与 v2rayN TUN 订阅
   {
     # v4.9.49：剔除 v2rayN 专用的 fm（finalmask JSON）参数，小火箭解析不了复杂 URI
     grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "${home}/client-config.txt" | sed -E 's/&fm=[^&#]*//' || true
@@ -332,7 +345,7 @@ cmd_resub() {
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
     base64 "${subdir}/shadowrocket-raw.txt" | tr -d '\n' > "${subdir}/shadowrocket.txt"
   fi
-  awk '!/-CDN-|-cdn-/ || /#VLESS-XHTTP-CDN-H3/' "${home}/client-config.txt" > "${subdir}/v2rayn-tun-raw.txt" || true
+  cp "${home}/client-config.txt" "${subdir}/v2rayn-tun-raw.txt" || true   # v4.9.76 起 TUN 订阅含全部节点（原因见 12-subscription.sh）
   if [[ -s "${subdir}/v2rayn-tun-raw.txt" ]]; then
     base64 "${subdir}/v2rayn-tun-raw.txt" | tr -d '\n' > "${subdir}/v2rayn-tun.txt"
   fi

@@ -113,3 +113,28 @@ mihomo / Clash 用户不需要这份清单
   rules 首条 DIRECT           万一进了 TUN 也第一条放出去
   sniffer.skip-dst-address    即使被捞到也不许改写目标地址
 直接用那份配置即可，无需手工添加规则。
+
+==================================================
+Xray 原生 TUN（Xray-core >= 26.9.30，不依赖 v2rayN 的 TUN 实现）
+==================================================
+订阅目录里有三个现成配置，按系统选一个，用 root / 管理员身份运行：
+
+  xray-tun-windows.json   Windows（Wintun；开启 WFP 过滤器封死 DNS 泄漏与 TUN 配置错误时的明文外泄）
+  xray-tun-linux.json     Linux  （接口名 xray-tun）
+  xray-tun-macos.json     macOS  （接口名由 Xray 自动取 utunN）
+
+  下载：订阅链接把末尾的 v2rayn-tun.txt 换成上面的文件名，例如
+        https://${REALITY_DOMAIN}/sub/<你的订阅 token>/xray-tun-linux.json
+  运行：xray run -c xray-tun-linux.json
+
+和旧办法的区别：
+  - autoOutboundsInterface=auto：Xray 自己发出的连接自动绑定到物理网卡，不会再被 TUN 捞回形成环路。
+    所以**不需要**再给服务器 IP / 域名手工加直连路由，也不再有「开 TUN 后节点全部超时」的回环问题。
+  - autoSystemRoutingTable：Xray 自己把 0.0.0.0/0 加进系统路由表，退出时一并清掉。
+  - 配置里包含订阅里全部 vless:// 节点（含 CDN-H2 / CDN-H3 / Reality-Up-CDN-Down），按延迟自动择优
+    （observatory + leastPing），并把 CN 域名 / CN IP / 内网 / 本机服务器地址设为直连，其余走代理。
+  - Hysteria2 节点不在这份配置里（Xray TUN 配置只放 vless 节点）；要用 Hysteria2 请用 v2rayN / Mihomo 的 TUN。
+
+需要的文件：Xray 目录里要有 geoip.dat / geosite.dat（官方发布包自带）。
+已在 Linux（netns）里实测：TUN 自动建好、路由自动加上、6 个节点都存活、非 CN 目标走代理、CN 目标直连、DNS 正常；
+Windows / macOS 两份只做了配置校验（xray run -test），没有在真机上跑过。

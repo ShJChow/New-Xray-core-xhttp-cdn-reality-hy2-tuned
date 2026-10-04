@@ -34,8 +34,19 @@ mihomo_tun_variants() {
   done
 }
 
+# 由 client-config.txt 生成 Xray 原生 TUN 客户端配置（Xray-core >= 26.9.30）：xray-tun-{windows,linux,macos}.json
+# 用法：xray_tun_variants <client-config.txt> <输出目录>
+xray_tun_variants() {
+  local src="$1" outdir="$2"
+  [[ -s "$src" ]] || return 0
+  python3 - "$src" "$outdir" "${REALITY_DOMAIN:-}" "${CDN_DOMAIN:-}" "${VPS_IP:-}" <<'XTUNPY' || warn "Xray TUN 配置生成失败（不影响其它订阅）"
+@@include templates/xray-tun-gen.py.tmpl
+XTUNPY
+}
+
 cp "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR/mihomo-full.yaml"
 mihomo_tun_variants "$USER_HOME/client-config-mihomo-full.yaml" "$SUB_DIR"
+xray_tun_variants "$USER_HOME/client-config.txt" "$SUB_DIR"
 cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
 
 # Shadowrocket 专属订阅（包含小火箭完全兼容的 REALITY、Hy2；若启用 FEATURE_CDN_H2 则附带）
@@ -53,10 +64,11 @@ if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
   base64 "$SUB_DIR/shadowrocket-raw.txt" | tr -d '\n' > "$SUB_DIR/shadowrocket.txt"
 fi
 
-# v2rayN TUN 优化订阅（排除在 TUN 模式下会导致 UDP 53 DNS 丢包超时的纯 CDN 节点；
-# CDN-H3（xh cdnh3 on 开启后）例外，保留——TUN 下需把 CDN 域名加进直连列表，见 client-config-v2rayn-tun.txt。
-# 注意：默认节点 VLESS-Reality-Up-CDN-Down 名字里带 -CDN-，会被这条过滤掉，TUN 订阅默认没有 CDN 节点）
-awk '!/-CDN-|-cdn-/ || /#VLESS-XHTTP-CDN-H3/' "$USER_HOME/client-config.txt" > "$SUB_DIR/v2rayn-tun-raw.txt" || true
+# v2rayN TUN 订阅：v4.9.76 起包含全部节点，不再排除 CDN 节点。
+# 旧规则（排除名字带 -CDN- 的节点）是为旧版 TUN 的 UDP 53 DNS 丢包写的；Xray 26.9.x 的 autoOutboundsInterface
+# 已把 Xray 自己发出的流量绑到物理网卡，不再回环。TUN 下仍需把 CDN 域名与服务器 IP 设为直连，见 client-config-v2rayn-tun.txt。
+# 没在 v2rayN 上实测：若 TUN 下 CDN 节点出现 DNS 超时，把 CDN 域名加进 v2rayN 的直连规则即可。
+cp "$USER_HOME/client-config.txt" "$SUB_DIR/v2rayn-tun-raw.txt" || true
 if [[ -s "$SUB_DIR/v2rayn-tun-raw.txt" ]]; then
   base64 "$SUB_DIR/v2rayn-tun-raw.txt" | tr -d '\n' > "$SUB_DIR/v2rayn-tun.txt"
 fi
@@ -113,8 +125,13 @@ cat > "$SUB_LINKS_FILE" << SUBLINKEOF
 V2RayN 订阅 (base64):
 $V2RAYN_SUB_URL
 
-V2RayN TUN 模式优化订阅 (排除纯 CDN 节点):
+V2RayN TUN 模式订阅 (全部节点，含 CDN 节点):
 $V2RAYN_TUN_SUB_URL
+
+Xray 原生 TUN 配置 (Xray-core >= 26.9.30，按系统选一个文件，root / 管理员运行 xray run -c 文件)：
+${V2RAYN_TUN_SUB_URL%/v2rayn-tun.txt}/xray-tun-windows.json
+${V2RAYN_TUN_SUB_URL%/v2rayn-tun.txt}/xray-tun-linux.json
+${V2RAYN_TUN_SUB_URL%/v2rayn-tun.txt}/xray-tun-macos.json
 
 Shadowrocket 专属订阅 (仅保留完全兼容节点):
 $SHADOWROCKET_SUB_URL
