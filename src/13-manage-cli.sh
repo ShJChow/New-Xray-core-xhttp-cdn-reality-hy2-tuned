@@ -925,9 +925,15 @@ cmd_update() {
   if [[ -n "$target_ver" ]]; then
     latest="${target_ver#v}"
   else
-    # 优先检测最新版本号（含 v26.9.30 等前沿增强版本）
-    latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases" 2>/dev/null \
-      | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    # 默认跟随 pre-release 通道：/releases 列表按时间倒序且含 pre-release，第一项即最新版。
+    # XRAY_CHANNEL=stable 时只取 /releases/latest（官方正式版）。
+    if [[ "${XRAY_CHANNEL:-prerelease}" == "stable" ]]; then
+      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
+        | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    else
+      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases" 2>/dev/null \
+        | grep -m1 '"tag_name"' | cut -d'"' -f4)
+    fi
     latest="${latest#v}"
     [[ -z "$latest" ]] && latest="${XRAY_DEFAULT_VERSION:-26.9.30}"
   fi
@@ -950,22 +956,15 @@ cmd_update() {
   fi
 
   if [[ "$is_prerelease" == "true" ]]; then
-    if [[ "$latest" == "${XRAY_DEFAULT_VERSION:-26.9.30}" || "$latest" == "26.9.30" ]]; then
-      info "目标版本 v${latest} 为项目推荐的增强版本（支持 XDRIVE 云盘代理、MASQUE 等新特性）"
+    if [[ "${XRAY_CHANNEL:-prerelease}" != "stable" ]]; then
+      info "目标版本 v${latest} 为 Pre-release；当前跟随 pre-release 通道（默认；XRAY_CHANNEL=stable 可改回正式版）"
+    elif [[ $auto -eq 1 ]]; then
+      warn "stable 通道的自动更新不安装 Pre-release v${latest}"
+      return 0
     else
-      echo ""
-      warn "============================================================"
-      warn "⚠️ 目标版本 v${latest} 被标记为 Pre-release / 测试版本！"
-      warn "测试版本可能引入实验性更改，请评估客户端兼容性。"
-      warn "============================================================"
-      echo ""
-      if [[ $auto -eq 1 ]]; then
-        warn "自动更新模式已拦截非项目推荐的未知测试版本安装。"
-        return 0
-      else
-        read -rp "确定仍要安装此测试版本吗? [y/N]: " force_reply
-        [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
-      fi
+      warn "目标版本 v${latest} 被标记为 Pre-release / 测试版本，可能引入实验性更改"
+      read -rp "确定仍要安装此测试版本吗? [y/N]: " force_reply
+      [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
     fi
   fi
 

@@ -12,6 +12,16 @@
 XRAY_MIN_VER_UDP="26.3.27"
 
 # ver_ge A B —— A >= B ? 用 sort -V 做版本比较，不做字符串比较
+# 目标 Xray 版本：显式 XRAY_VERSION 优先；否则默认跟随 pre-release 通道取 GitHub 最新 tag，
+# 这样新装节点直接拿到最新特性。XRAY_CHANNEL=stable 取最新正式版；查询失败回退 XRAY_DEFAULT_VERSION。
+resolve_xray_target_ver() {
+  if [[ -n "${XRAY_VERSION:-}" ]]; then printf '%s' "$XRAY_VERSION"; return; fi
+  local url="https://api.github.com/repos/XTLS/Xray-core/releases" tag
+  [[ "${XRAY_CHANNEL:-prerelease}" == "stable" ]] && url="${url}/latest"
+  tag=$(curl -fsSL --max-time 15 "$url" 2>/dev/null | grep -m1 '"tag_name"' | cut -d'"' -f4)
+  printf '%s' "${tag#v}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' && printf '%s' "${tag#v}" || printf '%s' "${XRAY_DEFAULT_VERSION:-26.9.30}"
+}
+
 ver_ge() {
   [[ "$1" == "$2" ]] && return 0
   [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" == "$2" ]]
@@ -175,7 +185,7 @@ install_xray() {
       if [[ "${FEATURE_H3_DIRECT:-false}" == true || "${FEATURE_HY2:-false}" == true ]]; then
         if [[ -n "$cur" ]] && ! ver_ge "$cur" "$XRAY_MIN_VER_UDP"; then
           warn "当前 Xray ${cur} 低于直连 UDP 节点所需的 ${XRAY_MIN_VER_UDP}，正在自动升级..."
-          local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.9.30}}"
+          local target_ver="$(resolve_xray_target_ver)"
           if [[ "$OS_ID" != "alpine" ]]; then
             local install_flag=""
             [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
@@ -211,7 +221,7 @@ install_xray() {
       fi
     fi
     # 默认安装锁定版本（默认 v26.9.30 最新特性版本，支持 XDRIVE、MASQUE 等新特性）
-    local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.9.30}}"
+    local target_ver="$(resolve_xray_target_ver)"
     local install_flag=""
     [[ -n "$target_ver" && "$target_ver" != "latest" ]] && install_flag="--version v${target_ver#v}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install $install_flag -u root
@@ -228,7 +238,7 @@ install_xray() {
 
   command -v unzip >/dev/null 2>&1 || pkg_install unzip
   tmpdir=$(mktemp -d)
-  local target_ver="${XRAY_VERSION:-${XRAY_DEFAULT_VERSION:-26.9.30}}"
+  local target_ver="$(resolve_xray_target_ver)"
   local latest_tag asset_url
   if [[ -n "$target_ver" && "$target_ver" != "latest" ]]; then
     latest_tag="v${target_ver#v}"

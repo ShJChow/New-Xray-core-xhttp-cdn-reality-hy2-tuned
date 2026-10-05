@@ -33,7 +33,7 @@ fi
 # ==================================================
 
 PROJECT_NAME="xray-xhttp"
-PROJECT_VERSION="5.0.0"
+PROJECT_VERSION="5.0.1"
 PROJECT_REPO="ShJChow/New-Xray-core-xhttp-cdn-reality-hy2-tuned"
 # 默认推荐的 Xray-core 版本：升级至最新稳定/前沿版 v26.9.30（具备 XDRIVE 云盘代理、MASQUE、Finalmask Noise exp、WFP 防泄露等特性）。
 XRAY_DEFAULT_VERSION="26.9.30"
@@ -71,6 +71,8 @@ MANAGE_CMD="xh"
 
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
+# Xray-core 通道：prerelease（默认，安装与每周自动更新都取 GitHub 最新含 pre-release 的版本）| stable
+XRAY_CHANNEL=${XRAY_CHANNEL:-prerelease}
 AUTO=${AUTO:-0}
 
 # ==================================================

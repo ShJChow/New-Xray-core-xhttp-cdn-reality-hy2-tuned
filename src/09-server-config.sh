@@ -697,6 +697,7 @@ info "写入 ${NODE_ENV_FILE} ..."
   printf 'FEATURE_NOISE_LINKS=%q\n'    "${FEATURE_NOISE_LINKS:-false}"
   printf 'FEATURE_REALITY_VISION=%q\n'  "${FEATURE_REALITY_VISION:-false}"
   printf 'FEATURE_REALITY_XHTTP=%q\n'   "${FEATURE_REALITY_XHTTP:-true}"
+  printf 'XRAY_CHANNEL=%q\n'   "${XRAY_CHANNEL:-prerelease}"
   printf 'NOISE_EXP_PACKET=%q\n'       "${NOISE_EXP_PACKET:-<b 16030100><r 32><t><c><rd 8>}"
   printf 'NOISE_EXP_DELAY=%q\n'        "${NOISE_EXP_DELAY:-10-50}"
   if [[ "$FEATURE_XPADDING" == true ]]; then
