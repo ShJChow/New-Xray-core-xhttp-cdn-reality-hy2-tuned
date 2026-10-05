@@ -106,7 +106,14 @@ fi
 
 if [[ -n "$XRAY_TCP_CC" ]]; then
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
-  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${XRAY_TCP_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
+  # Reality 443 入站（Reality-Vision / Reality-XHTTP 共用）默认用自适应的 BBR，不用 Brutal：
+  # Brutal 按 /etc/tcp-brutal.rules 的固定速率（auto = 网卡速率，常见 3800 Mbps）发包、不看丢包与线路容量。
+  # v5.0.2 netns 实测（RTT 160ms / 丢包 1% / 300 Mbps）：Brutal 下行 87~88 Mbps，BBR 51~108 Mbps，
+  # 差距在噪声内，没有测出谁更快；改 BBR 是因为它能随线路自适应，不会按固定速率压线路。只测了 Reality-XHTTP。
+  # REALITY_TCP_CC=brutal 可改回 Brutal（需要内核 brutal 模块）。
+  REALITY_CC="${REALITY_TCP_CC:-bbr}"
+  [[ "$AVAIL" == *"$REALITY_CC"* ]] || REALITY_CC="$XRAY_TCP_CC"
+  REALITY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpcongestion":"'"${REALITY_CC}"'","tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
 else
   warn "BBR / Brutal 均不可用，Xray Reality 入站不写 tcpcongestion（TFO / keepalive 照常写入）"
   XRAY_SOCKOPT_JSON=',"sockopt":{"tcpFastOpen":true,"tcpMptcp":true,"tcpKeepAliveIdle":30,"tcpKeepAliveInterval":5,"tcpUserTimeout":300000}'
