@@ -5,3 +5,8 @@ __pycache__/
 *.db
 *.db-journal
 cache.db
+
+# Agent and assistant artifacts
+.agents/
+.claude/
+skills-lock.json
