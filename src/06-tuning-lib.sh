@@ -248,10 +248,10 @@ apply_system_tuning() {
 
   local SOCK_MEM_DEF UDP_MEM_MIN
   if [[ "$MEM_MB" -ge 16384 ]]; then
-    TUNE_TIER="large";  SOCK_MEM_MAX=67108864;  TCP_MEM_MAX=67108864; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="large";  SOCK_MEM_MAX=134217728; TCP_MEM_MAX=134217728; NETDEV_BACKLOG=65536; CONNTRACK_MAX=1048576; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=2097152; UDP_MEM_MIN=131072
   elif [[ "$MEM_MB" -ge 4096 ]]; then
-    TUNE_TIER="medium"; SOCK_MEM_MAX=67108864; TCP_MEM_MAX=33554432; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
+    TUNE_TIER="medium"; SOCK_MEM_MAX=134217728; TCP_MEM_MAX=134217728; NETDEV_BACKLOG=32768; CONNTRACK_MAX=262144; NETDEV_BUDGET=6000; OPTMEM_MAX=131072
     SOCK_MEM_DEF=1048576; UDP_MEM_MIN=65536
   elif [[ "$MEM_MB" -ge 1536 ]]; then
     TUNE_TIER="entry";  SOCK_MEM_MAX=33554432; TCP_MEM_MAX=16777216;  NETDEV_BACKLOG=16384; CONNTRACK_MAX=65536; NETDEV_BUDGET=""; OPTMEM_MAX=65536
@@ -557,9 +557,8 @@ DROPINEOF
   # ---------- Before / After ----------
   echo ""
   local _buf_mb _cap_mb
-  if [[ "$MEM_MB" -ge 16384 ]]; then _buf_mb=128; _cap_mb=128;
-  elif [[ "$MEM_MB" -ge 4096  ]]; then _buf_mb=64; _cap_mb=64;
-  elif [[ "$MEM_MB" -ge 1536  ]]; then _buf_mb=32; _cap_mb=32;
+  if [[ "$MEM_MB" -ge 4096 ]]; then _buf_mb=128; _cap_mb=128;
+  elif [[ "$MEM_MB" -ge 1536 ]]; then _buf_mb=32; _cap_mb=32;
   else _buf_mb=16; _cap_mb=16; fi
 
   echo -e "${YELLOW}[+] 流控调优 Before / After${NC}"
@@ -692,10 +691,10 @@ show_linux_tuning() {
   echo -e "${CYAN}   Linux 客户端千兆 TCP 缓冲区与 BDP 调优指南         ${NC}"
   echo -e "${CYAN}======================================================${NC}"
   cat <<'EOF'
-sudo sysctl -w net.core.rmem_max=67108864
-sudo sysctl -w net.core.wmem_max=67108864
-sudo sysctl -w net.ipv4.tcp_rmem="4096 87380 67108864"
-sudo sysctl -w net.ipv4.tcp_wmem="4096 65536 67108864"
+sudo sysctl -w net.core.rmem_max=134217728
+sudo sysctl -w net.core.wmem_max=134217728
+sudo sysctl -w net.ipv4.tcp_rmem="4096 87380 134217728"
+sudo sysctl -w net.ipv4.tcp_wmem="4096 65536 134217728"
 sudo sysctl -w net.ipv4.tcp_limit_output_bytes=4194304
 sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0
 sudo sysctl -w net.ipv4.tcp_adv_win_scale=1
