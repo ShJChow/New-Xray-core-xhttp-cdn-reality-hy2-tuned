@@ -101,12 +101,12 @@ HY2_H3_PORT=${HY2_H3_PORT:-}
 HY2_PORT=${HY2_PORT:-}
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# v4.9.83 起默认开启（与本机当前节点一致，TCP 443 经 CDN）；不需要时 FEATURE_CDN_H2=false 或装好后 xh cdnh2 off。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
+# 备用节点（TCP 443 经 CDN）；需要时 FEATURE_CDN_H2=true 或装好后 xh cdnh2 on。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
-# v4.9.83 起默认关闭（备用节点，UDP 443 经 CDN）；需要时 FEATURE_CDN_H3=true 或装好后 xh cdnh3 on。
-FEATURE_CDN_H3=${FEATURE_CDN_H3:-false}
+# 默认开启（与本机当前节点一致，UDP 443 经 CDN）；不需要时 FEATURE_CDN_H3=false 或装好后 xh cdnh3 off。
+FEATURE_CDN_H3=${FEATURE_CDN_H3:-true}
 
 # FEATURE_BLOCK_CN / FEATURE_BLOCK_ADS（v4.9.53，默认关闭）：出站屏蔽回国 IP（geoip:cn）/ 广告域名
 # （geosite:category-ads-all），参考 zxcvos/Xray-script 的可选规则。运行期用 xh block cn|ads on|off 切换。
