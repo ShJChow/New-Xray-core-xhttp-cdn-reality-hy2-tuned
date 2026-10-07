@@ -399,6 +399,7 @@ systemctl enable --now cf-healthcheck.timer
   xh bestcf show             # 查看当前状态、已解析最优 IP 与自愈监听状态
   xh bestcf setup            # 交互式全自动安装/配置凭据、测速工具与守护定时器
   xh bestcf check            # 立即执行一次链路健康与延迟探测
+  xh bestcf audit            # 调用 Cloudflare CLI 全面检测 DNS 规范性 (校验小黄云/灰云/TTL)
   xh bestcf run              # 强制立即重新测速并推送最优 DNS
   xh bestcf interval <周期>  # 动态调整轮换周期 (如 2h, 4h, 6h)
   xh bestcf on / off         # 开启 / 暂停自动更新与故障自愈监听

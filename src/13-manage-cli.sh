@@ -2486,6 +2486,76 @@ HCTMREOF
       info "正在执行优选 IP 链路质量与握手检测..."
       "$hc_script"
       ;;
+    audit)
+      info "正在调用 Cloudflare CLI 执行 DNS 全面规范性体检..."
+      local cf_bin
+      cf_bin=$(command -v cf || echo "/usr/local/bin/cf")
+      if [[ ! -x "$cf_bin" ]]; then
+        fail "未找到 cf 命令，请先运行: npm i -g cf"
+      fi
+      local cur_zone="" cur_token=""
+      if [[ -f "$py_script" ]]; then
+        cur_token=$(grep -E '^\s*CF_TOKEN\s*=' "$py_script" | cut -d'"' -f2 || true)
+        cur_zone=$(grep -E '^\s*CF_ZONE_ID\s*=' "$py_script" | cut -d'"' -f2 || true)
+      fi
+      [[ -n "$cur_zone" ]] || cur_zone="${CF_ZONE_ID:-}"
+      [[ -n "$cur_token" ]] || cur_token="${CF_TOKEN:-${CF_Token:-}}"
+      [[ -n "$cur_zone" && -n "$cur_token" ]] || fail "缺少 Cloudflare 凭据，请先执行 ${MANAGE_CMD} bestcf setup"
+
+      python3 -c "
+import json, subprocess, sys
+
+token = '${cur_token}'
+zone = '${cur_zone}'
+cf_bin = '${cf_bin}'
+
+cmd = [cf_bin, 'dns', 'records', 'list', '--zone', zone, '-q']
+env = {'CLOUDFLARE_API_TOKEN': token, 'PATH': '/usr/local/bin:/usr/bin:/bin'}
+res = subprocess.run(cmd, env=env, capture_output=True, text=True)
+
+if res.returncode != 0:
+    print('调用 cf CLI 失败:', res.stderr)
+    sys.exit(1)
+
+raw = res.stdout[res.stdout.find('['):]
+try:
+    records = json.loads(raw)
+except Exception as e:
+    print('解析 Cloudflare 返回数据失败:', e)
+    sys.exit(1)
+
+print('')
+print(f'\033[1;36m=== Cloudflare DNS 全面规范性体检 (共 {len(records)} 条解析) ===\033[0m')
+for r in records:
+    name = r.get('name', '')
+    rtype = r.get('type', '')
+    content = r.get('content', '')
+    proxied = r.get('proxied', False)
+    ttl = r.get('ttl', 0)
+    
+    proxy_str = '\033[1;33m已开启 (小黄云代理)\033[0m' if proxied else '\033[1;32m仅DNS (灰色云朵)\033[0m'
+    print(f'• [{rtype}] {name} -> {content} | 状态: {proxy_str} | TTL: {ttl}s')
+
+    if name.startswith('bestcf.'):
+        if proxied:
+            print('  \033[1;31m[严重异常] 优选域名绝对不能开启 CDN 代理，必须为灰云！\033[0m')
+        elif ttl > 120:
+            print('  \033[1;33m[优化建议] 优选域名 TTL 建议设为 60s 以便故障极速切换。\033[0m')
+        else:
+            print('  \033[1;32m[配置正确] 优选域名为纯 DNS 极速直连 (TTL 60s)。\033[0m')
+    elif name.startswith('cdn.'):
+        if not proxied:
+            print('  \033[1;33m[警告] CDN 域名未开启小黄云代理，真实 IP 未被隐藏。\033[0m')
+        else:
+            print('  \033[1;32m[配置正确] CDN 域名已开启小黄云回源代理。\033[0m')
+    elif name.startswith('reality.'):
+        if proxied:
+            print('  \033[1;31m[严重异常] Reality 直连域名不能开启小黄云代理！\033[0m')
+        else:
+            print('  \033[1;32m[配置正确] Reality 域名为纯 DNS 直连。\033[0m')
+print('')
+"
+      ;;
     run)
       if [[ ! -x "$py_script" ]]; then
         fail "未找到 ${py_script}，请先执行 ${MANAGE_CMD} bestcf setup"
@@ -2519,7 +2589,7 @@ HCTMREOF
       info "Cloudflare 优选定时器与故障自愈监听已停用"
       ;;
     *)
-      fail "用法: ${MANAGE_CMD} bestcf [show|setup|check|run|interval|on|off]"
+      fail "用法: ${MANAGE_CMD} bestcf [show|setup|check|audit|run|interval|on|off]"
       ;;
   esac
 }
@@ -4120,19 +4190,21 @@ cmd_menu() {
         echo "  1) 查看当前状态与解析 (show)"
         echo "  2) 配置 Cloudflare 凭据与域名 (setup)"
         echo "  3) 立即执行链路健康与延迟检测 (check)"
-        echo "  4) 立即强制重新测速与 DNS 同步 (run)"
-        echo "  5) 修改自动轮换周期 (interval)"
-        echo "  6) 开启自动更新与故障自愈监听 (on)"
-        echo "  7) 暂停自动更新与故障自愈监听 (off)"
-        read -rp "请选择 [1-7 或输入指令，直接回车查看状态]: " a
+        echo "  4) Cloudflare DNS 全面规范性体检 (audit: 校验小黄云/灰云状态)"
+        echo "  5) 立即强制重新测速与 DNS 同步 (run)"
+        echo "  6) 修改自动轮换周期 (interval)"
+        echo "  7) 开启自动更新与故障自愈监听 (on)"
+        echo "  8) 暂停自动更新与故障自愈监听 (off)"
+        read -rp "请选择 [1-8 或输入指令，直接回车查看状态]: " a
         case "$a" in
           1|show|"")  cmd_bestcf show ;;
           2|setup)    cmd_bestcf setup ;;
           3|check)    cmd_bestcf check ;;
-          4|run)      cmd_bestcf run ;;
-          5|interval) cmd_bestcf interval ;;
-          6|on)       cmd_bestcf on ;;
-          7|off)      cmd_bestcf off ;;
+          4|audit)    cmd_bestcf audit ;;
+          5|run)      cmd_bestcf run ;;
+          6|interval) cmd_bestcf interval ;;
+          7|on)       cmd_bestcf on ;;
+          8|off)      cmd_bestcf off ;;
           *)          cmd_bestcf "${a:-show}" ;;
         esac
         ;;
@@ -4180,7 +4252,7 @@ xray-xhttp 管理命令
   xh autoupdate [on|off|show]       每周日 04:00 自动更新 Xray-core，并检查 nginx / tcp-brutal 新版本（只提醒）
   xh guard              健康检查并拉起异常服务（cron 调用）
   xh reality [show|vision on|off|xhttp on|off|updown on|off]  Reality 节点管理（Vision / XHTTP 增删服务端项并重启 xray；updown 为纯客户端链接）
-  xh bestcf [show|setup|run|interval|on|off]  Cloudflare 优选 IP 自动化测速与 DNS 同步管理
+  xh bestcf [show|setup|check|audit|run|interval|on|off]  Cloudflare 优选 IP 自动化测速、秒级自愈与 DNS 规范体检
   xh uninstall          卸载全部组件
   xh version
 USAGEEOF
