@@ -20,10 +20,11 @@
   - [1. 交互式一键部署](#1-交互式一键部署)
   - [2. 零交互环境变量一键部署](#2-零交互环境变量一键部署)
 - [三、常驻管理命令 `xh`](#三常驻管理命令-xh)
-- [四、节点拓扑与双轨架构](#四节点拓扑与双轨架构)
-- [五、常见问题与排错](#五常见问题与排错)
-- [六、版本迭代与核心调优演进记录 (v4.8 - v4.9.51)](#六版本迭代与核心调优演进记录-v48---v4951)
-- [七、免责声明](#七免责声明)
+- [四、Cloudflare CDN 优选 IP 自动化配置（防延迟波动）](#四cloudflare-cdn-优选-ip-自动化配置防延迟波动)
+- [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
+- [六、常见问题与排错](#六常见问题与排错)
+- [七、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)](#七版本迭代与核心调优演进记录-v48---v500)
+- [八、免责声明](#八免责声明)
 
 ---
 
@@ -196,7 +197,168 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 四、节点拓扑与双轨架构
+## 四、Cloudflare CDN 优选 IP 自动化配置（防延迟波动）
+
+在默认情况下，Cloudflare CDN 节点会将域名随机解析到任一 Cloudflare Anycast 边缘 IP，这会导致国内或跨洋网络访问时延迟大幅抖动（例如由 190ms 飘高至 400ms+）。
+
+为了彻底解决此问题，系统支持**自动化 Cloudflare 优选 IP 测速与动态 DNS 同步**：
+- **核心机制**：在服务端定期运行测速工具（如 CloudflareSpeedTest），挑选当前网络下延迟最低、下行速度最快的 Cloudflare 官方边缘 IP，通过 Cloudflare API 自动更新一个专属优选二级域名（如 `bestcf.example.com`）的 A 记录（**仅 DNS / 灰色云朵**，TTL 设为 60s）。
+- **客户端透明兼容**：客户端节点连接地址（Address/Server）自动采用优选域名 `bestcf.example.com`，而握手与 HTTP Host（`host` / `sni`）保持真实的已代理 CDN 域名 `cdn.example.com`。握手成功后 Cloudflare CDN 将以最优链路将请求反向代理回源至 VPS。
+
+---
+
+### 自动化配置与部署步骤
+
+#### 1. 前置准备：获取 Cloudflare 凭据
+1. 登录 Cloudflare 控制台，进入你的域名所在主页；
+2. 在右下角获取 **区域 ID (Zone ID)**；
+3. 进入 **我的个人资料 (My Profile)** ➡️ **API 令牌 (API Tokens)** ➡️ **创建令牌 (Create Token)**：
+   - 使用模板「编辑区域 DNS (Edit zone DNS)」；
+   - 权限选择：`区域 - DNS - 编辑`；
+   - 资源范围：选择你的目标域名所在的区域；
+   - 创建后保存生成的 **API Token**（形如 `cfut_...`）。
+
+---
+
+#### 2. 服务端测速与自动同步程序配置
+推荐在 VPS 上部署轻量同步守护（以 Python 3 与 `cfst` 为例）：
+
+```bash
+mkdir -p /root/cf-bestip && cd /root/cf-bestip
+
+# 1. 下载 CloudflareSpeedTest 测速客户端 (ARM64 / AMD64 请按机器架构选择)
+# ARM64:
+curl -fsSL https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.5/cfst_linux_arm64.tar.gz | tar -zxvf - cfst
+# AMD64:
+# curl -fsSL https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.5/cfst_linux_amd64.tar.gz | tar -zxvf - cfst
+chmod +x cfst
+
+# 2. 下载或准备最新的 Cloudflare 官方 IPV4 列表 ip.txt
+curl -fsSL -o ip.txt https://raw.githubusercontent.com/XIU2/CloudflareSpeedTest/master/ip.txt
+```
+
+编写自动更新脚本 `/root/cf-bestip/dns_updater.py`（**请替换配置中的 YOUR_CF_TOKEN、YOUR_ZONE_ID、bestcf.example.com**）：
+
+```python
+#!/usr/bin/env python3
+"""
+Cloudflare 优选 IP 自动测速与 DNS 解析同步工具
+"""
+import os, sys, json, subprocess, urllib.request, time
+
+CF_TOKEN = "YOUR_CLOUDFLARE_API_TOKEN"      # 替换为你的 Cloudflare API Token
+CF_ZONE_ID = "YOUR_CLOUDFLARE_ZONE_ID"      # 替换为你的 Zone ID
+DOMAIN_NAME = "bestcf.example.com"          # 替换为你的优选域名 (如 bestcf.你的域名)
+DIR = "/root/cf-bestip"
+
+def run_cfst():
+    cmd = [
+        f"{DIR}/cfst", "-f", f"{DIR}/ip.txt", "-tp", "443",
+        "-url", "https://speed.cloudflare.com/__down?bytes=10000000",
+        "-t", "3", "-n", "200", "-dn", "5", "-dt", "5", "-p", "5",
+        "-o", f"{DIR}/result.csv"
+    ]
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始 Cloudflare 优选测速...")
+    subprocess.run(cmd, cwd=DIR, check=True)
+
+def get_best_ips(limit=2):
+    csv_path = f"{DIR}/result.csv"
+    ips = []
+    if not os.path.exists(csv_path): return ips
+    with open(csv_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    for l in lines[1:]:
+        parts = l.strip().split(",")
+        if parts and len(parts) >= 6:
+            ips.append({"ip": parts[0].strip(), "speed": parts[5].strip(), "latency": parts[4].strip()})
+            if len(ips) >= limit: break
+    return ips
+
+def cf_api_request(method, endpoint, data=None):
+    url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/{endpoint}"
+    headers = {"Authorization": f"Bearer {CF_TOKEN}", "Content-Type": "application/json"}
+    body = json.dumps(data).encode("utf-8") if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    with urllib.request.urlopen(req) as resp:
+        return json.load(resp)
+
+def sync_dns(ips):
+    if not ips: return
+    print(f"最优 IP: {[x['ip'] + ' (' + x['speed'] + 'MB/s, ' + x['latency'] + 'ms)' for x in ips]}")
+    res = cf_api_request("GET", f"dns_records?type=A&name={DOMAIN_NAME}")
+    current_records = res.get("result", [])
+    target_ips = [x["ip"] for x in ips]
+    if sorted(target_ips) == sorted([r["content"] for r in current_records]):
+        print("当前 DNS 记录已是最优 IP，无需更新。")
+        return
+    for r in current_records:
+        cf_api_request("DELETE", f"dns_records/{r['id']}")
+    for ip in target_ips:
+        cf_api_request("POST", "dns_records", {
+            "type": "A", "name": DOMAIN_NAME, "content": ip, "ttl": 60, "proxied": False
+        })
+        print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
+
+if __name__ == "__main__":
+    run_cfst()
+    sync_dns(get_best_ips(limit=2))
+```
+
+给予执行权限：
+```bash
+chmod +x /root/cf-bestip/dns_updater.py
+```
+
+---
+
+#### 3. 设置 systemd 定时任务（每 6 小时自动测速轮换）
+
+创建服务文件 `/etc/systemd/system/cf-bestip.service`：
+```ini
+[Unit]
+Description=Cloudflare Best IP DNS Auto-Updater
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/cf-bestip
+ExecStart=/root/cf-bestip/dns_updater.py
+```
+
+创建定时器文件 `/etc/systemd/system/cf-bestip.timer`：
+```ini
+[Unit]
+Description=Run Cloudflare Best IP DNS Auto-Updater periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+
+[Install]
+WantedBy=timers.target
+```
+
+启动并启用定时器：
+```bash
+systemctl daemon-reload
+systemctl enable --now cf-bestip.timer
+# 手动触发首次运行检验：
+systemctl start cf-bestip.service
+```
+
+---
+
+#### 4. 节点与订阅自动拉取优选地址
+
+脚本体系原生内置 `bestcf` 优选域名自动适配：
+- 安装或重新生成配置时，脚本会自动检测 `bestcf.<你的主域名>` 是否能够解析。
+- 一旦探测成功，生成的客户端订阅（V2RayN / Mihomo 等）中，**CDN 节点的连接地址会自动从 `cdn.example.com` 切换为 `bestcf.example.com`**，彻底消除链路延迟飘高的烦恼。
+- 若已有现有节点需立即生效，修改后在终端运行一次 `xh resub` 即可全自动重新打包发布订阅。
+
+---
+
+## 五、节点拓扑与双轨架构
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
@@ -221,7 +383,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 五、常见问题与排错
+## 六、常见问题与排错
 
 | 故障现象 | 核心排查原因 | 快速解决指引 |
 | :--- | :--- | :--- |
@@ -232,7 +394,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 六、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)
+## 七、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -242,7 +404,7 @@ sudo bash <(curl -fsSL https://github.com/ShJChow/New-Xray-core-xhttp-cdn-realit
 
 ---
 
-## 七、免责声明
+## 八、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
