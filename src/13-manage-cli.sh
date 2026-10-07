@@ -2226,7 +2226,7 @@ cmd_bestcf() {
 
       cat > "$py_script" <<PYEOF
 #!/usr/bin/env python3
-import os, sys, json, subprocess, urllib.request, time
+import os, sys, json, subprocess, urllib.request, time, shutil
 
 CF_TOKEN = "${input_token}"
 CF_ZONE_ID = "${input_zone}"
@@ -2266,26 +2266,66 @@ def cf_api_request(method, endpoint, data=None):
     with urllib.request.urlopen(req) as resp:
         return json.load(resp)
 
+def get_existing_records():
+    cf_bin = shutil.which("cf") or "/usr/local/bin/cf"
+    if os.path.exists(cf_bin) and os.access(cf_bin, os.X_OK):
+        try:
+            env = os.environ.copy()
+            env["CLOUDFLARE_API_TOKEN"] = CF_TOKEN
+            cmd = [cf_bin, "dns", "records", "list", "--zone", CF_ZONE_ID, "-q"]
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=15)
+            if res.returncode == 0:
+                raw = res.stdout
+                s_idx = raw.find("[")
+                if s_idx != -1:
+                    records = json.loads(raw[s_idx:])
+                    return [r for r in records if r.get("name") == DOMAIN_NAME and r.get("type") == "A"]
+        except Exception:
+            pass
+    res = cf_api_request("GET", f"dns_records?type=A&name={DOMAIN_NAME}")
+    return res.get("result", [])
+
 def sync_dns(ips):
     if not ips:
         print("未检测到有效优选 IP，跳过 DNS 更新")
         return
     print(f"最优 IP: {[x['ip'] + ' (' + x['speed'] + 'MB/s, ' + x['latency'] + 'ms)' for x in ips]}")
-    res = cf_api_request("GET", f"dns_records?type=A&name={DOMAIN_NAME}")
-    current_records = res.get("result", [])
+    current_records = get_existing_records()
     target_ips = [x["ip"] for x in ips]
     if sorted(target_ips) == sorted([r["content"] for r in current_records]):
         print("当前 DNS 记录已是最优 IP，无需更新。")
         return
-    for r in current_records:
-        cf_api_request("DELETE", f"dns_records/{r['id']}")
-        print(f"已删除旧 DNS 记录: {r['content']}")
-    for ip in target_ips:
-        cf_api_request("POST", "dns_records", {
-            "type": "A", "name": DOMAIN_NAME, "content": ip, "ttl": 60, "proxied": False,
-            "comment": f"Auto BestCF {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        })
-        print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
+
+    cf_bin = shutil.which("cf") or "/usr/local/bin/cf"
+    used_cli_batch = False
+    if os.path.exists(cf_bin) and os.access(cf_bin, os.X_OK):
+        try:
+            deletes = [{"id": r["id"]} for r in current_records]
+            posts = [{
+                "type": "A", "name": DOMAIN_NAME, "content": ip, "ttl": 60, "proxied": False,
+                "comment": f"Auto BestCF {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            } for ip in target_ips]
+            batch_body = {"deletes": deletes, "posts": posts}
+            env = os.environ.copy()
+            env["CLOUDFLARE_API_TOKEN"] = CF_TOKEN
+            cmd = [cf_bin, "dns", "records", "batch", "--zone", CF_ZONE_ID, "--body", json.dumps(batch_body), "-q"]
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=20)
+            if res.returncode == 0:
+                print(f"通过 cf CLI batch 成功更新 DNS 记录: {DOMAIN_NAME} -> {target_ips} (TTL=60, 仅DNS)")
+                used_cli_batch = True
+        except Exception as e:
+            print("cf CLI batch 执行异常，回退到 HTTP API 模式:", e)
+
+    if not used_cli_batch:
+        for r in current_records:
+            cf_api_request("DELETE", f"dns_records/{r['id']}")
+            print(f"已删除旧 DNS 记录: {r['content']}")
+        for ip in target_ips:
+            cf_api_request("POST", "dns_records", {
+                "type": "A", "name": DOMAIN_NAME, "content": ip, "ttl": 60, "proxied": False,
+                "comment": f"Auto BestCF {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            })
+            print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
 
 if __name__ == "__main__":
     try:
