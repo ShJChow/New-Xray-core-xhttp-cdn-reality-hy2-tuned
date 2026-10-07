@@ -22,3 +22,11 @@
 - **更新策略**：默认通道改为 `stable`（官方正式版）。
   - 自动更新任务（每周日 04:00）默认仅拉取 GitHub Releases 中的正式版本（`/releases/latest`），遇到 Pre-release 自动跳过，保障生产环境稳定。
   - 用户若需体验 Pre-release 版本（如 26.9.30+ 的后量子加密新特性），可通过 `xh autoupdate pre` 或在菜单选择 `6` 手动输入 `pre` 切换。
+
+## 3. Reality 节点连通性与 Xray 26.9+ 后量子强卡控排障 (2026-10-07)
+- **故障背景**：Shadowrocket / sing-box / Clash Meta 连接 Reality 节点报错 `reality verification failed`。
+- **根因分析**：
+  - Xray v26.9.8+ (如 26.9.30) 在 REALITY 握手层对客户端强制要求后量子混合密钥 `X25519MLKEM768`。即便配置了 `minClientVer: 1.8.0`，底层密码学握手仍被内核硬阻断，第三方客户端无法连通。
+- **解决对策**：
+  - 生产环境将 Xray 内核回退并锁定为官方稳定正式版 **v26.3.27**，并开启 `minClientVer: 1.8.0`。
+  - 实测 sing-box / Shadowrocket 与原生 Xray 客户端均秒级握手成功，连通性完全恢复。
