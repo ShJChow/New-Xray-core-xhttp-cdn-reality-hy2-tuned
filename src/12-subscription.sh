@@ -58,8 +58,10 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   # 不改时 Reality 节点在小火箭里连不上，而 v2rayN 正常（对 Xray 内核两者等价）；3) 去掉 spx（纯客户端参数，可省）。
   grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//; s/&type=raw(&|#)/\&type=tcp\1/; s/&spx=[^&#]*//' || true
   # v4.9.29：8001 开了 vlessenc（FEATURE_XHTTP_VLESSENC）时小火箭连不上 CDN 节点，不再附带
-  if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
-    echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+  if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
+    cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
+    [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
+    echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
   fi
 } > "$SUB_DIR/shadowrocket-raw.txt"
 if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then

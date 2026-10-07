@@ -339,8 +339,10 @@ cmd_resub() {
     # v4.9.49：剔除 v2rayN 专用的 fm（finalmask JSON）参数，小火箭解析不了复杂 URI
     # 小火箭专属处理同 12-subscription.sh：去 fm、type=raw→tcp、去 spx
     grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "${home}/client-config.txt" | sed -E 's/&fm=[^&#]*//; s/&type=raw(&|#)/\&type=tcp\1/; s/&spx=[^&#]*//' || true
-    if [[ "${FEATURE_CDN_H2:-false}" == true && "${FEATURE_XHTTP_VLESSENC:-true}" != true ]]; then
-      echo "vless://${UUID2}@${CDN_DOMAIN}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=${XHTTP_PATH}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+    if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
+      local cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
+      [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
+      echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
     fi
   } > "${subdir}/shadowrocket-raw.txt"
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then

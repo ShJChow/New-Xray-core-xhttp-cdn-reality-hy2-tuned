@@ -87,6 +87,43 @@
         },
         {
             "listen": "127.0.0.1",
+            "port": 8002,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "${UUID2}",
+                        "level": 0
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "xhttp",
+                "sockopt": {
+                    "trustedXForwardedFor": ["X-Real-IP"],
+                    "tcpFastOpen": true,
+                    "tcpMptcp": true,
+                    "tcpcongestion": "${XRAY_TCP_CC:-brutal}",
+                    "tcpKeepAliveIdle": 30,
+                    "tcpKeepAliveInterval": 5,
+                    "tcpUserTimeout": 300000
+                },
+                "xhttpSettings": {
+                    "host": "",
+                    "path": "/sr${XHTTP_PATH#/}",
+                    "mode": "auto"${XRAY_XHTTP_PADDING_JSON}
+                }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false,
+                "routeOnly": true
+            }
+        },
+        {
+            "listen": "127.0.0.1",
             "port": 8001,
             "protocol": "vless",
             "settings": {
