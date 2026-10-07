@@ -311,7 +311,7 @@ chmod +x /root/cf-bestip/dns_updater.py
 
 ---
 
-#### 3. 设置 systemd 定时任务（每 2 小时自动测速轮换）
+#### 3. 设置 systemd 定时任务（每 1 小时自动测速轮换）
 
 创建服务文件 `/etc/systemd/system/cf-bestip.service`：
 ```ini
@@ -333,14 +333,14 @@ Description=Run Cloudflare Best IP DNS Auto-Updater periodically
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=2h
+OnUnitActiveSec=1h
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 ```
 
-启动并启用定时器（每 2 小时自动更新）：
+启动并启用定时器（每 1 小时自动更新）：
 ```bash
 systemctl daemon-reload
 systemctl enable --now cf-bestip.timer
@@ -352,7 +352,7 @@ systemctl start cf-bestip.service
 
 #### 4. 配置故障秒级自愈与链路健康监听（线路不通或劣化立即自动更换）
 
-除了周期性（每 2 小时）轮换外，系统还配备了**全自动链路探测与应急自愈守护**：
+除了周期性（每 1 小时）轮换外，系统还配备了**全自动链路探测与应急自愈守护**：
 - **实时监测**：后台每 3 分钟自动执行一次真实 TLS 握手握感与网络延迟检测；
 - **自动切换**：一旦检测到当前优选 IP 出现**断流、超时、丢包或延迟突增（>300ms）**，系统会**立刻自动重新触发测速并更新 Cloudflare DNS**，实现劣质节点零等待秒级下线。
 

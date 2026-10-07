@@ -2432,7 +2432,7 @@ Description=Run Cloudflare Best IP DNS Auto-Updater periodically
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=2h
+OnUnitActiveSec=1h
 Persistent=true
 
 [Install]
