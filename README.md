@@ -340,7 +340,7 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-启动并启用定时器：
+启动并启用定时器（每 2 小时自动更新）：
 ```bash
 systemctl daemon-reload
 systemctl enable --now cf-bestip.timer
@@ -350,7 +350,63 @@ systemctl start cf-bestip.service
 
 ---
 
-#### 4. 节点与订阅自动拉取优选地址
+#### 4. 配置故障秒级自愈与链路健康监听（线路不通或劣化立即自动更换）
+
+除了周期性（每 2 小时）轮换外，系统还配备了**全自动链路探测与应急自愈守护**：
+- **实时监测**：后台每 3 分钟自动执行一次真实 TLS 握手握感与网络延迟检测；
+- **自动切换**：一旦检测到当前优选 IP 出现**断流、超时、丢包或延迟突增（>300ms）**，系统会**立刻自动重新触发测速并更新 Cloudflare DNS**，实现劣质节点零等待秒级下线。
+
+创建健康检查服务 `/etc/systemd/system/cf-healthcheck.service`：
+```ini
+[Unit]
+Description=Cloudflare Best IP Health Check and Auto Fallback
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/cf-bestip
+ExecStart=/root/cf-bestip/health_check.py
+```
+
+创建健康检查定时器 `/etc/systemd/system/cf-healthcheck.timer`（每 3 分钟自检一次）：
+```ini
+[Unit]
+Description=Run Cloudflare Best IP Health Check every 3 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+启动自愈监听：
+```bash
+systemctl daemon-reload
+systemctl enable --now cf-healthcheck.timer
+```
+
+---
+
+#### 5. 整合常驻管理命令 `xh bestcf`
+
+所有上述操作无需手动配置，已完全整合进终端常驻管理菜单中：
+- 终端运行 `xh` 菜单输入 **`31`**（或直接执行快捷命令）：
+  ```bash
+  xh bestcf show             # 查看当前状态、已解析最优 IP 与自愈监听状态
+  xh bestcf setup            # 交互式全自动安装/配置凭据、测速工具与守护定时器
+  xh bestcf check            # 立即执行一次链路健康与延迟探测
+  xh bestcf run              # 强制立即重新测速并推送最优 DNS
+  xh bestcf interval <周期>  # 动态调整轮换周期 (如 2h, 4h, 6h)
+  xh bestcf on / off         # 开启 / 暂停自动更新与故障自愈监听
+  ```
+
+---
+
+#### 6. 节点与订阅自动拉取优选地址
 
 脚本体系原生内置 `bestcf` 优选域名自动适配：
 - 安装或重新生成配置时，脚本会自动检测 `bestcf.<你的主域名>` 是否能够解析。

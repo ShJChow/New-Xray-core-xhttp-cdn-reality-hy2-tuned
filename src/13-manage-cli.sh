@@ -2129,6 +2129,361 @@ cmd_cert() {
   esac
 }
 
+cmd_bestcf() {
+  local action="${1:-show}"
+  local dir="/root/cf-bestip"
+  local py_script="${dir}/dns_updater.py"
+  local timer_file="/etc/systemd/system/cf-bestip.timer"
+  local service_file="/etc/systemd/system/cf-bestip.service"
+
+  case "$action" in
+    show|status)
+      echo ""
+      echo -e "${CYAN}=== Cloudflare CDN 优选 IP 自动化状态 ===${NC}"
+      if systemctl is-active --quiet cf-bestip.timer 2>/dev/null; then
+        echo -e "  定时轮换:       ${GREEN}运行中 (Active)${NC}"
+      else
+        echo -e "  定时轮换:       ${YELLOW}未激活 (Inactive)${NC}"
+      fi
+
+      if systemctl is-active --quiet cf-healthcheck.timer 2>/dev/null; then
+        echo -e "  故障自愈健康检查: ${GREEN}运行中 (每 3 分钟检测握手与延迟，异常自动切 IP)${NC}"
+      else
+        echo -e "  故障自愈健康检查: ${YELLOW}未激活${NC}"
+      fi
+
+      local cur_interval="2h"
+      if [[ -f "$timer_file" ]]; then
+        cur_interval=$(grep -oE 'OnUnitActiveSec=[^ ]+' "$timer_file" | cut -d= -f2 || echo "2h")
+      fi
+      echo -e "  轮换周期:       ${GREEN}${cur_interval}${NC}"
+
+      if [[ -f "$py_script" ]]; then
+        local cur_domain cur_zone
+        cur_domain=$(grep -E '^\s*DOMAIN_NAME\s*=' "$py_script" | cut -d'"' -f2 || true)
+        cur_zone=$(grep -E '^\s*CF_ZONE_ID\s*=' "$py_script" | cut -d'"' -f2 || true)
+        echo -e "  优选域名:       ${GREEN}${cur_domain:-未配置}${NC}"
+        echo -e "  Zone ID:        ${cur_zone:-未配置}"
+
+        if [[ -n "$cur_domain" ]] && command -v getent >/dev/null 2>&1; then
+          local resolved_ips
+          resolved_ips=$(getent ahostsv4 "$cur_domain" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ')
+          echo -e "  当前解析 IP:    ${GREEN}${resolved_ips:-未能解析}${NC}"
+        fi
+      else
+        echo -e "  更新脚本:       ${YELLOW}未安装配置 (/root/cf-bestip/dns_updater.py)${NC}"
+      fi
+
+      if command -v systemctl >/dev/null 2>&1; then
+        local next_run
+        next_run=$(systemctl list-timers cf-bestip.timer 2>/dev/null | grep 'cf-bestip' | awk '{print $1" "$2" "$3}' || true)
+        if [[ -n "$next_run" ]]; then
+          echo -e "  下次轮换时间:   ${next_run}"
+        fi
+      fi
+      echo ""
+      echo -e "快捷指令:"
+      echo -e "  ${MANAGE_CMD} bestcf show             # 查看状态与当前解析"
+      echo -e "  ${MANAGE_CMD} bestcf setup            # 交互式配置 Cloudflare 凭据与优选域名"
+      echo -e "  ${MANAGE_CMD} bestcf check            # 立即检测当前优选 IP 延迟/握手质量"
+      echo -e "  ${MANAGE_CMD} bestcf run              # 强制立即测速与更新 DNS"
+      echo -e "  ${MANAGE_CMD} bestcf interval <周期>  # 调整定时周期 (如 2h, 4h, 6h)"
+      echo -e "  ${MANAGE_CMD} bestcf on / off         # 开启 / 暂停自动更新定时器与健康检查"
+      echo ""
+      ;;
+    setup)
+      echo ""
+      echo -e "${CYAN}=== 配置 Cloudflare 优选 IP 自动化服务 ===${NC}"
+      local default_domain="bestcf.${CDN_DOMAIN#*.}"
+      read -rp "请输入优选二级域名 [默认: ${default_domain}]: " input_domain
+      local final_domain="${input_domain:-$default_domain}"
+
+      read -rp "请输入 Cloudflare 区域 ID (Zone ID): " input_zone
+      [[ -n "$input_zone" ]] || fail "Zone ID 不能为空"
+
+      read -rp "请输入 Cloudflare API Token (需 DNS 编辑权限): " input_token
+      [[ -n "$input_token" ]] || fail "API Token 不能为空"
+
+      info "正在部署/更新 /root/cf-bestip 环境..."
+      mkdir -p "$dir"
+      # 若无 cfst 测速工具，自动拉取
+      if [[ ! -x "${dir}/cfst" ]]; then
+        local arch
+        arch=$(uname -m)
+        local cfst_url="https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.5/cfst_linux_amd64.tar.gz"
+        if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
+          cfst_url="https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.3.5/cfst_linux_arm64.tar.gz"
+        fi
+        info "下载 CloudflareSpeedTest (${arch})..."
+        curl -fsSL "$cfst_url" | tar -zxvf - -C "$dir" cfst 2>/dev/null || true
+        chmod +x "${dir}/cfst" 2>/dev/null || true
+      fi
+
+      if [[ ! -f "${dir}/ip.txt" ]]; then
+        info "下载 Cloudflare 官方 IPV4 段列表..."
+        curl -fsSL -o "${dir}/ip.txt" "https://raw.githubusercontent.com/XIU2/CloudflareSpeedTest/master/ip.txt" 2>/dev/null || true
+      fi
+
+      cat > "$py_script" <<PYEOF
+#!/usr/bin/env python3
+import os, sys, json, subprocess, urllib.request, time
+
+CF_TOKEN = "${input_token}"
+CF_ZONE_ID = "${input_zone}"
+DOMAIN_NAME = "${final_domain}"
+DIR = "${dir}"
+
+def run_cfst():
+    cmd = [
+        f"{DIR}/cfst",
+        "-f", f"{DIR}/ip.txt",
+        "-tp", "443",
+        "-url", "https://speed.cloudflare.com/__down?bytes=10000000",
+        "-t", "3", "-n", "200", "-dn", "5", "-dt", "5", "-p", "5",
+        "-o", f"{DIR}/result.csv"
+    ]
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始 Cloudflare 优选测速...")
+    subprocess.run(cmd, cwd=DIR, check=True)
+
+def get_best_ips(limit=2):
+    csv_path = f"{DIR}/result.csv"
+    ips = []
+    if not os.path.exists(csv_path): return ips
+    with open(csv_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    for l in lines[1:]:
+        parts = l.strip().split(",")
+        if parts and len(parts) >= 6:
+            ips.append({"ip": parts[0].strip(), "speed": parts[5].strip(), "latency": parts[4].strip()})
+            if len(ips) >= limit: break
+    return ips
+
+def cf_api_request(method, endpoint, data=None):
+    url = f"https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/{endpoint}"
+    headers = {"Authorization": f"Bearer {CF_TOKEN}", "Content-Type": "application/json"}
+    body = json.dumps(data).encode("utf-8") if data else None
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    with urllib.request.urlopen(req) as resp:
+        return json.load(resp)
+
+def sync_dns(ips):
+    if not ips:
+        print("未检测到有效优选 IP，跳过 DNS 更新")
+        return
+    print(f"最优 IP: {[x['ip'] + ' (' + x['speed'] + 'MB/s, ' + x['latency'] + 'ms)' for x in ips]}")
+    res = cf_api_request("GET", f"dns_records?type=A&name={DOMAIN_NAME}")
+    current_records = res.get("result", [])
+    target_ips = [x["ip"] for x in ips]
+    if sorted(target_ips) == sorted([r["content"] for r in current_records]):
+        print("当前 DNS 记录已是最优 IP，无需更新。")
+        return
+    for r in current_records:
+        cf_api_request("DELETE", f"dns_records/{r['id']}")
+        print(f"已删除旧 DNS 记录: {r['content']}")
+    for ip in target_ips:
+        cf_api_request("POST", "dns_records", {
+            "type": "A", "name": DOMAIN_NAME, "content": ip, "ttl": 60, "proxied": False,
+            "comment": f"Auto BestCF {time.strftime('%Y-%m-%d %H:%M:%S')}"
+        })
+        print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
+
+if __name__ == "__main__":
+    try:
+        run_cfst()
+        sync_dns(get_best_ips(limit=2))
+    except Exception as e:
+        print("执行出错:", e)
+        sys.exit(1)
+PYEOF
+      chmod 700 "$py_script"
+
+      # 写入健康检查脚本（检测延迟与握手，异常立即自愈）
+      local hc_script="${dir}/health_check.py"
+      cat > "$hc_script" <<'HCEOF'
+#!/usr/bin/env python3
+import os, sys, time, subprocess, socket, ssl
+
+DIR = "/root/cf-bestip"
+PY_UPDATER = f"{DIR}/dns_updater.py"
+DOMAIN_NAME = "bestcf.example.com"
+SNI_HOST = "speed.cloudflare.com"
+MAX_LATENCY_MS = 300.0
+TIMEOUT_SECS = 3.5
+
+def check_ip_health(ip):
+    t0 = time.time()
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    try:
+        with socket.create_connection((ip, 443), timeout=TIMEOUT_SECS) as sock:
+            with ctx.wrap_socket(sock, server_hostname=SNI_HOST) as ssock:
+                latency = (time.time() - t0) * 1000.0
+                cipher = ssock.cipher()[0] if ssock.cipher() else "TLS"
+                if latency > MAX_LATENCY_MS:
+                    return False, latency, f"延迟过高 ({latency:.1f}ms > {MAX_LATENCY_MS}ms)"
+                return True, latency, f"正常 (TLS握手成功, {cipher}, 握手耗时: {latency:.1f}ms)"
+    except socket.timeout:
+        return False, 9999.0, "连接超时 (Timeout)"
+    except Exception as e:
+        return False, 9999.0, f"TLS 握手失败: {e}"
+
+def main():
+    global DOMAIN_NAME
+    if os.path.exists(PY_UPDATER):
+        with open(PY_UPDATER, "r", encoding="utf-8") as f:
+            for l in f:
+                if l.strip().startswith("DOMAIN_NAME"):
+                    DOMAIN_NAME = l.split('"')[1]
+                    break
+
+    try:
+        current_ips = list(set(socket.gethostbyname_ex(DOMAIN_NAME)[2]))
+    except Exception as e:
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 无法解析 {DOMAIN_NAME}: {e}，立刻重新优选！")
+        subprocess.run([sys.executable, PY_UPDATER], cwd=DIR)
+        return
+
+    if not current_ips:
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 域名未返回任何 IP，立刻触发测速更新！")
+        subprocess.run([sys.executable, PY_UPDATER], cwd=DIR)
+        return
+
+    all_failed = True
+    any_degraded = False
+
+    for ip in current_ips:
+        ok, lat, reason = check_ip_health(ip)
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 检测 IP {ip}: {reason}")
+        if ok: all_failed = False
+        else: any_degraded = True
+
+    if all_failed or any_degraded:
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ⚠️ 检测到当前优选 IP 不佳或链路异常，立刻自动重新测速并更新 DNS！")
+        res = subprocess.run([sys.executable, PY_UPDATER], cwd=DIR)
+        if res.returncode == 0:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 自动应急切换成功！")
+        else:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ❌ 应急切换失败，退出码: {res.returncode}")
+    else:
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 所有优选 IP 链路健康稳定，无需切换。")
+
+if __name__ == "__main__":
+    main()
+HCEOF
+      chmod 700 "$hc_script"
+
+      # 写入 systemd 配置
+      cat > "$service_file" <<SVCEOF
+[Unit]
+Description=Cloudflare Best IP DNS Auto-Updater
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${dir}
+ExecStart=${py_script}
+SVCEOF
+
+      cat > "$timer_file" <<TMREOF
+[Unit]
+Description=Run Cloudflare Best IP DNS Auto-Updater periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TMREOF
+
+      # 写入健康检查自愈定时器（每 3 分钟自动探测一次）
+      local hc_service="/etc/systemd/system/cf-healthcheck.service"
+      local hc_timer="/etc/systemd/system/cf-healthcheck.timer"
+      cat > "$hc_service" <<HCSVCEOF
+[Unit]
+Description=Cloudflare Best IP Health Check and Auto Fallback
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${dir}
+ExecStart=${hc_script}
+HCSVCEOF
+
+      cat > "$hc_timer" <<HCTMREOF
+[Unit]
+Description=Run Cloudflare Best IP Health Check every 3 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+HCTMREOF
+
+      systemctl daemon-reload
+      systemctl enable --now cf-bestip.timer
+      systemctl enable --now cf-healthcheck.timer
+      info "服务已配置完成并启动："
+      info "  1. 周期性轮换定时器 (每 2 小时自动重新优选)"
+      info "  2. 故障自愈监测定时器 (每 3 分钟检测延迟与握手，异常立刻自动换 IP)"
+      read -rp "是否立即运行一次测速与 DNS 同步？[Y/n]: " run_now
+      if [[ "${run_now:-y}" =~ ^[Yy]$ ]]; then
+        cmd_bestcf run
+      fi
+      ;;
+    check)
+      local hc_script="${dir}/health_check.py"
+      if [[ ! -x "$hc_script" ]]; then
+        fail "未找到 ${hc_script}，请先执行 ${MANAGE_CMD} bestcf setup"
+      fi
+      info "正在执行优选 IP 链路质量与握手检测..."
+      "$hc_script"
+      ;;
+    run)
+      if [[ ! -x "$py_script" ]]; then
+        fail "未找到 ${py_script}，请先执行 ${MANAGE_CMD} bestcf setup"
+      fi
+      info "正在手动触发测速与 DNS 解析同步 (约需 10~30 秒)..."
+      "$py_script"
+      info "测速与 DNS 解析同步完成！"
+      ;;
+    interval)
+      local int_val="${2:-}"
+      if [[ -z "$int_val" ]]; then
+        read -rp "请输入定时更新周期 (例如 2h, 4h, 6h, 12h): " int_val
+      fi
+      [[ -n "$int_val" ]] || fail "周期不能为空"
+      [[ -f "$timer_file" ]] || fail "定时器文件不存在，请先执行 ${MANAGE_CMD} bestcf setup"
+      sed -i -E "s/^OnUnitActiveSec=.*/OnUnitActiveSec=${int_val}/" "$timer_file"
+      systemctl daemon-reload
+      systemctl restart cf-bestip.timer
+      info "定时周期已更新为: ${int_val}"
+      ;;
+    on)
+      systemctl enable --now cf-bestip.timer 2>/dev/null || true
+      systemctl enable --now cf-healthcheck.timer 2>/dev/null || true
+      info "Cloudflare 优选定时器与故障自愈监听已开启"
+      ;;
+    off)
+      systemctl stop cf-bestip.timer 2>/dev/null || true
+      systemctl disable cf-bestip.timer 2>/dev/null || true
+      systemctl stop cf-healthcheck.timer 2>/dev/null || true
+      systemctl disable cf-healthcheck.timer 2>/dev/null || true
+      info "Cloudflare 优选定时器与故障自愈监听已停用"
+      ;;
+    *)
+      fail "用法: ${MANAGE_CMD} bestcf [show|setup|check|run|interval|on|off]"
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   echo -e "${RED}[!] 将删除 Xray / Nginx / ACME / Hysteria2 及本项目的配置、证书、订阅文件${NC}"
   read -rp "确认卸载？输入 yes 继续: " reply
@@ -3634,7 +3989,8 @@ cmd_menu() {
     echo " 28) 证书续期方式查看 / 切换 DNS-01 (cert: show / dnscf)"
     echo " 29) Nginx 版本检查与升级 (nginx: show / check / update)"
     echo " 30) Reality 节点管理 (show / vision on|off / xhttp on|off / updown on|off)"
-    echo " 31) 卸载"
+    echo " 31) Cloudflare CDN 优选 IP 自动化 (bestcf: show / setup / run / interval / on / off)"
+    echo " 32) 卸载"
     echo "  0) 退出"
     read -rp "请选择: " choice
     case "$choice" in
@@ -3718,7 +4074,29 @@ cmd_menu() {
       28) read -rp "  show / dnscf: " a; cmd_cert "${a:-show}" ;;
       29) read -rp "  show / check / update: " a; cmd_nginx "${a:-show}" ;;
       30) read -rp "  show / vision on|off / xhttp on|off / updown on|off: " a; ( cmd_reality ${a:-show} ) ;;
-      31) cmd_uninstall; break ;;
+      31)
+        echo ""
+        echo -e "${CYAN}--- Cloudflare 优选 IP 自动化操作选择 ---${NC}"
+        echo "  1) 查看当前状态与解析 (show)"
+        echo "  2) 配置 Cloudflare 凭据与域名 (setup)"
+        echo "  3) 立即执行链路健康与延迟检测 (check)"
+        echo "  4) 立即强制重新测速与 DNS 同步 (run)"
+        echo "  5) 修改自动轮换周期 (interval)"
+        echo "  6) 开启自动更新与故障自愈监听 (on)"
+        echo "  7) 暂停自动更新与故障自愈监听 (off)"
+        read -rp "请选择 [1-7 或输入指令，直接回车查看状态]: " a
+        case "$a" in
+          1|show|"")  cmd_bestcf show ;;
+          2|setup)    cmd_bestcf setup ;;
+          3|check)    cmd_bestcf check ;;
+          4|run)      cmd_bestcf run ;;
+          5|interval) cmd_bestcf interval ;;
+          6|on)       cmd_bestcf on ;;
+          7|off)      cmd_bestcf off ;;
+          *)          cmd_bestcf "${a:-show}" ;;
+        esac
+        ;;
+      32) cmd_uninstall; break ;;
       0) break ;;
       *) warn "无效选择" ;;
     esac
@@ -3762,6 +4140,7 @@ xray-xhttp 管理命令
   xh autoupdate [on|off|show]       每周日 04:00 自动更新 Xray-core，并检查 nginx / tcp-brutal 新版本（只提醒）
   xh guard              健康检查并拉起异常服务（cron 调用）
   xh reality [show|vision on|off|xhttp on|off|updown on|off]  Reality 节点管理（Vision / XHTTP 增删服务端项并重启 xray；updown 为纯客户端链接）
+  xh bestcf [show|setup|run|interval|on|off]  Cloudflare 优选 IP 自动化测速与 DNS 同步管理
   xh uninstall          卸载全部组件
   xh version
 USAGEEOF
@@ -3820,6 +4199,7 @@ case "${1:-menu}" in
   noise)      shift; cmd_noise "$@" ;;
   split)      shift; cmd_split "$@" ;;
   reality)    shift; cmd_reality "$@" ;;
+  bestcf)     shift; cmd_bestcf "$@" ;;
   tuning|tune) shift; cmd_tuning "$@" ;;   # tune 为常见误打，一并接受
   brutal)     shift; cmd_brutal "$@" ;;
   keepalive)  shift; cmd_keepalive "$@" ;;
