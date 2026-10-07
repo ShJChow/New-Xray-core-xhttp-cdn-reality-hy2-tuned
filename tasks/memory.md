@@ -30,3 +30,16 @@
 - **解决对策**：
   - 生产环境将 Xray 内核回退并锁定为官方稳定正式版 **v26.3.27**，并开启 `minClientVer: 1.8.0`。
   - 实测 sing-box / Shadowrocket 与原生 Xray 客户端均秒级握手成功，连通性完全恢复。
+
+## 4. 全节点连接与下载稳定性、持续性调优 (2026-10-07)
+- **故障背景**：CDN 节点及部分直连节点在大文件下载、持续测速或长连接时出现断断续续、周期性卡顿或中途断流。
+- **根因分析**：
+  1. **Nginx 反代超时过紧**：全局 `client_body_timeout 10s` 和 `send_timeout 10s`。在 CDN 大文件传输或网络轻微抖动时，Nginx 在 10 秒无突发吞吐时会主动断开客户端连接。
+  2. **XHTTP 上行重连周期过短**：Xray 默认 `scStreamUpServerSecs` 配置为 `"20-50"` 秒，导致服务端每 20~50 秒强制重置上行流，客户端频繁重连切片引发周期性停顿。
+  3. **TCP 套接字关闭截断**：Xray policy 的 `uplinkOnly: 5s` 与 `downlinkOnly: 10s` 在单向关闭（FIN）时过快杀死连接，残余下行数据包未接收完毕即被掐断。
+- **解决对策与优化项**：
+  1. **Nginx 长连接保护**：在 `/xhttp-path` 与 `/sr-xhttp-path` 位置块显式配置 `client_body_timeout 300s` 与 `send_timeout 300s`，配合已有的 `grpc_read_timeout 1h` 与 `grpc_send_timeout 1h`，彻底消除 Nginx 提前切断长连接。
+  2. **XHTTP 流保活周期扩容**：将 `scStreamUpServerSecs` 调整放宽至 `"300-600"` 秒（5~10分钟），避免 20 秒短周期频繁握手重连。
+  3. **Xray Policy 优雅关闭放宽**：调整 `uplinkOnly: 15s` 与 `downlinkOnly: 30s`，保证大文件下载与尾部数据完整平滑传输。
+  4. **系统级持续性参数**：保持内核 `tcpUserTimeout: 300000ms` (5分钟) 与 `tcpKeepAliveIdle: 30s`，抗击跨境链路短暂丢包与抖动。
+

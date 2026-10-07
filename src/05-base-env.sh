@@ -296,14 +296,14 @@ if [[ "$FEATURE_XPADDING" == true ]]; then
                     "xPaddingHeader": "${XHTTP_PADDING_HEADER}",
                     "xPaddingPlacement": "${XHTTP_PADDING_PLACEMENT}",
                     "xPaddingMethod": "${XHTTP_PADDING_METHOD}",
-                    "scStreamUpServerSecs": "20-50"
+                    "scStreamUpServerSecs": "300-600"
 EOF
 )
 else
   XRAY_XHTTP_PADDING_JSON=$(cat <<EOF
 ,
                     "xPaddingBytes": "100-1000",
-                    "scStreamUpServerSecs": "20-50"
+                    "scStreamUpServerSecs": "300-600"
 EOF
 )
 fi

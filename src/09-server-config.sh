@@ -74,13 +74,13 @@ EOF
 # 不限速 RTT 0 与 160ms RTT + 1% 丢包两组，上下行中位全部落在彼此范围内，xray RSS 58~70MB 也无差别。
 # 保留现值只是因为改动同样拿不出收益，不代表它提速。
 # 超时调优：handshake 10s（防跨境抖动重试断开）、connIdle 1800s（30分钟长连接保活）、
-# uplinkOnly 5s / downlinkOnly 10s（防非对称关闭提前截断数据）。
+# uplinkOnly 15s / downlinkOnly 30s（防非对称关闭提前截断数据，提升持续下载与大文件稳定性）。
 MEM_MB=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
 if   [[ "$MEM_MB" -ge 16384 ]]; then XRAY_BUFFER_KB=4096
 elif [[ "$MEM_MB" -ge 4096  ]]; then XRAY_BUFFER_KB=2048
 else XRAY_BUFFER_KB=512
 fi
-XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":10,\"connIdle\":1800,\"uplinkOnly\":5,\"downlinkOnly\":10,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
+XRAY_POLICY_JSON="\"policy\":{\"levels\":{\"0\":{\"handshake\":10,\"connIdle\":1800,\"uplinkOnly\":15,\"downlinkOnly\":30,\"bufferSize\":${XRAY_BUFFER_KB}}}},"
 
 
 # Reality 入站 sockopt：不启用 TFO 避免部分运营商/移动端网络丢弃带数据的 SYN 包导致 failed to read client hello
