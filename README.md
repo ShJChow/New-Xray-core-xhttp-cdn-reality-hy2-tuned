@@ -311,7 +311,7 @@ chmod +x /root/cf-bestip/dns_updater.py
 
 ---
 
-#### 3. 设置 systemd 定时任务（每 6 小时自动测速轮换）
+#### 3. 设置 systemd 定时任务（每 2 小时自动测速轮换）
 
 创建服务文件 `/etc/systemd/system/cf-bestip.service`：
 ```ini
@@ -333,7 +333,8 @@ Description=Run Cloudflare Best IP DNS Auto-Updater periodically
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=6h
+OnUnitActiveSec=2h
+Persistent=true
 
 [Install]
 WantedBy=timers.target
