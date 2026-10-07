@@ -101,8 +101,8 @@ HY2_H3_PORT=${HY2_H3_PORT:-}
 HY2_PORT=${HY2_PORT:-}
 
 # FEATURE_CDN_H2：是否生成经 CDN 的 TCP(h2) 节点 VLESS-XHTTP-CDN-H2。
-# 备用节点（TCP 443 经 CDN）；需要时 FEATURE_CDN_H2=true 或装好后 xh cdnh2 on。
-FEATURE_CDN_H2=${FEATURE_CDN_H2:-false}
+# 默认开启（与本机当前节点一致，TCP 443 经 CDN）；不需要时 FEATURE_CDN_H2=false 或装好后 xh cdnh2 off。
+FEATURE_CDN_H2=${FEATURE_CDN_H2:-true}
 
 # FEATURE_CDN_H3：是否生成经 CDN 的 QUIC(h3) 节点 VLESS-XHTTP-CDN-H3。
 # 默认开启（与本机当前节点一致，UDP 443 经 CDN）；不需要时 FEATURE_CDN_H3=false 或装好后 xh cdnh3 off。
@@ -183,9 +183,9 @@ FEATURE_NOISE_EXP=${FEATURE_NOISE_EXP:-false}
 # 确认所有客户端内核都 >= 26.9.30 后再开：xh noise links on。
 FEATURE_NOISE_LINKS=${FEATURE_NOISE_LINKS:-false}
 
-# FEATURE_REALITY_VISION / FEATURE_REALITY_XHTTP（v4.9.82，Vision 默认关闭、XHTTP 默认开启，与本机当前节点一致）：Reality 443 入站上的两个直连节点。
+# FEATURE_REALITY_VISION / FEATURE_REALITY_XHTTP（Vision 与 XHTTP 默认开启，与本机当前节点一致）：Reality 443 入站上的两个直连节点。
 # 关闭 = 服务端去掉对应的 clients 项 / fallback 项并从订阅里移除节点；装好后用 xh reality vision|xhttp on|off 切换。
-FEATURE_REALITY_VISION=${FEATURE_REALITY_VISION:-false}
+FEATURE_REALITY_VISION=${FEATURE_REALITY_VISION:-true}
 FEATURE_REALITY_XHTTP=${FEATURE_REALITY_XHTTP:-true}
 NOISE_EXP_PACKET=${NOISE_EXP_PACKET:-"<b 16030100><r 32><t><c><rd 8>"}
 NOISE_EXP_DELAY=${NOISE_EXP_DELAY:-"10-50"}
