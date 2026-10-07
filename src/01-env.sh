@@ -72,7 +72,7 @@ MANAGE_CMD="xh"
 FEATURE_KEEPALIVE=${FEATURE_KEEPALIVE:-true}
 FEATURE_AUTOUPDATE=${FEATURE_AUTOUPDATE:-true}
 # Xray-core 通道：prerelease（默认，安装与每周自动更新都取 GitHub 最新含 pre-release 的版本）| stable
-XRAY_CHANNEL=${XRAY_CHANNEL:-prerelease}
+XRAY_CHANNEL=${XRAY_CHANNEL:-stable}
 AUTO=${AUTO:-0}
 
 # ==================================================

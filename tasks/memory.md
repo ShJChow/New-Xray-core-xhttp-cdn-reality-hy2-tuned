@@ -17,3 +17,8 @@
      - 小火箭专属订阅自动注入标准格式的 `VLESS-XHTTP-CDN-H2` 节点（连接 `bestcf-domain:443`，SNI `cdn-domain`，path `/sr-xhttp-path`，`encryption=none`）。
   4. **Reality 握手兼容**：
      - 配置 `minClientVer: 1.8.0`（通过 `xh minversion on`），避免非官方 Xray 客户端在 Reality 阶段被握手校验拒绝。
+
+## 2. Xray 内核更新通道规范 (2026-10-07)
+- **更新策略**：默认通道改为 `stable`（官方正式版）。
+  - 自动更新任务（每周日 04:00）默认仅拉取 GitHub Releases 中的正式版本（`/releases/latest`），遇到 Pre-release 自动跳过，保障生产环境稳定。
+  - 用户若需体验 Pre-release 版本（如 26.9.30+ 的后量子加密新特性），可通过 `xh autoupdate pre` 或在菜单选择 `6` 手动输入 `pre` 切换。

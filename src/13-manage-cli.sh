@@ -924,20 +924,30 @@ cmd_update() {
   current=$("$XRAY_BIN" version 2>/dev/null | head -1 | awk '{print $2}')
   current="${current#v}"
 
+  local force_channel=""
+  if [[ "$target_ver" == "pre" || "$target_ver" == "prerelease" ]]; then
+    force_channel="prerelease"
+    target_ver=""
+  elif [[ "$target_ver" == "stable" ]]; then
+    force_channel="stable"
+    target_ver=""
+  fi
+
+  local active_channel="${force_channel:-${XRAY_CHANNEL:-stable}}"
   if [[ -n "$target_ver" ]]; then
     latest="${target_ver#v}"
   else
-    # 默认跟随 pre-release 通道：/releases 列表按时间倒序且含 pre-release，第一项即最新版。
-    # XRAY_CHANNEL=stable 时只取 /releases/latest（官方正式版）。
-    if [[ "${XRAY_CHANNEL:-prerelease}" == "stable" ]]; then
-      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
+    # 自动更新 / 默认更新跟随正式版 (stable /releases/latest)。
+    # 仅当手动指定 pre 或 XRAY_CHANNEL=prerelease 时获取 /releases 列表最新 pre-release。
+    if [[ "$active_channel" == "prerelease" ]]; then
+      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases" 2>/dev/null \
         | grep -m1 '"tag_name"' | cut -d'"' -f4)
     else
-      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases" 2>/dev/null \
+      latest=$(curl -fsSL --max-time 15 "https://api.github.com/repos/XTLS/Xray-core/releases/latest" 2>/dev/null \
         | grep -m1 '"tag_name"' | cut -d'"' -f4)
     fi
     latest="${latest#v}"
-    [[ -z "$latest" ]] && latest="${XRAY_DEFAULT_VERSION:-26.9.30}"
+    [[ -z "$latest" ]] && latest="${XRAY_DEFAULT_VERSION:-26.3.27}"
   fi
 
   if [[ -z "$latest" ]]; then
@@ -958,13 +968,12 @@ cmd_update() {
   fi
 
   if [[ "$is_prerelease" == "true" ]]; then
-    if [[ "${XRAY_CHANNEL:-prerelease}" != "stable" ]]; then
-      info "目标版本 v${latest} 为 Pre-release；当前跟随 pre-release 通道（默认；XRAY_CHANNEL=stable 可改回正式版）"
-    elif [[ $auto -eq 1 ]]; then
-      warn "stable 通道的自动更新不安装 Pre-release v${latest}"
+    if [[ $auto -eq 1 && "$active_channel" != "prerelease" ]]; then
+      warn "正式版 (stable) 自动更新跳过 Pre-release 版本 v${latest}"
       return 0
-    else
-      warn "目标版本 v${latest} 被标记为 Pre-release / 测试版本，可能引入实验性更改"
+    fi
+    warn "目标版本 v${latest} 被标记为 Pre-release / 测试版本，可能引入实验性更改"
+    if [[ $auto -eq 0 ]]; then
       read -rp "确定仍要安装此测试版本吗? [y/N]: " force_reply
       [[ "${force_reply,,}" == "y" ]] || { info "已取消安装测试版本"; return 0; }
     fi
@@ -1269,18 +1278,45 @@ cmd_keepalive() {
 }
 
 cmd_autoupdate() {
-  case "${1:-show}" in
+  local act="${1:-show}" sub="${2:-}"
+  case "$act" in
     on)
       cron_write "$(crontab -l 2>/dev/null | grep "$CRON_TAG" | grep -v 'update --auto'; \
         echo "0 4 * * 0 /usr/local/bin/xh update --auto >/dev/null 2>&1 ${CRON_TAG} autoupdate")"
-      info "自动更新已开启（每周日 04:00：Xray-core 自动更新、失败回滚；nginx / tcp-brutal 只检查并提醒；日志 journalctl -t xh-autoupdate）"
+      info "自动更新已开启（每周日 04:00：自动更新至最新正式版、失败回滚；nginx / tcp-brutal 只检查并提醒；日志 journalctl -t xh-autoupdate）"
       ;;
     off)
       cron_write "$(crontab -l 2>/dev/null | grep "$CRON_TAG" | grep -v 'update --auto')"
       info "内核自动更新已关闭"
       ;;
-    show|*)
-      crontab -l 2>/dev/null | grep 'update --auto' || info "未开启内核自动更新"
+    stable)
+      update_node_env XRAY_CHANNEL stable
+      export XRAY_CHANNEL=stable
+      info "Xray 内核通道已设置为: stable (仅更新官方正式版)"
+      ;;
+    pre|prerelease)
+      update_node_env XRAY_CHANNEL prerelease
+      export XRAY_CHANNEL=prerelease
+      info "Xray 内核通道已设置为: prerelease (允许自动更新 Pre-release 测试版)"
+      ;;
+    show|status|*)
+      echo ""
+      echo -e "${CYAN}=== Xray 内核自动更新与通道设置 ===${NC}"
+      local cron_status="${YELLOW}未开启${NC}"
+      crontab -l 2>/dev/null | grep -q 'update --auto' && cron_status="${GREEN}已开启 (每周日 04:00)${NC}"
+      echo -e "  自动更新状态:  ${cron_status}"
+      local ch="${XRAY_CHANNEL:-stable}"
+      if [[ "$ch" == "prerelease" ]]; then
+        echo -e "  更新通道模式:  ${YELLOW}Pre-release 测试版通道 (prerelease)${NC}"
+      else
+        echo -e "  更新通道模式:  ${GREEN}官方正式版通道 (stable, 默认推荐)${NC}"
+      fi
+      echo ""
+      echo "  快捷命令:"
+      echo "    xh autoupdate on / off        # 开启 / 关闭自动更新任务"
+      echo "    xh autoupdate stable          # 设置为稳定正式版通道 (推荐)"
+      echo "    xh autoupdate pre             # 设置为 Pre-release 测试版通道"
+      echo ""
       ;;
   esac
 }
@@ -4080,7 +4116,7 @@ cmd_menu() {
     echo "  7) 系统层调优 show / on / off"
     echo "  8) TCP Brutal 极速加速 show / on / off / speed"
     echo "  9) 保活开关"
-    echo " 10) 内核自动更新开关"
+    echo " 10) 内核自动更新与通道管理 (show / on / off / stable / pre)"
     echo " 11) UDP 节点自检 (diag)"
     echo " 12) sysctl 冲突检测 (conflict)"
     echo " 13) Reality 兼容模式 / minversion (minClientVer)"
@@ -4111,11 +4147,11 @@ cmd_menu() {
       3) cmd_sub ;;
       4) cmd_restart ;;
       5) cmd_log xray ;;
-      6) read -rp "  直接回车更新最新版，或输入指定版本 (如 26.7.28): " a; cmd_update "${a}" ;;
+      6) read -rp "  回车更新正式版，输入 pre 更新测试版，或指定版本(如 26.3.27): " a; cmd_update "${a}" ;;
       7) read -rp "  show / on / off / client / win / mac / linux / sb: " a; cmd_tuning "${a:-show}" ;;
       8) read -rp "  show / on / off / speed: " a; cmd_brutal "${a:-show}" ;;
       9) read -rp "  on / off / show: " a; cmd_keepalive "${a:-show}" ;;
-      10) read -rp "  on / off / show: " a; cmd_autoupdate "${a:-show}" ;;
+      10) read -rp "  show / on / off / stable / pre: " a; cmd_autoupdate "${a:-show}" ;;
       11) cmd_diag ;;
       12) cmd_conflict ;;
       13) read -rp "  show / on / off / 版本号(默认1.8.0): " a; cmd_minversion "${a:-show}" ;;

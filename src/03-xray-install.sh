@@ -17,7 +17,7 @@ XRAY_MIN_VER_UDP="26.3.27"
 resolve_xray_target_ver() {
   if [[ -n "${XRAY_VERSION:-}" ]]; then printf '%s' "$XRAY_VERSION"; return; fi
   local url="https://api.github.com/repos/XTLS/Xray-core/releases" tag
-  [[ "${XRAY_CHANNEL:-prerelease}" == "stable" ]] && url="${url}/latest"
+  [[ "${XRAY_CHANNEL:-stable}" != "prerelease" ]] && url="${url}/latest"
   tag=$(curl -fsSL --max-time 15 "$url" 2>/dev/null | grep -m1 '"tag_name"' | cut -d'"' -f4)
   printf '%s' "${tag#v}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' && printf '%s' "${tag#v}" || printf '%s' "${XRAY_DEFAULT_VERSION:-26.9.30}"
 }
