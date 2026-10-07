@@ -120,12 +120,12 @@ if [[ -n "$def_route" ]]; then
   ip route change $clean_route initcwnd 32 initrwnd 32 2>/dev/null || true
 fi
 
-# 2. 出口网卡发送队列长度；MTU 低于 1480 时抬到 1480、高于 1500 时降到 1500
+# 2. 出口网卡发送队列长度；MTU 低于 1500 时抬到 1500、高于 1500 时降到 1500（锁定标准以太网 1500）
 if [[ -n "$def_dev" ]]; then
   ip link set dev "$def_dev" txqueuelen 10000 2>/dev/null || true
   cur_mtu=$(cat "/sys/class/net/$def_dev/mtu" 2>/dev/null || echo 1500)
-  if [[ "$cur_mtu" -lt 1480 && "$cur_mtu" -gt 0 ]]; then
-    ip link set dev "$def_dev" mtu 1480 2>/dev/null || true
+  if [[ "$cur_mtu" -lt 1500 && "$cur_mtu" -gt 0 ]]; then
+    ip link set dev "$def_dev" mtu 1500 2>/dev/null || true
   fi
   # v4.9.51：MTU 高于公网路径的 1500（如部分云厂商默认 9000 巨帧）会发出超大 TCP 段，
   # 在公网出口被静默丢弃（PMTU 黑洞）：TCP 握手成功，但 TLS 证书链等大包到不了，
