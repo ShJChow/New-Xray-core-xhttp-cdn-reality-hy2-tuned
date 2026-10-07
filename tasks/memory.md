@@ -43,3 +43,11 @@
   3. **Xray Policy 优雅关闭放宽**：调整 `uplinkOnly: 15s` 与 `downlinkOnly: 30s`，保证大文件下载与尾部数据完整平滑传输。
   4. **系统级持续性参数**：保持内核 `tcpUserTimeout: 300000ms` (5分钟) 与 `tcpKeepAliveIdle: 30s`，抗击跨境链路短暂丢包与抖动。
 
+## 5. 网卡 MTU 调优与 PMTU 适应 (2026-10-07)
+- **背景与原因**：
+  - Oracle Cloud 等云厂商默认网卡 MTU 为 9000（巨型帧），而公网标准物理 MTU 为 1500。
+  - 为进一步消除跨境隧道、多层封装（如 WireGuard / GRE / VLESS / QUIC / TLS）以及各种中间路由 MTU 限制导致的丢包与重传，生产网卡 MTU 调优下限设为 **1408**。
+- **持久化方案**：
+  - 系统配置 `/etc/netplan/99-mtu.yaml` 覆盖默认 netplan，并编译注入底层 `systemd-networkd`（`MTUBytes=1408`），保证重启不丢失。
+
+
