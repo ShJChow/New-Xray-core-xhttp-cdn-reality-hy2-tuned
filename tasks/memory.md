@@ -104,3 +104,21 @@
      - Mihomo/Clash 与普通客户端使用免后量子加密的标准节点。
      - Shadowrocket TUIC 链接显式补齐 `version=5`，Naive 转换为 `http3://` / `http2://`，过滤不支持的 `anytls`。
      - Sing-box 客户端 TUN 入站 MTU 严格锁定为标准物理以太网 `1500`。
+
+
+## 9. sbbox 多端客户端全兼容规范与发布落地 (v2.7.65, 2026-10-08)
+- **多端适配矩阵**：
+  1. **Sing-box 原生客户端**：
+     - TUN 入站 MTU 全面修正为 `1500`（物理以太网标准），消灭 PMTU 巨帧丢包黑洞。
+  2. **Shadowrocket (小火箭)**：
+     - TUIC 链接显式补齐 `version=5`，防止小火箭误判为 v4 导致握手失败。
+     - Naive 链接在识别小火箭 UA 时自动由 `naive+quic://` / `naive+https://` 转换为 `http3://` / `http2://`。
+     - 自动过滤剔除小火箭不支持的 `anytls://` 协议，确保导入节点 100% 可用。
+  3. **Clash / Mihomo**：
+     - `clmi.yaml` 默认隔离 `type: anytls`，并在 `sub_server.py` 下发时执行 `sanitize_clash_yaml` 清洗，防止内核因未知代理类型报错崩溃。
+     - 保持 TUIC (`congestion-controller: cubic`) 与 Hysteria2 (`obfs: salamander`) 规范完全兼容。
+  4. **v2rayN**：
+     - `anytls://` 与 `tuic://` 强校验携带 `security=tls`，满足 core 解析要求，防止无 TLS 配置闪退。
+- **发布记录**：
+  - 仓库：`ShJChow/New-sing-box-naiveproxy-tuic-hy2-tuning`
+  - 版本：`v2.7.65`，Commit: `fc14735`
