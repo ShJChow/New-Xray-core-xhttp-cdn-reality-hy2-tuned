@@ -70,3 +70,37 @@
      - `xray-config.json.tmpl` 中的 fallback DNS 统一修正为 `127.0.0.53`。
   3. **停用境外服务端优选定时器**：
      - 明确优选 IP 测速必须在客户端或本地网关执行，停用服务端的 `cf-bestip.timer` 与 `cf-healthcheck.timer`。
+
+## 7. 全局单流缓冲区保护上限 64MB 规格调整与 Brutal 卸载 (2026-10-08)
+- **背景与原因**：
+  - 此前 medium/large 档位将单流缓冲区保护上限与 TCP 读写缓冲直接开至 128MB (`134217728` 字节)。
+  - 在高突发多并发连接场景下，单流无节制增长至 128MB 会导致内存池被局部大流侵占，增加系统 OOM 风险。
+  - 彻底停用并卸载内核 `brutal` 模块，使全协议回归标准 BBRv3 控制环路。
+- **调整规范**：
+  1. **缓冲区保护上限降至 64MB**：
+     - `net.core.rmem_max` 与 `net.core.wmem_max` 调整为 `67108864` (64MB)。
+     - `net.ipv4.tcp_rmem` 与 `net.ipv4.tcp_wmem` 的最大值从 128MB 收敛为 `67108864` (64MB)。
+     - `06-tuning-lib.sh`、`13-manage-cli.sh`、`ubuntu_vps_optimize.sh`、`vps-tune.sh` 中的 large/medium 档位计算及 `show` 摘要展示统一对齐 64MB 规格。
+  2. **Brutal 彻底退役**：
+     - 内核中通过 `rmmod brutal` 卸载模块，禁用 `tcp-brutal-rules.service`，清理开机加载项。
+
+## 8. CDN 节点连通性排障与多客户端兼容性规范 (2026-10-08)
+- **故障背景**：客户端拉取订阅后测试 CDN 节点显示延迟为 `-1`（连接超时/不可达）。
+- **根因分析**：
+  1. **Cloudflare 默认 Anycast IP 遭遇 GFW 阻断**：
+     - 服务端自动同步将优选域名绑定到了美西本地 SJC 的 `104.21.x.x` IP，而 CDN 域名默认解析也是 Cloudflare 易被墙的 `172.67 / 104.21` 段。大陆网络环境下该 IP 段的 443 端口被运营商与 GFW 大面积阻断丢包，TCP 握手无法完成，直接超时报 `-1`。
+  2. **Shadowrocket 专属订阅回退 Bug**：
+     - `node.env` 缺少 `BESTCF_DOMAIN` 时，小火箭订阅中的 CDN 节点连接地址回退成了被墙的默认 CDN 域名，而非优选 IP。
+  3. **客户端对后量子加密（ML-KEM-768）不兼容**：
+     - Mihomo (Clash Meta) 与旧版 V2RayN (Xray < 26.9) 不支持 VLESS 嵌套后量子加密（`mlkem768x25519plus`），带该加密的节点在上述客户端测速必然报错 `-1`。
+  4. **Sing-box 客户端 TUN MTU 9000 巨帧黑洞**：
+     - `sbox_client.json` 中 TUN 入站硬编码 `"mtu": 9000`，客户端发出巨型帧在公网触发 PMTU 黑洞丢包。
+- **解决对策与多端兼容规范**：
+  1. **优选 IP 绑定纯净 Anycast 段**：
+     - 优选域名必须绑定国内运营商访问优良的官方纯净 Anycast IP 段（如 `104.16.x.x`、`162.159.x.x` 优质节点）。
+  2. **小火箭专属 CDN 节点规范**：
+     - 补齐 `BESTCF_DOMAIN`，小火箭订阅中的 CDN 节点连接地址锁定为优选域名端口 443，SNI/Host 保持 CDN 域名，路由走免加密的 8002 入站（`/sr-path`，`encryption=none`）。
+  3. **客户端协议差异化下发**：
+     - Mihomo/Clash 与普通客户端使用免后量子加密的标准节点。
+     - Shadowrocket TUIC 链接显式补齐 `version=5`，Naive 转换为 `http3://` / `http2://`，过滤不支持的 `anytls`。
+     - Sing-box 客户端 TUN 入站 MTU 严格锁定为标准物理以太网 `1500`。
