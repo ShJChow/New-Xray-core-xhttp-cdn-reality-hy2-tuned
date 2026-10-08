@@ -158,7 +158,7 @@ else log "    未检测到活动规则（云厂商安全组可能在机器外层
 # ---- 内存分档：所有派生值都从这里出 ----
 # NETDEV_BUDGET：NAPI 每轮 poll 的包数上限，默认 300 在高并发小包下 softirq 收不完
 # （/proc/net/softnet_stat 的 time_squeeze 非零）。小内存档不写，保持默认。
-if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=134217728; TCP_MAX=67108864; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000
+if   [[ "$MEM_MB" -ge 16384 ]]; then TIER=large;  SOCK_MAX=67108864;  TCP_MAX=67108864; BACKLOG=65536; CONNTRACK=1048576; NETDEV_BUDGET=6000
 elif [[ "$MEM_MB" -ge 4096  ]]; then TIER=medium; SOCK_MAX=67108864; TCP_MAX=33554432; BACKLOG=32768; CONNTRACK=262144; NETDEV_BUDGET=6000
 else                                 TIER=small;  SOCK_MAX=16777216; TCP_MAX=8388608;  BACKLOG=16384; CONNTRACK=0; NETDEV_BUDGET=""
 fi

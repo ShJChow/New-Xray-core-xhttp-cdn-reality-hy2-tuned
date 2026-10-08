@@ -137,8 +137,8 @@ cmd_status() {
   _cores=$(nproc 2>/dev/null || echo '?')
   _mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
   _arch=$(uname -m 2>/dev/null || echo unknown)
-  if   [[ "$_mem" -ge 16384 ]]; then _tier=large; _buf_mb=128; _cap_mb=128;
-  elif [[ "$_mem" -ge 4096  ]]; then _tier=medium; _buf_mb=128; _cap_mb=128;
+  if   [[ "$_mem" -ge 16384 ]]; then _tier=large; _buf_mb=64; _cap_mb=64;
+  elif [[ "$_mem" -ge 4096  ]]; then _tier=medium; _buf_mb=64; _cap_mb=64;
   elif [[ "$_mem" -ge 1536  ]]; then _tier=entry; _buf_mb=32; _cap_mb=32;
   else _tier=small; _buf_mb=16; _cap_mb=16; fi
 
@@ -1042,7 +1042,7 @@ cmd_tuning() {
     show)
       local _mem _buf_mb _cap_mb
       _mem=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-      if   [[ "$_mem" -ge 4096  ]]; then _buf_mb=128; _cap_mb=128;
+      if   [[ "$_mem" -ge 4096  ]]; then _buf_mb=64; _cap_mb=64;
       elif [[ "$_mem" -ge 1536  ]]; then _buf_mb=32; _cap_mb=32;
       else _buf_mb=16; _cap_mb=16; fi
 
