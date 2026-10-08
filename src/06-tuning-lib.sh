@@ -1034,10 +1034,12 @@ set_tcp_brutal_xray() {
     install_tcp_brutal_service "$mbps"
 
     python3 -c "
+import re
 with open('$cfg', 'r') as f:
     s = f.read()
 s = s.replace('\"tcpcongestion\":\"bbr\"', '\"tcpcongestion\":\"brutal\"')
 s = s.replace('\"tcpcongestion\": \"bbr\"', '\"tcpcongestion\": \"brutal\"')
+s = re.sub(r'(\"protocol\"\s*:\s*\"freedom\"[\s\S]*?\"sockopt\"\s*:\s*\{[\s\S]*?\"tcpcongestion\"\s*:\s*)\"brutal\"', r'\g<1>\"bbr\"', s)
 with open('$cfg', 'w') as f:
     f.write(s)
 " 2>/dev/null || sed -i -e 's/"tcpcongestion":[[:space:]]*"bbr"/"tcpcongestion":"brutal"/g' "$cfg"

@@ -51,6 +51,22 @@
 - **持久化方案**：
   1. 系统配置 `/etc/netplan/99-mtu.yaml` 覆盖 cloud-init 默认值（锁定 `mtu: 1500`），经 `netplan generate` 注入底层 `systemd-networkd`（`MTUBytes=1500`）。
   2. 开机调优脚本（`xray-xhttp-nic-tune` / `sbbox-nic-tune`）将 MTU 校验上下限均对齐至 **1500**，杜绝开机回退为 1480 或 9000。
-
-
-
+## 6. 全链路网络与节点性能排障与“罪证”清理规范 (2026-10-08)
+- **故障背景**：节点网络吞吐受限、出现周期性微抖动，以及 TCP 握手重传率高（SNMP 显示重传数达 33 万+）。
+- **根因分析**：
+  1. **Xray Freedom 直连出站拥塞控制与 MPTCP 误配**：
+     - `xray-config.json.tmpl` 中 freedom 出站误继承了 `${XRAY_TCP_CC:-brutal}` 以及 `tcpMptcp: true`。
+     - TCP Brutal 属于单向固定速率算法，强行作用于 VPS 访问公网目标（Google、YouTube、Cloudflare）的自由出站连接时，导致拥塞窗口畸形膨胀（高达 14855 报文）并引发中间路由器缓冲区溢出与丢包。
+     - 公网绝大多数目标服务器和防火墙不识别 TCP SYN 中的 `MP_CAPABLE` 选项，易引发 1~3 秒 RTO 超时重传。
+  2. **DNS 本地解析死地址**：
+     - Xray 配置 fallback 的 DNS 服务器填写了 `localhost`（即 127.0.0.1:53），而 systemd-resolved 仅监听在 127.0.0.53，导致本地回退查询被拒绝连接。
+  3. **Cloudflare 优选 IP 测速逻辑颠倒**：
+     - 在美西 VPS 上执行 `cfst` 测速只会选出美西本地（SJC 0.8ms）节点并同步至 DNS，给国内客户端造成跨洋劣质路由。
+- **解决对策与优化规范**：
+  1. **锁定 Freedom 出站协议栈**：
+     - 显式将 freedom 出站中的 `tcpcongestion` 锁定为标准的 `"bbr"`，同时关闭 `"tcpMptcp": false`，严禁在直连出站上使用 Brutal。
+     - `06-tuning-lib.sh` 中的 `set_tcp_brutal_xray` 在开启 Brutal 时通过正则守卫，确保 freedom 出站始终维持 BBR。
+  2. **修复 DNS 本地解析**：
+     - `xray-config.json.tmpl` 中的 fallback DNS 统一修正为 `127.0.0.53`。
+  3. **停用境外服务端优选定时器**：
+     - 明确优选 IP 测速必须在客户端或本地网关执行，停用服务端的 `cf-bestip.timer` 与 `cf-healthcheck.timer`。

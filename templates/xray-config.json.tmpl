@@ -15,7 +15,7 @@
         "servers": [
             "9.9.9.10",
             "1.1.1.1",
-            "localhost"
+            "127.0.0.53"
         ],
         "queryStrategy": "UseIPv4"
     },
@@ -192,8 +192,8 @@
                     // Xray 26.9+ 弃用 freedom.settings.domainStrategy / targetStrategy，迁移至 sockopt.domainStrategy
                     "domainStrategy": "UseIPv4",
                     "tcpFastOpen": true,
-                    "tcpMptcp": true,
-                    "tcpcongestion": "${XRAY_TCP_CC:-brutal}",
+                    "tcpMptcp": false,
+                    "tcpcongestion": "bbr",
                     "tcpKeepAliveIdle": 30,
                     "tcpKeepAliveInterval": 5,
                     "tcpUserTimeout": 300000
