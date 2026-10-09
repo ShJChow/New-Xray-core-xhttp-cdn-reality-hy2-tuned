@@ -1,0 +1,19 @@
+feature,area,priority,original,clone,notes
+VLESS Reality xtls-rprx-vision TCP Direct (Port 443),core-inbound,must,yes,yes,Direct 443 TCP Reality entry for high speed and low latency
+VLESS XHTTP Reality Fallback (Port 443 to 8001),core-inbound,must,yes,yes,Fallback path for XHTTP over Reality direct
+Nginx SNI Dispatch and gRPC Reverse Proxy,gateway,must,yes,yes,Nginx 8003 ssl multiplexes Reality domain and CDN domain to Xray 8001
+VLESS Encryption (vlessenc ML-KEM + X25519),security,must,yes,partial,Enabled on 8001 but 8002 is none (unencrypted over CDN if 8002 used)
+xPadding CDN Obfuscation (Referer tokenish),anti-dpi,must,yes,yes,Configured with 100-1000 bytes tokenish padding in Referer
+Asymmetric Uplink CDN and Downlink Reality (Mode 3),asymmetric-flow,must,yes,yes,CDN uplink bypasses egress firewalls while Reality downlink avoids CDN speed cap
+Asymmetric Uplink Reality and Downlink CDN (Mode 5),asymmetric-flow,must,yes,yes,Reality uplink avoids CDN upload limits while CDN downlink survives IP blocks
+Encrypted Client Hello (ECH) on CDN SNI,anti-dpi,should,yes,no,Present in repo templates; currently disabled on server (xh ech on)
+XHTTP HTTP/3 on Standard UDP 443 via Nginx,transport,should,yes,no,Nginx lacks listen 443 quic reuseport; direct H3 uses non-standard port 8446
+Local Static SingleFile Masquerade Site,anti-probing,should,yes,no,Server proxies external universities (sjsu/harvard); risks 502s and latency fingerprinting
+ACME DNS-01 Automation with Cloudflare API,maintenance,must,yes,no,Currently standalone HTTP-01; will fail to renew when CDN is proxied
+Nginx Non-Root Execution Hardening,security,should,yes,no,Repo v1.2.6 uses nobody user; local server still runs nginx as root
+Outbound Mainland China (geoip:cn) Blocking,routing,should,yes,no,Repo template blocks geoip:cn; local server has it disabled (xh block cn on)
+Dual-CDN Extension (CDN-A Up / CDN-B Down),extension,could,yes,no,Available in repo extensions/dual-cdn
+Dual-IP Extension (IPv4 Up / IPv6 Down),extension,could,yes,no,Available in repo extensions/dual-ip; server is currently IPv4 only
+Hysteria 2 with Salamander UDP Obfuscation,udp-acceleration,could,yes,yes,Active on UDP 37987 with finalmask salamander
+Tokenized Subscription Portal (/sub/TOKEN/),client-distribution,must,yes,yes,Active in Nginx with rate limiting and h2only protection
+Cloudflare Optimized IP Automation (bestcf),performance,should,yes,yes,Active in local xh manager (bestcf.example.com)

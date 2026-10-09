@@ -205,6 +205,7 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
 
     server {
         listen       127.0.0.1:8003 ssl;
+        listen       443 quic reuseport;
         http2        on;
         # >>xh-h2only
         # 只接受 HTTP/2：HTTP/1.x 请求直接断开（nginx 无法在 ALPN 层去掉 http/1.1，只能在请求层拒绝）。
