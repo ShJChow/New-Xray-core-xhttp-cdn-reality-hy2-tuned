@@ -174,3 +174,19 @@
   4. **彻底修复 systemd-resolved 回退 DNS 异常**：
      - 将 fallback DNS 统一修正为全球权威 Anycast DNS `8.8.8.8`（与 `9.9.9.9`、`1.1.1.1` 组成三核 Anycast 冗余），彻底根除 `127.0.0.53` 在处理特定压缩标签时触发的 `segment prefix is reserved` 异常；
      - 本机 `/usr/local/etc/xray/config.json` 与 `templates/xray-config.json.tmpl` 均已同步修正，Xray 进程零报错稳定运行。
+
+## 13. REA-Agents 工具链集成规范与二进制分析沉淀 (2026-10-09)
+- **环境部署与 MCP 对齐规范**：
+  1. **配置预校验**：
+     - `/root/.gemini/config/mcp_config.json` 严禁出现 0 字节空文件，空文件会触发 Inquirer/CLI 内部 JSON 解析阻断（报 `malformed`）；必须预置基础合法 JSON 对象 `{"mcpServers": {}}`。
+  2. **跨 Client 多端自动配置**：
+     - 使用命令 `npx -y rea-agents setup --all-detected --yes` 可无交互自动完成当前环境检测到的所有 AI Client 配置（Antigravity、Claude Code、Gemini CLI），三端状态均达成 `aligned` / `configured`。
+  3. **逆向 Skill 安装位置**：
+     - REA 逆向工程 Skill 固化于 `/root/.agents/skills/reverse-engineer-anything`（v33，集成了 139 个静态分析与探测工具）。
+- **Go/ELF 二进制逆向与性能审计实践**：
+  1. **Go 构建图谱提取**：
+     - 即使 Go 二进制经过 `strip` 剥离了常规符号表，ELF 的 `.go.buildinfo` 段依然完整封装了构建依赖版本树、编译器标志（`-gcflags`、`-trimpath`）、CGO 状态以及架构参数（`GOARM64` 等），可通过 REA 与十六进制解析直接提取。
+  2. **指令集与硬件匹配审计**：
+     - 将逆向提取的编译架构参数（如 `GOARM64=v8.0`）与宿主 CPU 硬件指令集（如 Neoverse-N1 的 `atomics/LSE`, `aes`, `pmull`, `sha2`, `crc32`）进行对标，能够精准识别并发原子操作（LL/SC 循环 vs 原生 LSE 硬件指令）与硬件加速的潜在性能差距。
+  3. **非侵入式运行时性能加固**：
+     - 在无法随意替换核心二进制的生产环境中，优先通过 Go 运行时环境变量（`GOMEMLIMIT`、`GODEBUG`、`GOGC`）与 Linux cgroup/systemd 调度参数（`Nice`、`LimitMEMLOCK`）释放机器物理硬件极限，达成零停机零风险的最佳性能调优。
