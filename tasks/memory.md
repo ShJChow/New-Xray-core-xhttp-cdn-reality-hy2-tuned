@@ -122,3 +122,20 @@
 - **发布记录**：
   - 仓库：`ShJChow/New-sing-box-naiveproxy-tuic-hy2-tuning`
   - 版本：`v2.7.65`，Commit: `fc14735`
+
+
+## 10. CDN 节点自适应 ALPN (h2, h3) 规范与落地 (2026-10-09)
+- **背景与需求**：
+  - 此前 CDN 节点在客户端 URI 和配置中写死为单一协议（如仅 `alpn=h2` 或仅 `alpn=h3`）。
+  - 当客户端网络环境或代理工具对 HTTP/2 与 HTTP/3 (QUIC) 具备不同支持度时，单一协议锁定会导致无法动态协商最优传输层。
+  - 调整 CDN 节点为自适应协商 ALPN (`h2, h3`)。
+- **调整规范与多端落地**：
+  1. **VLESS URI 链接规范**：
+     - CDN 节点链接中的 `alpn` 参数调整为 `alpn=h2,h3`（小火箭/v2rayN/Xray 原生均支持逗号分隔解析为 `["h2", "h3"]` 列表）。
+  2. **Mihomo (Clash Meta) 代理条目**：
+     - `VLESS-XHTTP-CDN-H2` 的 `alpn` 配置更新为 `[h2, h3]` 列表。
+     - 同时保留纯 QUIC 的 `VLESS-XHTTP-CDN-H3` (`alpn: [h3]`)，使 Mihomo 的「自动选择」测速组能在 TCP 与 QUIC 间智能择优。
+  3. **小火箭 (Shadowrocket) 专属订阅**：
+     - 免加密 8002 入站通道下发的 CDN 节点同步下发 `alpn=h2,h3` 与 `alpn=h3,h2`，由客户端自主发起握手协商。
+  4. **管理脚本与安装包对齐**：
+     - `11-client-config.sh`、`12-subscription.sh`、`13-manage-cli.sh`、`/usr/local/bin/xh` 以及 `dist/` 安装包全量更新。

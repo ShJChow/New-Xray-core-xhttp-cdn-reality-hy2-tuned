@@ -61,7 +61,12 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
     cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
     [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
-    echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+    echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,h3&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+  fi
+  if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
+    cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
+    [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
+    echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3,h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H3"
   fi
 } > "$SUB_DIR/shadowrocket-raw.txt"
 if [[ -s "$SUB_DIR/shadowrocket-raw.txt" ]]; then
