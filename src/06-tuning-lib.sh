@@ -505,16 +505,24 @@ LIMITSEOF
       # 若服务未安装或目录不存在，仅在存在/可创建时操作
       if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 || [[ -d "$dir" ]]; then
         install -d -m 755 "$dir" 2>/dev/null || continue
-        # 小内存机给 Go 运行时设软上限（物理内存的 60%）：接近上限时更积极 GC，而不是长到被 OOM 杀掉
+        # 内存自适应软上限（GOMEMLIMIT）：小内存机设为 60% 避免 OOM，大内存机设为 75% 极大减少 GC 暂停
         local GOMEM_LINE="" _gm
         _gm=$(awk '/^MemTotal:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-        [[ "$_gm" -gt 0 && "$_gm" -lt 2048 ]] && GOMEM_LINE="Environment=\"GOMEMLIMIT=$((_gm * 60 / 100))MiB\""
+        if [[ "$_gm" -gt 0 ]]; then
+          if [[ "$_gm" -lt 2048 ]]; then
+            GOMEM_LINE="Environment=\"GOMEMLIMIT=$((_gm * 60 / 100))MiB\""
+          else
+            GOMEM_LINE="Environment=\"GOMEMLIMIT=$((_gm * 75 / 100))MiB\""
+          fi
+        fi
         cat > "${dir}/${dropin}" <<DROPINEOF || warn "写入 ${unit} drop-in 失败"
 # xray-xhttp 句柄上限，由 xh tuning on 生成 / xh tuning off 移除。
 # 本项目只写这一个文件，同目录下你自己的 override.conf 不会被改动。
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=infinity
+LimitMEMLOCK=infinity
+Nice=-10
 Environment="GOGC=200"
 Environment="GOMAXPROCS=${CPU_CORES}"
 Environment="GODEBUG=madvdontneed=1"

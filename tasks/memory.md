@@ -157,3 +157,17 @@
      - 补充 `docs/参考资料.md`，完整收录 Xray-core XHTTP 官方讨论（#4113, #4118）、xpadding 长度混淆泄露分析与 BBS 讨论、Cloudflare ECH 边缘规范与 Xray-core v26.3.27 演进、Mihomo 传输标准、以及 BBRv3 / 64MB 单流保护模型。
   5. **客户端直连与 CDN 灵活路由切换指引**：
      - 在 `README.md` 中补充技术解析：阐明 SNI 锁定 CDN 域名时，客户端 Server 地址在「CDN 优选 IP」与「真实 VPS IP」之间切换的原理，方便用户按需一键切换低延迟直连或抗封锁 CDN。
+
+## 12. 基于 REA-Agents 二进制逆向洞察的 Xray 运行时与硬件级调优 (2026-10-09)
+- **背景与逆向发现**：
+  - 通过 `rea-agents` 对 `/usr/local/bin/xray` (Xray 26.3.27 ARM64 静态 ELF) 进行结构与 Go buildinfo 深度逆向分析：
+    1. **硬件特性匹配**：宿主机为 ARM Neoverse-N1 (ARMv8.2-A)，具备硬件 `atomics` (LSE)、`aes`、`pmull`、`sha1`、`sha2` 与点积指令加速，而预编译版仅锁定 `GOARM64=v8.0`；
+    2. **Go 运行时 GC 与调度瓶颈**：当前 VPS 拥有 24GB 物理内存，而默认 Go 运行时无软内存限制（GOMEMLIMIT 未设定），高吞吐并发下容易因默认 GOGC 行为发生不必要的 GC 停顿或抖动。
+- **优化与工程落地**：
+  1. **自适应 Go 运行时软上限 (`GOMEMLIMIT`)**：
+     - 在 `06-tuning-lib.sh` 与系统 drop-in (`10-xray-xhttp.conf`) 中加入动态自适应逻辑：大内存机（>=2GB）将 `GOMEMLIMIT` 设定为物理内存的 75%（24GB 机器设为 `18GiB`），允许 Go 运行时充分享受大物理内存对象池，彻底消除并发激增时的 GC 停顿；小内存机保持 60% 防止 OOM。
+  2. **锁定内存与进程调度加固 (`LimitMEMLOCK` / `Nice`)**：
+     - drop-in 中追加 `LimitMEMLOCK=infinity`，提升 UDP/QUIC 缓冲区锁定能力；
+     - 追加 `Nice=-10`，赋予 Xray 核心更高的系统级 CPU 调度优先级，消除网络包处理的排队调度抖动。
+  3. **实时生效与验证**：
+     - 本机 `/etc/systemd/system/xray.service.d/10-xray-xhttp.conf` 已更新并重载生效，Xray 进程成功加载 `GOMEMLIMIT=18GiB`、`LimitMEMLOCK=infinity` 并在 7 个核心端口稳定监听。
