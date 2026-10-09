@@ -190,3 +190,22 @@
      - 将逆向提取的编译架构参数（如 `GOARM64=v8.0`）与宿主 CPU 硬件指令集（如 Neoverse-N1 的 `atomics/LSE`, `aes`, `pmull`, `sha2`, `crc32`）进行对标，能够精准识别并发原子操作（LL/SC 循环 vs 原生 LSE 硬件指令）与硬件加速的潜在性能差距。
   3. **非侵入式运行时性能加固**：
      - 在无法随意替换核心二进制的生产环境中，优先通过 Go 运行时环境变量（`GOMEMLIMIT`、`GODEBUG`、`GOGC`）与 Linux cgroup/systemd 调度参数（`Nice`、`LimitMEMLOCK`）释放机器物理硬件极限，达成零停机零风险的最佳性能调优。
+
+## 14. Shadowrocket 小火箭 CDN-H2 连通性彻底修复与协议解耦 (2026-10-09)
+- **故障排查与根因剖析**：
+  1. **Cloudflare CDN 特征约束**：
+     - Cloudflare 边缘节点对 HTTP/3 (QUIC) 并不支持 XHTTP 双向长连接流（`stream-up` 模式），请求体会被边缘缓冲或切断；XHTTP CDN 必须基于 HTTP/2 (TCP) 稳定承载。
+  2. **`alpn=h2,h3` 误导客户端**：
+     - 此前将 CDN-H2 节点的 ALPN 调整为自适应 `h2,h3`，小火箭 (Shadowrocket) 收到包含 `h3` 的 ALPN 会在 `bestcf` 优选 IP 上优先发起 UDP 443 QUIC 握手或引发 TLS 协商异常，导致连通性彻底归零。
+  3. **Nginx Alt-Svc 广播导致客户端强升 H3**：
+     - Nginx 在 `cdn.*` 虚拟主机上广播了 `Alt-Svc: 'h3=":443"; ma=86400'`，小火箭缓存此响应头后后续所有连接会被强制切换到 UDP 443；同时 Nginx 内部的 `$h2only` 防探测规则会将协议非 `HTTP/2.0` 的请求直接 `return 444`。
+  4. **Nginx 错误监听宿主机 UDP 443 QUIC**：
+     - CDN 流量经 Cloudflare Anycast 回源恒为 TCP，Nginx CDN 虚拟主机不应绑定宿主机 UDP 443。
+- **修复方案与落地**：
+  1. **CDN-H2 严格锁定 `alpn=h2`**：
+     - 在 `11-client-config.sh`、`12-subscription.sh`、`13-manage-cli.sh`、`/usr/local/bin/xh` 中将 `VLESS-XHTTP-CDN-H2` 的 ALPN 严格设回 `alpn=h2`，与独立 QUIC 节点 `VLESS-XHTTP-CDN-H3` (`alpn=h3`) 明确分立。
+  2. **Nginx CDN 块精简与缓存即时清除**：
+     - 移除 Nginx CDN 虚拟主机的 `listen 443 quic reuseport;` 与 `add_header Alt-Svc ...` 广播；
+     - 在 `/sr...` 及主 XHTTP location 显式注入 `add_header Alt-Svc 'clear' always;`，彻底清除所有客户端此前缓存的 Alt-Svc 记录。
+  3. **订阅更新与服务验证**：
+     - 执行 `xh resub` 重新生成全套明文与 base64 订阅，`nginx -t` 语法检测通过并重载服务，外部 curl 探测验证返回预期的 `HTTP/2 404` 且携带 `alt-svc: clear`。

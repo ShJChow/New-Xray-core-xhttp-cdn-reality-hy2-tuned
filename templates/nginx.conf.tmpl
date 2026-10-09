@@ -205,7 +205,6 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
 
     server {
         listen       127.0.0.1:8003 ssl;
-        listen       443 quic reuseport;
         http2        on;
         # >>xh-h2only
         # 只接受 HTTP/2：HTTP/1.x 请求直接断开（nginx 无法在 ALPN 层去掉 http/1.1，只能在请求层拒绝）。
@@ -219,9 +218,6 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
-
-        # 广播 HTTP/3 (QUIC) 支持声明，提升伪装度并引导支持 h3 的客户端
-        add_header Alt-Svc 'h3=":443"; ma=86400' always;
 
         # 禁止访问隐藏文件及敏感配置文件
         location ~ /\.(?!well-known) {
@@ -242,6 +238,7 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
 
         location ${XHTTP_PATH} {
             grpc_pass grpc://xray_xhttp;
+            add_header Alt-Svc 'clear' always;
             # 下行吞吐：grpc_buffer_size 调大至 1024k，减少 HTTP/2 切片与系统调用开销
             grpc_buffer_size 1024k;
             # grpc_pass 不受 proxy_buffering / proxy_request_buffering 影响，无需显式关缓冲
@@ -265,6 +262,7 @@ $(nginx_fallback_config "$CDN_DOMAIN" "$CDN_FALLBACK_ORIGIN" "$CDN_FALLBACK_HOST
 
         location /sr${XHTTP_PATH#/} {
             grpc_pass grpc://xray_xhttp_sr;
+            add_header Alt-Svc 'clear' always;
             grpc_buffer_size 1024k;
             client_body_timeout   300s;
             send_timeout          300s;

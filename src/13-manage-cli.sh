@@ -342,12 +342,12 @@ cmd_resub() {
     if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
       local cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
       [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
-      echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2,h3&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
+      echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H2"
     fi
     if [[ "${FEATURE_CDN_H3:-false}" == true ]]; then
       local cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"
       [[ -z "$cdn_host" || "$cdn_host" == "127.0.0.1" ]] && cdn_host="bestcf.${REALITY_DOMAIN#reality.}"
-      echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3,h2&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H3"
+      echo "vless://${UUID2}@${cdn_host}:443?encryption=none&security=tls&sni=${CDN_DOMAIN}&fp=chrome&alpn=h3&type=xhttp&host=${CDN_DOMAIN}&path=%2Fsr${XHTTP_PATH#/}&mode=stream-up#VLESS-XHTTP-CDN-H3"
     fi
   } > "${subdir}/shadowrocket-raw.txt"
   if [[ -s "${subdir}/shadowrocket-raw.txt" ]]; then
@@ -1575,12 +1575,12 @@ for home in user_homes:
                 added = False
                 for line in lines:
                     if '#VLESS-XHTTP-CDN-H3' in line:
-                        h2_line = line.replace('alpn=h3', 'alpn=h2,h3').replace('#VLESS-XHTTP-CDN-H3', '#VLESS-XHTTP-CDN-H2')
+                        h2_line = line.replace('alpn=h3', 'alpn=h2').replace('#VLESS-XHTTP-CDN-H3', '#VLESS-XHTTP-CDN-H2')
                         new_lines.append(h2_line)
                         added = True
                     elif not added and ('#VLESS-XHTTP-Direct-H3' in line or '#VLESS-Reality' in line):
                         # 兜底：从直连节点提取参数构造
-                        h2_line = line.replace('alpn=h3', 'alpn=h2,h3')
+                        h2_line = line.replace('alpn=h3', 'alpn=h2')
                         h2_line = re.sub(r'@[^:]+:[0-9]+', '@${CDN_DOMAIN}:443', h2_line)
                         h2_line = re.sub(r'sni=[^&]+', 'sni=${CDN_DOMAIN}', h2_line)
                         h2_line = re.sub(r'#[^#]+$', '#VLESS-XHTTP-CDN-H2', h2_line)
@@ -1611,7 +1611,7 @@ for home in user_homes:
                     if 'VLESS-XHTTP-CDN-H3' in p.get('name', ''):
                         h2_p = copy.deepcopy(p)
                         h2_p['name'] = p['name'].replace('VLESS-XHTTP-CDN-H3', 'VLESS-XHTTP-CDN-H2')
-                        h2_p['alpn'] = ['h2', 'h3']
+                        h2_p['alpn'] = ['h2']
                         new_proxies.append(h2_p)
                         added = True
                     elif not added and ('VLESS-XHTTP-Direct-H3' in p.get('name', '') or 'VLESS-Reality' in p.get('name', '')):
@@ -1620,7 +1620,7 @@ for home in user_homes:
                         h2_p['server'] = '${CDN_DOMAIN}'
                         h2_p['port'] = 443
                         h2_p['servername'] = '${CDN_DOMAIN}'
-                        h2_p['alpn'] = ['h2', 'h3']
+                        h2_p['alpn'] = ['h2']
                         if 'xhttp-opts' in h2_p:
                             h2_p['xhttp-opts']['host'] = '${CDN_DOMAIN}'
                             h2_p['xhttp-opts']['mode'] = 'stream-up'
@@ -2190,7 +2190,7 @@ cmd_bestcf() {
       fi
 
       if systemctl is-active --quiet cf-healthcheck.timer 2>/dev/null; then
-        echo -e "  故障自愈健康检查: ${GREEN}运行中 (每 3 分钟检测握手与延迟，异常自动切 IP)${NC}"
+        echo -e "  故障自愈健康检查: ${GREEN}运行中 (每 1 分钟检测握手、延迟与源站可达性，异常自动切 IP)${NC}"
       else
         echo -e "  故障自愈健康检查: ${YELLOW}未激活${NC}"
       fi
@@ -2269,12 +2269,15 @@ cmd_bestcf() {
 
       cat > "$py_script" <<PYEOF
 #!/usr/bin/env python3
-import os, sys, json, subprocess, urllib.request, time, shutil
+import os, sys, json, subprocess, urllib.request, time, shutil, ssl, socket
 
 CF_TOKEN = "${input_token}"
 CF_ZONE_ID = "${input_zone}"
 DOMAIN_NAME = "${final_domain}"
 DIR = "${dir}"
+
+sys.path.insert(0, DIR)
+from probe import origin_ok  # 真实 XHTTP 隧道探测
 
 def run_cfst():
     cmd = [
@@ -2373,12 +2376,83 @@ def sync_dns(ips):
 if __name__ == "__main__":
     try:
         run_cfst()
-        sync_dns(get_best_ips(limit=2))
+        good = []
+        for c in get_best_ips(limit=30):
+            ok, why = origin_ok(c["ip"])
+            print("[%s] 候选 %s: %s" % (time.strftime('%Y-%m-%d %H:%M:%S'), c["ip"], why))
+            if ok:
+                good.append(c)
+            if len(good) >= 2:
+                break
+        if not good:
+            print("没有通过源站探测的候选 IP，保持现有 DNS 不变")
+            sys.exit(1)
+        sync_dns(good)
     except Exception as e:
         print("执行出错:", e)
         sys.exit(1)
 PYEOF
       chmod 700 "$py_script"
+
+      cat > "${dir}/probe.py" <<'PROBEEOF'
+#!/usr/bin/env python3
+"""优选 IP 真实通路探测：用订阅里的 CDN-H2 链接起临时 xray 客户端，把地址换成候选 IP，经 socks 取 204。
+坏 IP 能完成 TLS 握手、GET / 也返回 200，但 XHTTP 数据通不过，所以只能用真实隧道判断。"""
+import glob, json, os, shutil, socket, subprocess, tempfile, time, urllib.parse as u
+
+SUB_GLOB = "/usr/local/nginx/html/sub/*/v2rayn-raw.txt"
+TEST_URLS = ("https://www.gstatic.com/generate_204", "https://cp.cloudflare.com/generate_204")
+
+def _link():
+    for f in glob.glob(SUB_GLOB):
+        for l in open(f, encoding="utf-8"):
+            if l.startswith("vless://") and "XHTTP-CDN-H2" in l:
+                return l.strip()
+    return None
+
+def _config(link, ip, port):
+    p = u.urlparse(link); q = {k: v[0] for k, v in u.parse_qs(p.query).items()}
+    tls = {"serverName": q.get("sni", p.hostname), "fingerprint": q.get("fp", "chrome")}
+    if q.get("alpn"): tls["alpn"] = q["alpn"].split(",")
+    if q.get("ech"): tls["echConfigList"] = q["ech"]
+    x = {"path": q.get("path", "/"), "mode": q.get("mode", "auto")}
+    if q.get("host"): x["host"] = q["host"]
+    if q.get("extra"): x["extra"] = json.loads(q["extra"])
+    ob = {"protocol": "vless", "settings": {"vnext": [{"address": ip, "port": p.port or 443,
+          "users": [{"id": p.username, "encryption": q.get("encryption", "none")}]}]},
+          "streamSettings": {"network": "xhttp", "security": "tls", "tlsSettings": tls, "xhttpSettings": x}}
+    return {"log": {"loglevel": "none"},
+            "inbounds": [{"listen": "127.0.0.1", "port": port, "protocol": "socks", "settings": {"udp": False}}],
+            "outbounds": [ob]}
+
+def _free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0)); return s.getsockname()[1]
+
+def origin_ok(ip, attempts=2):
+    link = _link(); xray = shutil.which("xray") or "/usr/local/bin/xray"
+    if not link or not os.path.exists(xray):
+        return True, "探测不可用(无订阅链接或 xray)，跳过"
+    port = _free_port(); d = tempfile.mkdtemp(prefix="bestcf-probe-")
+    try:
+        cfg = os.path.join(d, "c.json"); json.dump(_config(link, ip, port), open(cfg, "w"))
+        pr = subprocess.Popen([xray, "run", "-c", cfg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(1.5)
+            for i in range(attempts):
+                r = subprocess.run(["curl", "-s", "-o", "/dev/null", "-m", "6", "-w", "%{http_code}",
+                    "-x", "socks5h://127.0.0.1:%d" % port, TEST_URLS[i % len(TEST_URLS)]], capture_output=True, text=True)
+                if r.stdout.strip() == "204":
+                    return True, "XHTTP 隧道探测通过"
+            return False, "XHTTP 隧道探测失败(握手正常但数据不通)"
+        finally:
+            pr.terminate()
+            try: pr.wait(timeout=3)
+            except Exception: pr.kill()
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+PROBEEOF
+      chmod 600 "${dir}/probe.py"
 
       # 写入健康检查脚本（检测延迟与握手，异常立即自愈）
       local hc_script="${dir}/health_check.py"
@@ -2393,6 +2467,9 @@ SNI_HOST = "speed.cloudflare.com"
 MAX_LATENCY_MS = 300.0
 TIMEOUT_SECS = 3.5
 
+sys.path.insert(0, DIR)
+from probe import origin_ok  # 真实 XHTTP 隧道探测
+
 def check_ip_health(ip):
     t0 = time.time()
     ctx = ssl.create_default_context()
@@ -2405,7 +2482,10 @@ def check_ip_health(ip):
                 cipher = ssock.cipher()[0] if ssock.cipher() else "TLS"
                 if latency > MAX_LATENCY_MS:
                     return False, latency, f"延迟过高 ({latency:.1f}ms > {MAX_LATENCY_MS}ms)"
-                return True, latency, f"正常 (TLS握手成功, {cipher}, 握手耗时: {latency:.1f}ms)"
+                ok, why = origin_ok(ip)
+                if not ok:
+                    return False, latency, why
+                return True, latency, f"正常 (TLS握手成功, {cipher}, 握手耗时: {latency:.1f}ms, {why})"
     except socket.timeout:
         return False, 9999.0, "连接超时 (Timeout)"
     except Exception as e:
@@ -2475,6 +2555,7 @@ Description=Run Cloudflare Best IP DNS Auto-Updater periodically
 
 [Timer]
 OnBootSec=5min
+OnActiveSec=1h
 OnUnitActiveSec=1h
 Persistent=true
 
@@ -2499,11 +2580,12 @@ HCSVCEOF
 
       cat > "$hc_timer" <<HCTMREOF
 [Unit]
-Description=Run Cloudflare Best IP Health Check every 3 minutes
+Description=Run Cloudflare Best IP Health Check every minute
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=3min
+OnActiveSec=30s
+OnUnitActiveSec=1min
 Persistent=true
 
 [Install]
