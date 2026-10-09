@@ -2377,23 +2377,40 @@ def sync_dns(ips):
             })
             print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
 
-# 针对中国移动 (CMI / AS58453 / AS9808) 优选 IP 候选池（直连香港 HKIX / 亚太 Anycast，避开晚高峰跨太平洋拥堵）
+# 针对中国移动 (CMI / AS58453 / AS9808) 优选 IP 候选池（严格限定 CMI 香港 HKIX 纯净 Anycast 段，严禁加入已受 GFW 干扰的 172.64/104.17 等段）
 CMCC_PREFERRED_IPS = [
     "%d.%d.%d.%d" % (a, b, c, d) for a, b, c, d in [
         (104, 16, 160, 187), (104, 16, 161, 187), (104, 16, 162, 187), (104, 16, 163, 187),
-        (104, 17, 160, 187), (104, 17, 161, 187), (104, 17, 162, 187), (104, 17, 163, 187),
-        (141, 101, 114, 1),   (141, 101, 115, 1),
-        (172, 64, 150, 1),   (172, 64, 151, 1),
-        (103, 21, 244, 1)
+        (104, 16, 160, 1),   (104, 16, 161, 1),   (104, 16, 162, 1),   (104, 16, 163, 1)
     ]
 ]
 
 def get_cmcc_candidates():
     candidates = []
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 优先探测中国移动 CMI 直连香港/亚太优选候选池...")
-    pool = list(CMCC_PREFERRED_IPS)
-    random.shuffle(pool)
-    for ip in pool:
+    # 1. 优先复用当前 DNS 中已有的且探测健康通过的 IP（避免无故障盲目漂移）
+    try:
+        current_records = get_existing_records()
+        for r in current_records:
+            cip = r.get("content")
+            if cip and (cip in CMCC_PREFERRED_IPS or cip.startswith("104.16.")):
+                ok, why = origin_ok(cip, attempts=1)
+                if ok:
+                    lat = "25"
+                    m = re.search(r'\(([0-9.]+)ms\)', why)
+                    if m: lat = f"{float(m.group(1)):.0f}"
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 保持当前健康优选 IP {cip}: {why}")
+                    candidates.append({"ip": cip, "speed": "CMI-HKG", "latency": lat, "loss": "0.00"})
+                    if len(candidates) >= 2:
+                        return candidates
+    except Exception as e:
+        print(f"检查现有记录异常: {e}")
+
+    # 2. 若现有 IP 不足 2 个健康节点，从 CMCC 纯净候选池中探测补充
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 探测中国移动 CMI 香港纯净优选池补充节点...")
+    existing_ips = [c["ip"] for c in candidates]
+    for ip in CMCC_PREFERRED_IPS:
+        if ip in existing_ips:
+            continue
         ok, why = origin_ok(ip, attempts=1)
         if ok:
             lat = "25"
