@@ -21,11 +21,12 @@ tun:
   auto-detect-interface: true
   dns-hijack:
     - any:53
+    - tcp://any:53
   strict-route: false
   route-exclude-address:
     - ${VPS_IP_CIDR}
   udp-timeout: 300
-  mtu: 1480
+  mtu: 1500
 
 sniffer:
   enable: true

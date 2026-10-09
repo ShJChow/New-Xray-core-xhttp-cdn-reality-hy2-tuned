@@ -139,3 +139,21 @@
      - 免加密 8002 入站通道下发的 CDN 节点同步下发 `alpn=h2,h3` 与 `alpn=h3,h2`，由客户端自主发起握手协商。
   4. **管理脚本与安装包对齐**：
      - `11-client-config.sh`、`12-subscription.sh`、`13-manage-cli.sh`、`/usr/local/bin/xh` 以及 `dist/` 安装包全量更新。
+
+## 11. 借鉴 Yulinanami 项目：静态回落规范化、Nginx Alt-Svc 广播与参考资料体系演进 (2026-10-09)
+- **背景与借鉴来源**：
+  - 对标并吸收开源项目 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的工程实践规范。
+- **优化与改进明细**：
+  1. **静态站回落目录规范化 (`/var/www/dist`)**：
+     - 将静态回落根目录由 `${USER_HOME}/dist` 规范迁移至符合 Linux FHS 标准的 `/var/www/dist`，彻底杜绝 Ubuntu/Debian 普通用户 home 目录权限（700）下 Nginx 运行身份（nobody/www-data）因权限不足导致的 403 报错；
+     - 保持向后兼容：当 `${USER_HOME}/dist` 存在时自动平滑识别，目录与文件统一赋予 755/644 安全访问权限；
+     - 同步更新 `src/04-input.sh`、`extensions/dual-cdn/01-read-existing.sh`、`extensions/dual-ip/01-read-existing.sh`。
+  2. **Nginx HTTP/3 广播声明 (`Alt-Svc`)**：
+     - 在 `templates/nginx.conf.tmpl` 与本机运行的 Nginx 对应 server 块中，加入标准 HTTP/3 响应头声明：`add_header Alt-Svc 'h3=":443"; ma=86400' always;`；
+     - 使得伪装站点和直接请求对现代浏览器和客户端通告 443 端口支持 HTTP/3，对齐主流互联网大厂（Cloudflare/Google）真实站点行为特征。
+  3. **Mihomo TUN DNS 劫持防护强化**：
+     - 在 `templates/mihomo-full.yaml.tmpl` 的 `tun.dns-hijack` 中补充 `- tcp://any:53`，MTU 锁定标准 `1500`，杜绝 TCP DNS 查询绕过劫持导致的泄露。
+  4. **全套权威参考资料与协议规范体系 (`docs/参考资料.md`)**：
+     - 补充 `docs/参考资料.md`，完整收录 Xray-core XHTTP 官方讨论（#4113, #4118）、xpadding 长度混淆泄露分析与 BBS 讨论、Cloudflare ECH 边缘规范与 Xray-core v26.3.27 演进、Mihomo 传输标准、以及 BBRv3 / 64MB 单流保护模型。
+  5. **客户端直连与 CDN 灵活路由切换指引**：
+     - 在 `README.md` 中补充技术解析：阐明 SNI 锁定 CDN 域名时，客户端 Server 地址在「CDN 优选 IP」与「真实 VPS IP」之间切换的原理，方便用户按需一键切换低延迟直连或抗封锁 CDN。

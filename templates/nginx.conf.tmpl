@@ -167,6 +167,9 @@ http {
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
 
+        # 广播 HTTP/3 (QUIC) 支持声明，提升伪装度并引导支持 h3 的客户端
+        add_header Alt-Svc 'h3=":443"; ma=86400' always;
+
         # 禁止访问隐藏文件及敏感配置文件
         location ~ /\.(?!well-known) {
             deny all;
@@ -192,6 +195,7 @@ http {
             default_type text/plain;
             add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
             add_header Profile-Update-Interval "24" always;
+            add_header Alt-Svc 'h3=":443"; ma=86400' always;
         }
 
         location / {
@@ -214,6 +218,9 @@ $(nginx_fallback_config "$REALITY_DOMAIN" "$REALITY_FALLBACK_ORIGIN" "$REALITY_F
 
         ssl_certificate /etc/ssl/private/fullchain.cer;
         ssl_certificate_key /etc/ssl/private/private.key;
+
+        # 广播 HTTP/3 (QUIC) 支持声明，提升伪装度并引导支持 h3 的客户端
+        add_header Alt-Svc 'h3=":443"; ma=86400' always;
 
         # 禁止访问隐藏文件及敏感配置文件
         location ~ /\.(?!well-known) {

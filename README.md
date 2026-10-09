@@ -21,10 +21,12 @@
   - [2. 零交互环境变量一键部署](#2-零交互环境变量一键部署)
 - [三、常驻管理命令 `xh`](#三常驻管理命令-xh)
 - [四、Cloudflare CDN 优选 IP 自动化配置（防延迟波动）](#四cloudflare-cdn-优选-ip-自动化配置防延迟波动)
-- [五、节点拓扑与双轨架构](#五节点拓扑与双轨架构)
-- [六、常见问题与排错](#六常见问题与排错)
-- [七、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)](#七版本迭代与核心调优演进记录-v48---v500)
-- [八、免责声明](#八免责声明)
+- [五、客户端配置选择技巧（直连 vs CDN 灵活切换）](#五客户端配置选择技巧直连-vs-cdn-灵活切换)
+- [六、节点拓扑与双轨架构](#六节点拓扑与双轨架构)
+- [七、常见问题与排错](#七常见问题与排错)
+- [八、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)](#八版本迭代与核心调优演进记录-v48---v500)
+- [九、参考资料与技术规范](./docs/参考资料.md)
+- [十、免责声明](#十免责声明)
 
 ---
 
@@ -416,7 +418,22 @@ systemctl enable --now cf-healthcheck.timer
 
 ---
 
-## 五、节点拓扑与双轨架构
+## 五、客户端配置选择技巧（直连 vs CDN 灵活切换）
+
+由于 XHTTP-H2 和 XHTTP-H3 客户端配置中的 SNI 填写的都是已签发证书的 CDN 域名，因此用户可以在客户端（或自建配置）中自由切换连接地址（Server/Address），实现灵活路由与性能调度：
+
+1. **过 CDN（隐藏真实 VPS IP / 强抗封锁）**：
+   - 连接地址（Address / Server）填写 CDN 域名（如 `cdn.example.com`）或 Cloudflare 优选 Anycast 官方 IP（如 `104.16.x.x`）。
+   - **效果**：客户端与 Cloudflare CDN 边缘节点握手，流量再由 Cloudflare Anycast 网络安全回源到你的 VPS，彻底隐藏真实 VPS IP。
+2. **直连模式（超低延迟 / 跑满 VPS 极限带宽）**：
+   - 连接地址（Address / Server）直接填写 **你的 VPS 公网真实 IP**。
+   - **效果**：由于 TLS 握手的 SNI / Host 仍然保持为 CDN 域名，数据包直接发往 VPS 本地端口（经过 Nginx SNI 回落），无需重新申请独立域名证书，即可瞬间在「抗封锁」与「全速直连」之间切换。
+3. **上下行分离节点（Split）的混合编排**：
+   - 上下行分离配置中的上行（Uplink）和下行（Downlink）地址同样支持该模式：例如上行填真实 VPS IP 直连以降低发包延迟，下行填 CDN 优选 IP 隐藏接收端并防止源站被探测。
+
+---
+
+## 六、节点拓扑与双轨架构
 
 安装完成后将提供 **6 条核心全协议节点**，客户端通过 `urltest` 自动分流调度：
 
@@ -441,7 +458,7 @@ systemctl enable --now cf-healthcheck.timer
 
 ---
 
-## 六、常见问题与排错
+## 七、常见问题与排错
 
 | 故障现象 | 核心排查原因 | 快速解决指引 |
 | :--- | :--- | :--- |
@@ -452,7 +469,7 @@ systemctl enable --now cf-healthcheck.timer
 
 ---
 
-## 七、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)
+## 八、版本迭代与核心调优演进记录 (v4.8 - v5.0.0)
 
 本项目经跨洋高延迟弱网环境（160ms+ / 1% 丢包）实测迭代，核心演进总结如下：
 
@@ -462,7 +479,14 @@ systemctl enable --now cf-healthcheck.timer
 
 ---
 
-## 八、免责声明
+## 九、参考资料与技术规范
+
+完整技术原理、协议 RFC、反探测分析与上游项目讨论请参阅：
+👉 [参考资料与技术规范文档 (docs/参考资料.md)](./docs/参考资料.md)
+
+---
+
+## 十、免责声明
 
 1. 本项目为开源的网络传输技术研究与自动化部署工具，不提供任何公共代理服务，不接触任何用户数据。
 2. 使用者请严格遵守当地法律法规。严禁将本项目用于任何违法犯罪活动。
@@ -473,4 +497,5 @@ systemctl enable --now cf-healthcheck.timer
 ## 致谢与开源许可
 
 - 基于 [Xray-core](https://github.com/XTLS/Xray-core) 与 [sing-box](https://github.com/SagerNet/sing-box) 构建。
+- 借鉴并感谢开源项目 [Yulinanami/my-xhttp-cdn-config](https://github.com/Yulinanami/my-xhttp-cdn-config) 的静态站回落与上下行分离设计思路。
 - 本项目遵循 [MIT 许可证](./LICENSE)。欢迎提交 Issue 与 Pull Request！

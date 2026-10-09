@@ -92,9 +92,17 @@ esac
 case "${FALLBACK_CHOICE:-2}" in
   1)
     FALLBACK_MODE="static"
-    STATIC_SITE_DIR="${USER_HOME}/dist"
+    # 优先使用 Linux FHS 标准规范路径 /var/www/dist，若旧路径 ${USER_HOME}/dist 已有内容则向下兼容
+    if [[ -d "${USER_HOME}/dist" && ! -d "/var/www/dist" ]]; then
+      STATIC_SITE_DIR="${USER_HOME}/dist"
+    else
+      STATIC_SITE_DIR="/var/www/dist"
+    fi
+    mkdir -p "$STATIC_SITE_DIR"
+    chmod 755 "$STATIC_SITE_DIR" 2>/dev/null || true
     for domain in "$REALITY_DOMAIN" "$CDN_DOMAIN"; do
       mkdir -p "${STATIC_SITE_DIR}/${domain}"
+      chmod 755 "${STATIC_SITE_DIR}/${domain}" 2>/dev/null || true
       if [[ ! -f "${STATIC_SITE_DIR}/${domain}/index.html" ]]; then
         cat > "${STATIC_SITE_DIR}/${domain}/index.html" <<'INITIAL_HTML_EOF'
 @@include templates/default-index.html.tmpl
@@ -106,11 +114,10 @@ INITIAL_HTML_EOF
         chmod 644 "${STATIC_SITE_DIR}/${domain}/index.html"
         info "已生成 ${STATIC_SITE_DIR}/${domain}/index.html"
       fi
-      chown "$(stat -c '%u:%g' "$USER_HOME")" \
-        "${STATIC_SITE_DIR}/${domain}" \
-        "${STATIC_SITE_DIR}/${domain}/index.html"
+      chown -R "$(stat -c '%u:%g' "$USER_HOME")" "${STATIC_SITE_DIR}/${domain}" 2>/dev/null || true
     done
     echo ""
+    echo "静态回落目录：${STATIC_SITE_DIR}"
     echo "Reality 页面：${STATIC_SITE_DIR}/${REALITY_DOMAIN}/index.html"
     echo "CDN 页面：    ${STATIC_SITE_DIR}/${CDN_DOMAIN}/index.html"
     echo "可用 SingleFile 抓取网页后分别上传。"

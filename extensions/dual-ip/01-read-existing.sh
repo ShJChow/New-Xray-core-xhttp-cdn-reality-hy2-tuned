@@ -103,9 +103,12 @@ if [[ "$FALLBACK_MODE" == "proxy" ]]; then
   fi
   [[ "$FALLBACK_ORIGIN_V4" != "$FALLBACK_ORIGIN_V6" ]] || error "IPv4 和 IPv6 Reality 域名不能共用回落网站"
 else
+  STATIC_SITE_DIR="${STATIC_SITE_DIR:-/var/www/dist}"
+  [[ -d "${USER_HOME}/dist" && ! -d "/var/www/dist" ]] && STATIC_SITE_DIR="${USER_HOME}/dist"
   prepare_static_site() {
     local domain="$1"
     mkdir -p "${STATIC_SITE_DIR}/${domain}"
+    chmod 755 "${STATIC_SITE_DIR}/${domain}" 2>/dev/null || true
     if [[ ! -f "${STATIC_SITE_DIR}/${domain}/index.html" ]]; then
       cat > "${STATIC_SITE_DIR}/${domain}/index.html" <<'INITIAL_HTML_EOF'
 @@include templates/default-index.html.tmpl
@@ -116,9 +119,7 @@ INITIAL_HTML_EOF
         "${STATIC_SITE_DIR}/${domain}/index.html"
       chmod 644 "${STATIC_SITE_DIR}/${domain}/index.html"
     fi
-    chown "$(stat -c '%u:%g' "$USER_HOME")" \
-      "${STATIC_SITE_DIR}/${domain}" \
-      "${STATIC_SITE_DIR}/${domain}/index.html"
+    chown -R "$(stat -c '%u:%g' "$USER_HOME")" "${STATIC_SITE_DIR}/${domain}" 2>/dev/null || true
   }
 
   prepare_static_site "$REALITY_DOMAIN_V4"
