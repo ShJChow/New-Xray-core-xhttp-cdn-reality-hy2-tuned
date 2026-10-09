@@ -171,3 +171,6 @@
      - 追加 `Nice=-10`，赋予 Xray 核心更高的系统级 CPU 调度优先级，消除网络包处理的排队调度抖动。
   3. **实时生效与验证**：
      - 本机 `/etc/systemd/system/xray.service.d/10-xray-xhttp.conf` 已更新并重载生效，Xray 进程成功加载 `GOMEMLIMIT=18GiB`、`LimitMEMLOCK=infinity` 并在 7 个核心端口稳定监听。
+  4. **彻底修复 systemd-resolved 回退 DNS 异常**：
+     - 将 fallback DNS 统一修正为全球权威 Anycast DNS `8.8.8.8`（与 `9.9.9.9`、`1.1.1.1` 组成三核 Anycast 冗余），彻底根除 `127.0.0.53` 在处理特定压缩标签时触发的 `segment prefix is reserved` 异常；
+     - 本机 `/usr/local/etc/xray/config.json` 与 `templates/xray-config.json.tmpl` 均已同步修正，Xray 进程零报错稳定运行。
