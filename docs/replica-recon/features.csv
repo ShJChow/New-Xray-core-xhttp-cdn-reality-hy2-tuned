@@ -8,7 +8,7 @@ Asymmetric Uplink CDN and Downlink Reality (Mode 3),asymmetric-flow,must,yes,yes
 Asymmetric Uplink Reality and Downlink CDN (Mode 5),asymmetric-flow,must,yes,yes,Reality uplink avoids CDN upload limits while CDN downlink survives IP blocks
 Encrypted Client Hello (ECH) on CDN SNI,anti-dpi,should,yes,no,Present in repo templates; currently disabled on server (xh ech on)
 XHTTP HTTP/3 on Standard UDP 443 via Nginx,transport,should,yes,no,Nginx lacks listen 443 quic reuseport; direct H3 uses non-standard port 8446
-Local Static SingleFile Masquerade Site,anti-probing,should,yes,no,Server proxies external universities (sjsu/harvard); risks 502s and latency fingerprinting
+Local Static SingleFile Masquerade Site,anti-probing,should,yes,yes,Converted from remote university proxying to local self-contained HTML5 static site (/var/www/dist)
 ACME DNS-01 Automation with Cloudflare API,maintenance,must,yes,no,Currently standalone HTTP-01; will fail to renew when CDN is proxied
 Nginx Non-Root Execution Hardening,security,should,yes,no,Repo v1.2.6 uses nobody user; local server still runs nginx as root
 Outbound Mainland China (geoip:cn) Blocking,routing,should,yes,no,Repo template blocks geoip:cn; local server has it disabled (xh block cn on)
