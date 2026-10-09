@@ -145,9 +145,9 @@ if [[ -n "$def_dev" ]]; then
       "$ipt" -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
   done
   # 中国移动高端口 UDP QoS 旁路（UDP 443 -> HY2_H3_PORT，UDP 8443 -> HY2_PORT）
-  if [[ -f "/etc/xhttp-cdn/env.sh" ]]; then
-    _hy2_h3=$(grep -E '^HY2_H3_PORT=' /etc/xhttp-cdn/env.sh 2>/dev/null | cut -d= -f2 | tr -d "'\"")
-    _hy2_obfs=$(grep -E '^HY2_PORT=' /etc/xhttp-cdn/env.sh 2>/dev/null | cut -d= -f2 | tr -d "'\"")
+  if [[ -f "/etc/xhttp-cdn/node.env" ]]; then
+    _hy2_h3=$(grep -E '^HY2_H3_PORT=' /etc/xhttp-cdn/node.env 2>/dev/null | cut -d= -f2 | tr -d "'\"")
+    _hy2_obfs=$(grep -E '^HY2_PORT=' /etc/xhttp-cdn/node.env 2>/dev/null | cut -d= -f2 | tr -d "'\"")
     if [[ -n "$_hy2_h3" && "$_hy2_h3" != "443" ]] && command -v iptables >/dev/null 2>&1; then
       iptables -t nat -C PREROUTING -p udp --dport 443 -j REDIRECT --to-ports "$_hy2_h3" 2>/dev/null || \
         iptables -t nat -A PREROUTING -p udp --dport 443 -j REDIRECT --to-ports "$_hy2_h3" 2>/dev/null || true
