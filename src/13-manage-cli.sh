@@ -2195,9 +2195,13 @@ cmd_bestcf() {
         echo -e "  故障自愈健康检查: ${YELLOW}未激活${NC}"
       fi
 
-      local cur_interval="2h"
+      local cur_interval="每日高峰模式"
       if [[ -f "$timer_file" ]]; then
-        cur_interval=$(grep -oE 'OnUnitActiveSec=[^ ]+' "$timer_file" | cut -d= -f2 || echo "2h")
+        if grep -q 'OnCalendar=' "$timer_file"; then
+          cur_interval="每日高峰模式 (12:30, 19:00-23:00 每整点, 04:00)"
+        else
+          cur_interval=$(grep -oE 'OnUnitActiveSec=[^ ]+' "$timer_file" | cut -d= -f2 || echo "2h")
+        fi
       fi
       echo -e "  轮换周期:       ${GREEN}${cur_interval}${NC}"
 
@@ -2219,7 +2223,7 @@ cmd_bestcf() {
 
       if command -v systemctl >/dev/null 2>&1; then
         local next_run
-        next_run=$(systemctl list-timers cf-bestip.timer 2>/dev/null | grep 'cf-bestip' | awk '{print $1" "$2" "$3}' || true)
+        next_run=$(systemctl list-timers cf-bestip.timer --no-pager --no-legend --full 2>/dev/null | grep 'cf-bestip' | awk '{print $1" "$2" "$3" "$4" (剩余 "$5" "$6")"}' || true)
         if [[ -n "$next_run" ]]; then
           echo -e "  下次轮换时间:   ${next_run}"
         fi
@@ -2269,7 +2273,7 @@ cmd_bestcf() {
 
       cat > "$py_script" <<PYEOF
 #!/usr/bin/env python3
-import os, sys, json, subprocess, urllib.request, time, shutil, ssl, socket
+import os, sys, json, subprocess, urllib.request, time, shutil, ssl, socket, random, re
 
 CF_TOKEN = "${input_token}"
 CF_ZONE_ID = "${input_zone}"
@@ -2387,11 +2391,16 @@ CMCC_PREFERRED_IPS = [
 def get_cmcc_candidates():
     candidates = []
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 优先探测中国移动 CMI 直连香港/亚太优选候选池...")
-    for ip in CMCC_PREFERRED_IPS:
+    pool = list(CMCC_PREFERRED_IPS)
+    random.shuffle(pool)
+    for ip in pool:
         ok, why = origin_ok(ip, attempts=1)
         if ok:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 移动优选候选 {ip}: 探测通过")
-            candidates.append({"ip": ip, "speed": "CMI-HKG", "latency": "25", "loss": "0.00"})
+            lat = "25"
+            m = re.search(r'\(([0-9.]+)ms\)', why)
+            if m: lat = f"{float(m.group(1)):.0f}"
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 移动优选候选 {ip}: 探测通过 (延迟 {lat}ms)")
+            candidates.append({"ip": ip, "speed": "CMI-HKG", "latency": lat, "loss": "0.00"})
             if len(candidates) >= 2:
                 break
         else:
@@ -2469,10 +2478,12 @@ def origin_ok(ip, attempts=2):
         try:
             time.sleep(1.5)
             for i in range(attempts):
+                t_req = time.time()
                 r = subprocess.run(["curl", "-s", "-o", "/dev/null", "-m", "6", "-w", "%{http_code}",
                     "-x", "socks5h://127.0.0.1:%d" % port, TEST_URLS[i % len(TEST_URLS)]], capture_output=True, text=True)
+                cost_ms = (time.time() - t_req) * 1000.0
                 if r.stdout.strip() == "204":
-                    return True, "XHTTP 隧道探测通过"
+                    return True, "XHTTP 隧道探测通过 (%.1fms)" % cost_ms
             return False, "XHTTP 隧道探测失败(握手正常但数据不通)"
         finally:
             pr.terminate()
@@ -2583,16 +2594,21 @@ SVCEOF
 Description=Run Cloudflare Best IP DNS Auto-Updater periodically
 
 [Timer]
-OnBootSec=5min
-OnActiveSec=1h
-OnUnitActiveSec=1h
+OnBootSec=3min
+# 每日高峰时段自动测速与优选轮换 (UTC+8 北京时间)
+# 1. 凌晨低峰基准同步: 04:00
+# 2. 午高峰时段: 12:30
+# 3. 晚间核心高峰时段 (19:00 - 23:00 每整点轮换): 19:00, 20:00, 21:00, 22:00, 23:00
+OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 12:30:00
+OnCalendar=*-*-* 19..23:00:00
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 TMREOF
 
-      # 写入健康检查自愈定时器（每 3 分钟自动探测一次）
+      # 写入健康检查自愈定时器（每 1 分钟自动探测一次）
       local hc_service="/etc/systemd/system/cf-healthcheck.service"
       local hc_timer="/etc/systemd/system/cf-healthcheck.timer"
       cat > "$hc_service" <<HCSVCEOF
@@ -2625,8 +2641,8 @@ HCTMREOF
       systemctl enable --now cf-bestip.timer
       systemctl enable --now cf-healthcheck.timer
       info "服务已配置完成并启动："
-      info "  1. 周期性轮换定时器 (每 2 小时自动重新优选)"
-      info "  2. 故障自愈监测定时器 (每 3 分钟检测延迟与握手，异常立刻自动换 IP)"
+      info "  1. 高峰期轮换定时器 (每日高峰时段: 12:30, 19:00-23:00 每整点, 04:00 自动测速与优选)"
+      info "  2. 故障自愈监测定时器 (每 1 分钟检测握手与源站可达性，异常立刻自动换 IP)"
       read -rp "是否立即运行一次测速与 DNS 同步？[Y/n]: " run_now
       if [[ "${run_now:-y}" =~ ^[Yy]$ ]]; then
         cmd_bestcf run
@@ -2721,11 +2737,46 @@ print('')
     interval)
       local int_val="${2:-}"
       if [[ -z "$int_val" ]]; then
-        read -rp "请输入定时更新周期 (例如 2h, 4h, 6h, 12h): " int_val
+        echo -e "定时周期预设:"
+        echo -e "  1) peak  - 每日高峰模式 (推荐: 12:30, 19:00-23:00 每整点, 04:00 凌晨基准)"
+        echo -e "  2) 1h    - 每 1 小时定时轮换"
+        echo -e "  3) 2h    - 每 2 小时定时轮换"
+        echo -e "  4) 4h    - 每 4 小时定时轮换"
+        read -rp "请输入选项 [peak/1h/2h/4h/6h]: " int_val
       fi
       [[ -n "$int_val" ]] || fail "周期不能为空"
       [[ -f "$timer_file" ]] || fail "定时器文件不存在，请先执行 ${MANAGE_CMD} bestcf setup"
-      sed -i -E "s/^OnUnitActiveSec=.*/OnUnitActiveSec=${int_val}/" "$timer_file"
+      if [[ "$int_val" == "peak" || "$int_val" == "1" ]]; then
+        cat > "$timer_file" <<TMREOF
+[Unit]
+Description=Run Cloudflare Best IP DNS Auto-Updater periodically
+
+[Timer]
+OnBootSec=3min
+OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 12:30:00
+OnCalendar=*-*-* 19..23:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TMREOF
+        int_val="每日高峰模式 (12:30, 19:00-23:00 每整点, 04:00)"
+      else
+        cat > "$timer_file" <<TMREOF
+[Unit]
+Description=Run Cloudflare Best IP DNS Auto-Updater periodically
+
+[Timer]
+OnBootSec=5min
+OnActiveSec=${int_val}
+OnUnitActiveSec=${int_val}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TMREOF
+      fi
       systemctl daemon-reload
       systemctl restart cf-bestip.timer
       info "定时周期已更新为: ${int_val}"
