@@ -2373,17 +2373,46 @@ def sync_dns(ips):
             })
             print(f"成功添加优选 DNS 记录: {DOMAIN_NAME} -> {ip} (TTL=60, 仅DNS)")
 
+# 针对中国移动 (CMI / AS58453 / AS9808) 优选 IP 候选池（直连香港 HKIX / 亚太 Anycast，避开晚高峰跨太平洋拥堵）
+CMCC_PREFERRED_IPS = [
+    "%d.%d.%d.%d" % (a, b, c, d) for a, b, c, d in [
+        (104, 16, 160, 187), (104, 16, 161, 187), (104, 16, 162, 187), (104, 16, 163, 187),
+        (104, 17, 160, 187), (104, 17, 161, 187), (104, 17, 162, 187), (104, 17, 163, 187),
+        (141, 101, 114, 1),   (141, 101, 115, 1),
+        (172, 64, 150, 1),   (172, 64, 151, 1),
+        (103, 21, 244, 1)
+    ]
+]
+
+def get_cmcc_candidates():
+    candidates = []
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 优先探测中国移动 CMI 直连香港/亚太优选候选池...")
+    for ip in CMCC_PREFERRED_IPS:
+        ok, why = origin_ok(ip, attempts=1)
+        if ok:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 移动优选候选 {ip}: 探测通过")
+            candidates.append({"ip": ip, "speed": "CMI-HKG", "latency": "25", "loss": "0.00"})
+            if len(candidates) >= 2:
+                break
+        else:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] ❌ 移动优选候选 {ip}: {why}")
+    return candidates
+
 if __name__ == "__main__":
     try:
-        run_cfst()
-        good = []
-        for c in get_best_ips(limit=30):
-            ok, why = origin_ok(c["ip"])
-            print("[%s] 候选 %s: %s" % (time.strftime('%Y-%m-%d %H:%M:%S'), c["ip"], why))
-            if ok:
-                good.append(c)
-            if len(good) >= 2:
-                break
+        good = get_cmcc_candidates()
+        if len(good) < 2:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 移动专属池可用 IP 不足 2 个，启动全量测速兜底...")
+            run_cfst()
+            for c in get_best_ips(limit=30):
+                if c["ip"] in [b["ip"] for b in good]:
+                    continue
+                ok, why = origin_ok(c["ip"])
+                print("[%s] 候选 %s: %s" % (time.strftime('%Y-%m-%d %H:%M:%S'), c["ip"], why))
+                if ok:
+                    good.append(c)
+                if len(good) >= 2:
+                    break
         if not good:
             print("没有通过源站探测的候选 IP，保持现有 DNS 不变")
             sys.exit(1)

@@ -57,6 +57,10 @@ cp "$USER_HOME/client-config-mihomo-nodes.yaml" "$SUB_DIR/mihomo-nodes.yaml"
   # 小火箭专属：1) 去掉 fm（finalmask JSON）；2) type=raw 改成 type=tcp——raw 是 Xray 新叫法，小火箭只认 tcp，
   # 不改时 Reality 节点在小火箭里连不上，而 v2rayN 正常（对 Xray 内核两者等价）；3) 去掉 spx（纯客户端参数，可省）。
   grep -E 'Reality-Vision|Hysteria2-(Obfs|H3)-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//; s/&type=raw(&|#)/\&type=tcp\1/; s/&spx=[^&#]*//' || true
+  # 若 Hysteria2-H3 运行在高端口，同时下发一条 UDP 443 节点（借由 iptables UDP 443 重定向，绕过中国移动等运营商的高端口 UDP QoS 劣化）
+  if grep -q 'Hysteria2-H3-Direct' "$USER_HOME/client-config.txt" 2>/dev/null; then
+    grep 'Hysteria2-H3-Direct' "$USER_HOME/client-config.txt" | sed -E 's/&fm=[^&#]*//; s/:[0-9]+\/\?/:443\/?/; s/#Hysteria2-H3-Direct.*/#Hysteria2-H3-Port443-Direct/' || true
+  fi
   # v4.9.29：8001 开了 vlessenc（FEATURE_XHTTP_VLESSENC）时小火箭连不上 CDN 节点，不再附带
   if [[ "${FEATURE_CDN_H2:-false}" == true ]]; then
     cdn_host="${BESTCF_DOMAIN:-${CDN_CONNECT_ADDR:-${CDN_DOMAIN}}}"

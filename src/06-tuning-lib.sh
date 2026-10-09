@@ -134,14 +134,30 @@ if [[ -n "$def_dev" ]]; then
   if [[ "$cur_mtu" -gt 1500 ]]; then
     if ip link set dev "$def_dev" mtu 1500 2>/dev/null; then
       echo "网卡 $def_dev MTU $cur_mtu → 1500（避免 PMTU 黑洞）"
-      for ipt in iptables ip6tables; do
-        command -v "$ipt" >/dev/null 2>&1 || continue
-        "$ipt" -t mangle -C POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
-          "$ipt" -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null
-      done
-      command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1
     fi
   fi
+  # TCP MSS 钳制兜底（防中国移动 PPPoE 1492 / 蜂窝移动 GTP 1420 导致的 PMTU 黑洞与大包静默丢弃）
+  for ipt in iptables ip6tables; do
+    command -v "$ipt" >/dev/null 2>&1 || continue
+    "$ipt" -t mangle -C POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+      "$ipt" -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+    "$ipt" -t mangle -C OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+      "$ipt" -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+  done
+  # 中国移动高端口 UDP QoS 旁路（UDP 443 -> HY2_H3_PORT，UDP 8443 -> HY2_PORT）
+  if [[ -f "/etc/xhttp-cdn/env.sh" ]]; then
+    _hy2_h3=$(grep -E '^HY2_H3_PORT=' /etc/xhttp-cdn/env.sh 2>/dev/null | cut -d= -f2 | tr -d "'\"")
+    _hy2_obfs=$(grep -E '^HY2_PORT=' /etc/xhttp-cdn/env.sh 2>/dev/null | cut -d= -f2 | tr -d "'\"")
+    if [[ -n "$_hy2_h3" && "$_hy2_h3" != "443" ]] && command -v iptables >/dev/null 2>&1; then
+      iptables -t nat -C PREROUTING -p udp --dport 443 -j REDIRECT --to-ports "$_hy2_h3" 2>/dev/null || \
+        iptables -t nat -A PREROUTING -p udp --dport 443 -j REDIRECT --to-ports "$_hy2_h3" 2>/dev/null || true
+    fi
+    if [[ -n "$_hy2_obfs" && "$_hy2_obfs" != "8443" ]] && command -v iptables >/dev/null 2>&1; then
+      iptables -t nat -C PREROUTING -p udp --dport 8443 -j REDIRECT --to-ports "$_hy2_obfs" 2>/dev/null || \
+        iptables -t nat -A PREROUTING -p udp --dport 8443 -j REDIRECT --to-ports "$_hy2_obfs" 2>/dev/null || true
+    fi
+  fi
+  command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1
 fi
 
 # 3. RPS/RFS 多核软中断均衡（仅多核）+ fq 队列（仅在 default_qdisc=fq 即 BBR 可用时设置）
@@ -351,9 +367,14 @@ apply_system_tuning() {
   try_sysctl net.ipv4.tcp_fastopen 3
   try_sysctl net.ipv4.tcp_mtu_probing 1
   try_sysctl net.ipv4.tcp_slow_start_after_idle 0
-  # 套接字里允许积压的未发送字节数。针对 150~200ms RTT 跨境链路，放宽到 256KB
-  # 既能防止本地 bufferbloat，又不会锁死跨境单流高速下载吞吐。
-  try_sysctl net.ipv4.tcp_notsent_lowat 262144
+  # 套接字里允许积压的未发送字节数。针对中国移动等高抖动蜂窝网络 (4G/5G) 及高 BDP 跨境链路，
+  # 设为 16KB (16384)，根治 TCP send bufferbloat 与应用层多路复用队头阻塞，保持高吞吐同时降低延迟抖动。
+  try_sysctl net.ipv4.tcp_notsent_lowat 16384
+  # 移动网络无线跳频与高抖动优化（RFC 8985 TLP / F-RTO）：
+  # tcp_frto = 2: 开启 Forward RTO 探测，避免移动蜂窝网络偶发无线重传误触发 cwnd 骤降
+  # tcp_early_retrans = 3: 开启 Tail Loss Probe (TLP)，尾包丢失快速重传，避免长 RTO 超时
+  try_sysctl net.ipv4.tcp_frto 2
+  try_sysctl net.ipv4.tcp_early_retrans 3
   try_sysctl net.ipv4.tcp_syncookies 1
   try_sysctl net.ipv4.tcp_tw_reuse 1
   # tcp_ecn = 1（v4.9.1）：主动发起 ECN 协商，而不是只被动应答（旧值 2）。
@@ -441,10 +462,14 @@ apply_system_tuning() {
   fi
   install_nic_tune
 
-  # 3. TCP MSS Clamp 防护（避免 Jumbo Frame 与公网 MTU 冲突导致的黑洞丢包）
+  # 3. TCP MSS Clamp 防护（避免 Jumbo Frame 与公网 MTU 冲突导致的黑洞丢包，防中国移动 PPPoE 1492 / 蜂窝移动 GTP 1420 握手黑洞）
   if command -v iptables >/dev/null 2>&1; then
     iptables -t mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu >/dev/null 2>&1 \
       || iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+    iptables -t mangle -C POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu >/dev/null 2>&1 \
+      || iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+    iptables -t mangle -C OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu >/dev/null 2>&1 \
+      || iptables -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
   fi
 
   # ---------- 落盘（清理冲突并持久化） ----------

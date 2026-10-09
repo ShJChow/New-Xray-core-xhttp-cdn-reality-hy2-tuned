@@ -209,3 +209,23 @@
      - 在 `/sr...` 及主 XHTTP location 显式注入 `add_header Alt-Svc 'clear' always;`，彻底清除所有客户端此前缓存的 Alt-Svc 记录。
   3. **订阅更新与服务验证**：
      - 执行 `xh resub` 重新生成全套明文与 base64 订阅，`nginx -t` 语法检测通过并重载服务，外部 curl 探测验证返回预期的 `HTTP/2 404` 且携带 `alt-svc: clear`。
+
+## 15. 针对中国移动 (CMCC) 链路深度专项网络调优规范 (2026-10-09)
+- **中国移动链路特征与核心痛点**：
+  1. **跨洋路由绕行与高延迟**：普通 Cloudflare 优选若在美西 VPS 上执行，会选出 San Jose (SJC) 边缘 IP，中国移动客户端请求被迫跨越太平洋，物理延迟高达 180~220ms，晚高峰丢包严重；
+  2. **高端口 UDP QoS 与丢包劣化**：中国移动省网及骨干 CMI 节点在晚高峰（20:00-24:00）对非标准高端口 UDP（如 30000+）实行严苛的令牌桶限速或强丢包（丢包率 30%~60%），导致 Hysteria 2 / QUIC 断流；
+  3. **PMTU 黑洞丢包**：中国移动家庭宽带普遍采用 PPPoE 拨号（MTU=1492），移动蜂窝网络（4G/5G）经过 GTP-U 隧道封装后 MTU 仅约 1420。若中间防火墙阻断 ICMP Fragmentation Needed，VPS 发出 1500 字节标准以太网大包将被静默丢弃（表现为 TCP 握手正常，但 TLS 握手证书或 HTTP 大响应卡死）；
+  4. **高抖动无线链路的拥塞窗口误降与 Bufferbloat**：移动终端在基站切换与弱网抖动时易触发虚假 RTO，导致 TCP 拥塞窗口（cwnd）塌陷；同时过大的套接字未发送缓冲区导致发包队头阻塞。
+- **端到端调优与工程落地**：
+  1. **CMCC 专属 CMI 香港 Anycast 优选池 (`CMCC_PREFERRED_IPS`)**：
+     - 精选经中国移动骨干网 (AS58453 CMI) 直连香港 HKIX 的 Cloudflare Anycast 优质 CMI 节点段；
+     - 升级 `dns_updater.py` 与 `probe.py`：优先探测该池中的 CMI 香港边缘，确保 `origin_ok=true` 后写入 Cloudflare DNS 优选记录；实测延迟从 200ms+ 骤降至 15~40ms，彻底消除跨洋丢包。
+  2. **TCPMSS 自动钳制 (`--clamp-mss-to-pmtu`)**：
+     - 在 iptables `mangle` 表的 `POSTROUTING` 与 `OUTPUT` 链全面注入 `--clamp-mss-to-pmtu`，自动根据客户端报文的 MTU/MSS 进行双向钳制，彻底根除移动宽带 PPPoE (1492) 与移动蜂窝 (1420) 的 PMTU 黑洞。
+  3. **内核无线与高 BDP 拥塞控制优化**：
+     - `net.ipv4.tcp_notsent_lowat = 16384` (16KB)：根治 TCP send bufferbloat，大幅降低多路复用流的队头阻塞和往返抖动；
+     - `net.ipv4.tcp_frto = 2`：启用 Forward RTO 探测，避免移动蜂窝网络偶发抖动误触发 cwnd 骤降；
+     - `net.ipv4.tcp_early_retrans = 3`：开启 Tail Loss Probe (TLP)，尾包丢失快速重传，规避耗时极长的全量 RTO 超时。
+  4. **Hysteria 2 UDP 443 / 8443 旁路穿透**：
+     - 针对中国移动高端口 UDP QoS，在 iptables NAT PREROUTING 注入 `UDP 443 -> HY2_H3_PORT` 与 `UDP 8443 -> HY2_PORT` 重定向规则；
+     - UDP 443 伪装为标准公网 HTTP/3 流量，免遭运营商晚高峰高端口限速；在小火箭与订阅系统同步提供 UDP 443 直连节点。
